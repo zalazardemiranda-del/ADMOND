@@ -1,0 +1,270 @@
+-- ==============================================================================
+-- RODIPACK CENTRAL - ESQUEMA DE BASE DE DATOS SUPABASE (POSTGRESQL)
+-- ==============================================================================
+-- Ejecuta este script completo en el SQL Editor de tu proyecto en Supabase
+-- (Dashboard -> SQL Editor -> New Query -> Pegar y dar clic en RUN).
+-- ==============================================================================
+
+-- 1. EXTENSIONES NECESARIAS
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. TABLA DE PERFILES DE USUARIOS (Profiles)
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT UNIQUE NOT NULL,
+    nombre TEXT NOT NULL,
+    rol TEXT NOT NULL DEFAULT 'colaborador' CHECK (rol IN ('gerente', 'colaborador')),
+    departamento TEXT DEFAULT 'Operaciones',
+    cargo TEXT DEFAULT 'Colaborador',
+    avatar_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Habilitar RLS en profiles
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Los perfiles son visibles para todos los usuarios autenticados"
+ON public.profiles FOR SELECT 
+TO authenticated 
+USING (true);
+
+CREATE POLICY "Los usuarios pueden actualizar su propio perfil"
+ON public.profiles FOR UPDATE 
+TO authenticated 
+USING (auth.uid() = id);
+
+-- Trigger para crear perfil automáticamente al registrarse en Auth
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.profiles (id, email, nombre, rol, cargo, departamento, avatar_url)
+    VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'nombre', split_part(NEW.email, '@', 1)),
+        COALESCE(NEW.raw_user_meta_data->>'rol', 'colaborador'),
+        COALESCE(NEW.raw_user_meta_data->>'cargo', 'Colaborador'),
+        COALESCE(NEW.raw_user_meta_data->>'departamento', 'General'),
+        COALESCE(NEW.raw_user_meta_data->>'avatar_url', '')
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+
+-- 3. TABLA DE TABLERO DE TAREAS (Tasks)
+CREATE TABLE IF NOT EXISTS public.tasks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    titulo TEXT NOT NULL,
+    descripcion TEXT DEFAULT '',
+    prioridad TEXT NOT NULL DEFAULT 'Media' CHECK (prioridad IN ('Alta', 'Media', 'Baja')),
+    estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'en_progreso', 'completada')),
+    fecha_vencimiento DATE,
+    creado_por UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    asignado_a UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    asignado_nombre TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Cualquier usuario autenticado puede ver las tareas"
+ON public.tasks FOR SELECT 
+TO authenticated 
+USING (true);
+
+CREATE POLICY "Cualquier usuario autenticado puede crear y actualizar tareas"
+ON public.tasks FOR ALL 
+TO authenticated 
+USING (true);
+
+
+-- 4. TABLA DE CHATS Y CANALES (Chats)
+CREATE TABLE IF NOT EXISTS public.chats (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tipo TEXT NOT NULL DEFAULT 'directo' CHECK (tipo IN ('directo', 'grupo')),
+    nombre TEXT NOT NULL,
+    descripcion TEXT DEFAULT '',
+    creado_por UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.chats ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios autenticados pueden ver chats"
+ON public.chats FOR ALL 
+TO authenticated 
+USING (true);
+
+
+-- 5. TABLA DE PARTICIPANTES DE CHAT (Chat Members)
+CREATE TABLE IF NOT EXISTS public.chat_members (
+    chat_id UUID REFERENCES public.chats(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    PRIMARY KEY (chat_id, user_id)
+);
+
+ALTER TABLE public.chat_members ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Ver miembros de chat"
+ON public.chat_members FOR ALL 
+TO authenticated 
+USING (true);
+
+
+-- 6. TABLA DE MENSAJES DE CHAT (Messages)
+CREATE TABLE IF NOT EXISTS public.messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    chat_id UUID REFERENCES public.chats(id) ON DELETE CASCADE NOT NULL,
+    emisor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    emisor_nombre TEXT,
+    contenido TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Ver y enviar mensajes"
+ON public.messages FOR ALL 
+TO authenticated 
+USING (true);
+
+
+-- 7. TABLA DE REUNIONES (Meetings)
+CREATE TABLE IF NOT EXISTS public.meetings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    titulo TEXT NOT NULL,
+    fecha DATE NOT NULL,
+    hora TIME NOT NULL,
+    link TEXT DEFAULT '',
+    participantes TEXT DEFAULT '',
+    creado_por UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.meetings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Ver y programar reuniones"
+ON public.meetings FOR ALL 
+TO authenticated 
+USING (true);
+
+
+-- 8. TABLA DE CONSECUTIVO DE FACTURACIÓN 2026 (Consecutivo)
+CREATE TABLE IF NOT EXISTS public.consecutivo (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    consecutivo INTEGER NOT NULL,
+    factura TEXT NOT NULL,
+    fecha_emision DATE,
+    cliente TEXT NOT NULL,
+    folio_cliente TEXT DEFAULT '',
+    subtotal NUMERIC(12, 2) DEFAULT 0,
+    iva NUMERIC(12, 2) DEFAULT 0,
+    total NUMERIC(12, 2) DEFAULT 0,
+    st TEXT DEFAULT 'P',
+    fecha_pago DATE,
+    referencia_op TEXT DEFAULT '',
+    servicio TEXT DEFAULT '',
+    detalle TEXT DEFAULT '',
+    nota TEXT DEFAULT '',
+    porc_rodipak NUMERIC(6, 2) DEFAULT 0,
+    rodipak NUMERIC(12, 2) DEFAULT 0,
+    hugo_comision NUMERIC(12, 2) DEFAULT 0,
+    hugo_total NUMERIC(12, 2) DEFAULT 0,
+    porc_hugo NUMERIC(6, 2) DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.consecutivo ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Acceso a consecutivo para usuarios autenticados"
+ON public.consecutivo FOR ALL 
+TO authenticated 
+USING (true);
+
+
+-- 9. TABLA DE NÓMINAS Y ARCHIVOS HISTÓRICOS (Nominas)
+CREATE TABLE IF NOT EXISTS public.nominas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    archive_id UUID DEFAULT NULL,
+    archive_name TEXT DEFAULT NULL,
+    folio TEXT NOT NULL,
+    empleado TEXT NOT NULL,
+    fecha DATE,
+    servicio TEXT DEFAULT 'Nomina',
+    subtotal NUMERIC(12, 2) DEFAULT 0,
+    iva NUMERIC(12, 2) DEFAULT 0,
+    ret4 NUMERIC(12, 2) DEFAULT 0,
+    ret_isr NUMERIC(12, 2) DEFAULT 0,
+    total NUMERIC(12, 2) DEFAULT 0,
+    p TEXT DEFAULT 'P',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.nominas ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Acceso a nóminas para gerentes y usuarios autenticados"
+ON public.nominas FOR ALL 
+TO authenticated 
+USING (true);
+
+
+-- 10. TABLA DE PROVEEDORES Y GASTOS (Proveedores)
+CREATE TABLE IF NOT EXISTS public.proveedores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    folio_ff TEXT NOT NULL,
+    proveedor TEXT NOT NULL,
+    fecha DATE,
+    servicio TEXT DEFAULT 'Logistic',
+    subtotal NUMERIC(12, 2) DEFAULT 0,
+    iva NUMERIC(12, 2) DEFAULT 0,
+    ret4 NUMERIC(12, 2) DEFAULT 0,
+    ret_isr NUMERIC(12, 2) DEFAULT 0,
+    total NUMERIC(12, 2) DEFAULT 0,
+    p TEXT DEFAULT 'P',
+    folio_fe TEXT DEFAULT 'FE-',
+    op TEXT DEFAULT '',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.proveedores ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Acceso a proveedores para usuarios autenticados"
+ON public.proveedores FOR ALL 
+TO authenticated 
+USING (true);
+
+
+-- 11. HABILITAR SUPABASE REALTIME EN TABLAS CLAVE
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.chats;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.consecutivo;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

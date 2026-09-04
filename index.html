@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rodipack Gestión | Todo-en-Uno</title>
+    <!-- Google Fonts: Plus Jakarta Sans & Space Grotesk -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Google Material Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <!-- Chart.js for interactive Pie Chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- ========================================== -->
+    <!-- PANTALLA DE CARGA GLOBAL (GLASSMORPHISM)  -->
+    <!-- ========================================== -->
+    <div id="app-loading-screen" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(248, 250, 252, 0.82); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 999999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.4s ease, visibility 0.4s ease;">
+        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding: 16px 32px; background: rgba(255, 255, 255, 0.95); border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);">
+            <img src="Logo interno.png" alt="Rodipack Logo" style="width: 52px; height: 52px; object-fit: contain;">
+            <div>
+                <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #0F172A; letter-spacing: -0.5px; line-height: 1.1;">rodipack</h1>
+                <span style="font-size: 11px; font-weight: 700; color: #2563EB; letter-spacing: 2.5px; text-transform: uppercase;">gestión central</span>
+            </div>
+        </div>
+        <div style="width: 38px; height: 38px; border: 3.5px solid #E2E8F0; border-top: 3.5px solid #2563EB; border-radius: 50%; animation: loaderSpin 0.75s linear infinite; margin-bottom: 16px;"></div>
+        <p style="color: #64748B; font-size: 13px; font-weight: 600; margin: 0; letter-spacing: 0.2px;">Cargando sistema y datos de Rodipack...</p>
+    </div>
+    <style>
+        @keyframes loaderSpin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <img src="Logo interno.png" alt="Logo Interno" class="brand-logo-img" style="width: 44px; height: 44px; object-fit: contain;">
+                <div class="brand-text">
+                    <h2>rodipack</h2>
+                    <span>gestión</span>
+                </div>
+            </div>
+
+            <!-- Main App Nav -->
+            <nav class="sidebar-nav">
+                <ul>
+                    <li>
+                        <a href="#" class="nav-item active" id="nav-tasks" onclick="switchTab('tasks')">
+                            <span class="material-symbols-outlined">assignment</span>
+                            <span>Tablero de Tareas</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item" id="nav-chat" onclick="switchTab('chat')">
+                            <span class="material-symbols-outlined">chat_bubble</span>
+                            <span>Chat Interno</span>
+                            <span class="chat-badge" id="unread-chat-count" style="display: none;">0</span>
+                        </a>
+                    </li>
+                    <li id="sidebar-item-administracion">
+                        <a href="#" class="nav-item" id="nav-administracion" onclick="switchTab('administracion')">
+                            <span class="material-symbols-outlined">analytics</span>
+                            <span>Administración</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item" id="nav-meetings" onclick="switchTab('meetings')">
+                            <span class="material-symbols-outlined">calendar_today</span>
+                            <span>Reuniones</span>
+                        </a>
+                    </li>
+                    <li id="sidebar-item-users">
+                        <a href="#" class="nav-item" id="nav-users" onclick="switchTab('users')">
+                            <span class="material-symbols-outlined">group</span>
+                            <span>Usuarios</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <!-- Rodipack Family Links -->
+            <div class="rodipack-family">
+                <span class="family-label">APLICACIONES RODIPACK</span>
+                <div class="family-links">
+                    <a href="https://roditrack.online/" target="_blank" rel="noopener noreferrer" class="family-link-card" title="Abrir Roditrack (roditrack.online)">
+                        <div class="link-icon tracking-icon" style="background: #FFFFFF; border-radius: 8px; border: 1px solid #CBD5E1; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; overflow: hidden; padding: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.04);">
+                            <img src="logo sin fondo.png" alt="Roditrack Logo" style="width: 28px; height: 28px; object-fit: contain;">
+                        </div>
+                        <div class="link-info">
+                            <h4>Roditrack</h4>
+                            <p>Rastreo de envíos</p>
+                        </div>
+                        <span class="material-symbols-outlined arrow-icon">north_east</span>
+                    </a>
+                    <a href="https://www.rodiload.com/app/index.html" target="_blank" rel="noopener noreferrer" class="family-link-card" title="Abrir Rodiload (rodiload.com)">
+                        <div class="link-icon cubicacion-icon" style="background: #FFFFFF; border-radius: 8px; border: 1px solid #CBD5E1; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; overflow: hidden; padding: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.04);">
+                            <img src="https://www.google.com/s2/favicons?domain=rodiload.com&sz=128" alt="Rodiload Logo" style="width: 26px; height: 26px; object-fit: contain;" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">
+                            <span class="material-symbols-outlined" style="display: none; font-size: 20px; color: #2563EB;">inventory_2</span>
+                        </div>
+                        <div class="link-info">
+                            <h4>Rodiload</h4>
+                            <p>Optimización volumétrica</p>
+                        </div>
+                        <span class="material-symbols-outlined arrow-icon">north_east</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- User Status Footer -->
+            <div class="user-footer" id="user-footer-card" onclick="switchTab('profile')" style="cursor: pointer;" title="Perfil del Gerente / Administración de Usuarios">
+                <div class="avatar" id="user-avatar">G</div>
+                <div class="user-info">
+                    <h4 id="user-display-name">Gerente Principal</h4>
+                    <span id="user-display-role">Administrador del Sistema</span>
+                </div>
+                <span class="material-symbols-outlined" style="margin-left: auto; font-size: 18px; color: var(--text-secondary);">chevron_right</span>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <!-- Top Header Bar -->
+            <header class="top-bar">
+                <div class="page-title-container">
+                    <h1 id="page-main-title">Tablero de Tareas</h1>
+                    <p id="page-subtitle">Gestiona y supervisa las tareas del equipo de trabajo</p>
+                </div>
+                
+                <div class="quick-stats-container">
+                    <div class="stat-badge pending-badge">
+                        <span class="material-symbols-outlined">pending_actions</span>
+                        <div class="stat-data">
+                            <span class="stat-number" id="stats-pending">0</span>
+                            <span class="stat-desc">PENDIENTES</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-badge completed-badge">
+                        <span class="material-symbols-outlined">task_alt</span>
+                        <div class="stat-data">
+                            <span class="stat-number" id="stats-completed">1</span>
+                            <span class="stat-desc">COMPLETADAS</span>
+                        </div>
+                    </div>
+
+                    <div class="progress-container">
+                        <div class="progress-label">
+                            <span>Progreso General</span>
+                            <span id="progress-percentage">25%</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="progress-bar-fill" style="width: 25%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dynamic Tab Content Views -->
+            <div class="content-body">
+                
+                <!-- TAB 1: TAREAS -->
+                <section id="tab-tasks" class="tab-pane active">
+                    <div class="tasks-layout">
+                        <!-- Left pane: Create Task (Gerente only) & Priority Filter -->
+                        <div class="tasks-control-panel">
+                            <!-- New Task Form Card (Only Gerente can see) -->
+                            <div class="card form-card" id="new-task-card">
+                                <h3><span class="material-symbols-outlined">add_task</span> Asignar Nueva Tarea</h3>
+                                <form id="new-task-form" onsubmit="handleCreateTask(event)">
+                                    <div class="form-group">
+                                        <label for="task-title">Título de la Tarea</label>
+                                        <input type="text" id="task-title" required placeholder="Ej: Revisar cubicación contenedor #42">
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="task-desc">Descripción / Instrucciones</label>
+                                        <textarea id="task-desc" rows="3" required placeholder="Detalles de la tarea para el colaborador..."></textarea>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="task-assignee">Asignar a (Responsable / Colaborador)</label>
+                                        <input type="text" id="task-assignee" required placeholder="Ej. Nombre del colaborador o equipo" style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; background: #fff;">
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label>Prioridad</label>
+                                        <input type="hidden" id="task-priority" value="alta" required>
+                                        <div class="priority-segmented-control">
+                                            <button type="button" class="priority-segment-btn active" data-priority="alta" onclick="setTaskPrioritySegment('alta')">
+                                                <span class="priority-bullet priority-bullet-alta"></span>
+                                                <span>Alta</span>
+                                            </button>
+                                            <button type="button" class="priority-segment-btn" data-priority="media" onclick="setTaskPrioritySegment('media')">
+                                                <span class="priority-bullet priority-bullet-media"></span>
+                                                <span>Media</span>
+                                            </button>
+                                            <button type="button" class="priority-segment-btn" data-priority="baja" onclick="setTaskPrioritySegment('baja')">
+                                                <span class="priority-bullet priority-bullet-baja"></span>
+                                                <span>Baja</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 6px;">
+                                        <span class="material-symbols-outlined">send</span> Asignar Tarea
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Right pane: Tasks Grid -->
+                        <div class="tasks-list-container">
+                            <div class="tasks-header-actions">
+                                <div class="tasks-filter-bar">
+                                    <span class="filter-bar-title">
+                                        <span class="material-symbols-outlined">filter_list</span>
+                                        Filtrar por:
+                                    </span>
+                                    <div class="filter-pills-horizontal">
+                                        <button type="button" class="filter-btn active" data-filter="all" onclick="filterTasks('all', this)">Todas</button>
+                                        <button type="button" class="filter-btn" data-filter="alta" onclick="filterTasks('alta', this)"><span class="priority-bullet priority-bullet-alta"></span> Alta</button>
+                                        <button type="button" class="filter-btn" data-filter="media" onclick="filterTasks('media', this)"><span class="priority-bullet priority-bullet-media"></span> Media</button>
+                                        <button type="button" class="filter-btn" data-filter="baja" onclick="filterTasks('baja', this)"><span class="priority-bullet priority-bullet-baja"></span> Baja</button>
+                                        <span class="filter-divider"></span>
+                                        <button type="button" class="filter-btn" data-filter="pending" onclick="filterTasks('pending', this)"><span class="material-symbols-outlined icon-mini">pending</span> Pendientes</button>
+                                        <button type="button" class="filter-btn" data-filter="completed" onclick="filterTasks('completed', this)"><span class="material-symbols-outlined icon-mini">check_circle</span> Completadas</button>
+                                    </div>
+                                </div>
+                                <span class="tasks-count-pill" id="visible-tasks-count">0 tareas</span>
+                            </div>
+                            
+                            <div class="tasks-grid" id="tasks-grid-list">
+                                <!-- Dynamic task items here -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 2: CHAT INTERNO -->
+                <section id="tab-chat" class="tab-pane">
+                    <div class="chat-layout card">
+                        <!-- Chat Sidebar: Channels & Members -->
+                        <div class="chat-sidebar">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <div class="chat-section-header" style="margin-bottom: 0;">Canales</div>
+                                <button type="button" onclick="openCreateGroupModal()" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: rgba(37, 99, 235, 0.1); color: #2563EB; border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s;" title="Crear Nuevo Grupo de Chat">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">add</span> Crear Grupo
+                                </button>
+                            </div>
+                            <ul class="chat-channels-list" id="chat-channels-list-container">
+                                <li class="channel-item active" id="channel-general" onclick="selectChannel('general')">
+                                    <span class="material-symbols-outlined">tag</span> # general
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Chat Main Conversation Window -->
+                        <div class="chat-main">
+                            <div class="chat-header">
+                                <div class="chat-header-info">
+                                    <h3 id="current-channel-title"># general</h3>
+                                    <p id="current-channel-desc">Canal oficial de coordinación general de operaciones Rodipack.</p>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 12px; margin-left: auto;">
+                                    <button type="button" onclick="openAddMemberModal()" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;" title="Añadir Participantes a este Chat">
+                                        <span class="material-symbols-outlined" style="font-size: 16px;">person_add</span> Añadir Participante
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="chat-messages" id="chat-messages-container">
+                                <!-- Messages will load dynamically -->
+                            </div>
+
+                            <form class="chat-input-bar" onsubmit="handleSendChatMessage(event)">
+                                <input type="text" id="chat-input-field" placeholder="Escribe un mensaje en # general..." required>
+                                <button type="submit" class="chat-send-btn">
+                                    <span class="material-symbols-outlined">send</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 3: REUNIONES -->
+                <section id="tab-meetings" class="tab-pane">
+                    <div class="meetings-layout">
+                        <!-- Left pane: Schedule a Meeting -->
+                        <div class="meetings-form-container">
+                            <div class="card form-card">
+                                <h3><span class="material-symbols-outlined">calendar_month</span> Agendar Nueva Reunión</h3>
+                                <form id="meeting-form" onsubmit="handleCreateMeeting(event)">
+                                    <div class="form-group">
+                                        <label for="meeting-title">Asunto de la Reunión</label>
+                                        <input type="text" id="meeting-title" required placeholder="Ej: Coordinación del embarque de mañana">
+                                    </div>
+                                    
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="meeting-date">Fecha</label>
+                                            <input type="date" id="meeting-date" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="meeting-time">Hora</label>
+                                            <input type="time" id="meeting-time" required>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="meeting-link">Enlace de Videollamada (Opcional)</label>
+                                        <input type="url" id="meeting-link" placeholder="https://meet.google.com/xyz-abc-123">
+                                    </div>
+
+                                    <button type="submit" class="btn btn-primary">
+                                        <span class="material-symbols-outlined">calendar_today</span> Agendar Reunión
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Right pane: Meeting List -->
+                        <div class="meetings-list-container">
+                            <div class="card list-card">
+                                <h3>Próximas Reuniones Agendadas</h3>
+                                <div class="meetings-grid" id="meetings-list-container">
+                                    <!-- Dynamic meetings here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- TAB 4: ADMINISTRACIÓN -->
+                <section id="tab-administracion" class="tab-pane">
+                    <!-- Collaborator Lock Screen -->
+                    <div id="administracion-lock-screen" class="card admond-locked-card" style="display: none; text-align: center; padding: 60px 40px; max-width: 600px; margin: 40px auto;">
+                        <span class="material-symbols-outlined" style="font-size: 64px; color: var(--color-basalt); margin-bottom: 20px;">lock</span>
+                        <h2>Acceso Restringido</h2>
+                        <p style="color: var(--text-secondary); margin-top: 10px; font-size: 14px; line-height: 1.6;">
+                            Esta sección contiene información contable, estadísticas de departamentos, nóminas y control de proveedores.
+                            Por motivos de seguridad, solo está disponible para usuarios con rol de <strong>Gerente</strong>.
+                        </p>
+                    </div>
+
+                    <!-- Manager Workspace -->
+                    <div id="administracion-manager-workspace" style="display: block;">
+                        
+                        <!-- 3 Main Interactive Fichas Selection Header -->
+                        <div class="admin-fichas-nav">
+                            <button class="admin-ficha-card active" id="ficha-btn-visualizacion" onclick="switchAdminFicha('visualizacion')">
+                                <div class="ficha-icon"><span class="material-symbols-outlined">pie_chart</span></div>
+                                <div class="ficha-text">
+                                    <h4>Visualización</h4>
+                                    <p>Estadísticas, departamentos y balance</p>
+                                </div>
+                            </button>
+                            <button class="admin-ficha-card" id="ficha-btn-quincenal" onclick="switchAdminFicha('quincenal')">
+                                <div class="ficha-icon"><span class="material-symbols-outlined">account_balance_wallet</span></div>
+                                <div class="ficha-text">
+                                    <h4>Administración Quincenal</h4>
+                                    <p>Nóminas y pagos a colaboradores</p>
+                                </div>
+                            </button>
+                            <button class="admin-ficha-card" id="ficha-btn-proveedores" onclick="switchAdminFicha('proveedores')">
+                                <div class="ficha-icon"><span class="material-symbols-outlined">local_shipping</span></div>
+                                <div class="ficha-text">
+                                    <h4>Proveedores</h4>
+                                    <p>Control de gastos y fletes por proveedor</p>
+                                </div>
+                            </button>
+                            <button class="admin-ficha-card" id="ficha-btn-consecutivo" onclick="switchAdminFicha('consecutivo')">
+                                <div class="ficha-icon"><span class="material-symbols-outlined">receipt_long</span></div>
+                                <div class="ficha-text">
+                                    <h4>Consecutivo</h4>
+                                    <p>Facturación, comisiones y servicios 2026</p>
+                                </div>
+                            </button>
+                        </div>
+
+                        <!-- SUB-FICHA 1: VISUALIZACIÓN (Estadísticas y Departamentos - Imagen 2) -->
+                        <div class="admin-subpane active" id="admin-subpane-visualizacion">
+                            <div class="visualizacion-layout-grid">
+                                <!-- Left Column: Pie Chart and KPI Cards -->
+                                <div class="visualizacion-charts-col">
+                                    <div class="card chart-card">
+                                        <div class="card-header-flex">
+                                            <div>
+                                                <h3>Distribución de Capital y Egresos</h3>
+                                                <p>Porcentajes asignados por departamento y conceptos contables</p>
+                                            </div>
+                                            <span class="material-symbols-outlined icon-muted">donut_large</span>
+                                        </div>
+                                        <div class="chart-canvas-wrapper">
+                                            <canvas id="admin-pie-chart"></canvas>
+                                        </div>
+                                    </div>
+
+                                    <!-- Quick KPI Cards Grid -->
+                                    <div class="admin-kpi-grid">
+                                        <div class="kpi-mini-card kpi-bancos">
+                                            <span class="material-symbols-outlined">account_balance</span>
+                                            <div>
+                                                <span class="kpi-title">Bancos Inicial</span>
+                                                <h4 id="kpi-bancos-val">$10,000.00</h4>
+                                            </div>
+                                        </div>
+                                        <div class="kpi-mini-card kpi-proveedores">
+                                            <span class="material-symbols-outlined">local_shipping</span>
+                                            <div>
+                                                <span class="kpi-title">Gastos Proveedores</span>
+                                                <h4 id="kpi-proveedores-val">$0.00</h4>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+
+                                <!-- Right Column: Accounting Concept Table (Imagen 2 format) -->
+                                <div class="visualizacion-table-col">
+                                    <div class="card table-card">
+                                        <div class="table-card-header">
+                                            <div class="table-title-area">
+                                                <h3>Balance y Capital por Departamento</h3>
+                                                <p>Valores contables consolidados en tiempo real</p>
+                                            </div>
+                                        </div>
+                                        <div class="table-responsive">
+                                            <table class="excel-style-table sheet-summary-table" id="table-resumen-departamentos">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Concepto / Departamento</th>
+                                                        <th>Monto</th>
+                                                        <th>Detalle / Nota</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <!-- Bancos Row (Light Green) -->
+                                                    <tr class="excel-row-bancos">
+                                                        <td><strong>Bancos</strong></td>
+                                                        <td>
+                                                            <input type="number" id="concept-bancos-input" class="excel-input number-input" value="10000" step="100" oninput="updateAdminConcept('bancos', this.value)">
+                                                        </td>
+                                                        <td class="cell-note">Capital disponible en cuenta bancaria</td>
+                                                    </tr>
+                                                    <!-- Ingresos Row (Dark Blue) -->
+                                                    <tr class="excel-row-ingresos">
+                                                        <td><strong>Ingresos</strong></td>
+                                                        <td>
+                                                            <input type="number" id="concept-ingresos-input" class="excel-input number-input" value="0" step="100" oninput="updateAdminConcept('ingresos', this.value)">
+                                                        </td>
+                                                        <td class="cell-note"><strong>Facturas por recibir pago.</strong></td>
+                                                    </tr>
+                                                    <!-- Subtotal 1 (Blue) -->
+                                                    <tr class="excel-blue-balance-row">
+                                                        <td>Balance Parcial (Bancos + Ingresos)</td>
+                                                        <td id="balance-subtotal-1" class="text-right">$10,000.00</td>
+                                                        <td></td>
+                                                    </tr>
+                                                    <!-- Gastos proveedores (Yellow) -->
+                                                    <tr class="excel-row-gastos">
+                                                        <td><strong>Gastos proveedores</strong></td>
+                                                        <td id="concept-gastos-prov-val" class="text-right font-bold">$0.00</td>
+                                                        <td class="cell-note">Calculado automáticamente de Proveedores</td>
+                                                    </tr>
+                                                    <!-- Subtotal 2 (Blue) -->
+                                                    <tr class="excel-blue-balance-row">
+                                                        <td>Balance Parcial</td>
+                                                        <td id="balance-subtotal-2" class="text-right">$10,000.00</td>
+                                                        <td></td>
+                                                    </tr>
+                                                    <!-- Gastos Indirectos (Yellow) -->
+                                                    <tr class="excel-row-gastos">
+                                                        <td><strong>Gastos Ind.</strong></td>
+                                                        <td>
+                                                            <input type="number" id="concept-gastos-ind-input" class="excel-input number-input" value="670" step="10" oninput="updateAdminConcept('gastosInd', this.value)">
+                                                        </td>
+                                                        <td class="cell-note">Gastos operativos indirectos</td>
+                                                    </tr>
+                                                    <!-- Subtotal 3 (Blue) -->
+                                                    <tr class="excel-blue-balance-row">
+                                                        <td>Balance Parcial</td>
+                                                        <td id="balance-subtotal-3" class="text-right">$9,330.00</td>
+                                                        <td></td>
+                                                    </tr>
+                                                    <!-- Nóminas (Yellow) -->
+                                                    <tr class="excel-row-gastos">
+                                                        <td><strong>Nominas</strong></td>
+                                                        <td id="concept-nominas-val" class="text-right font-bold" style="color: #b71c1c;">$13,780.00</td>
+                                                        <td class="cell-note">Calculado de Administración Quincenal</td>
+                                                    </tr>
+                                                    <!-- Subtotal 4 (Blue) -->
+                                                    <tr class="excel-blue-balance-row">
+                                                        <td>Balance Parcial</td>
+                                                        <td id="balance-subtotal-4" class="text-right font-bold">-$4,450.00</td>
+                                                        <td></td>
+                                                    </tr>
+                                                    <!-- Impuestos (Yellow) -->
+                                                    <tr class="excel-row-gastos">
+                                                        <td><strong>Impuestos</strong></td>
+                                                        <td>
+                                                            <input type="number" id="concept-impuestos-input" class="excel-input number-input" value="0" step="100" oninput="updateAdminConcept('impuestos', this.value)">
+                                                        </td>
+                                                        <td class="cell-note">Retenciones y obligaciones fiscales</td>
+                                                    </tr>
+                                                    <!-- TOTAL ROW (Boxed Summary) -->
+                                                    <tr class="excel-final-total-row">
+                                                        <td><strong>TOTAL GENERAL</strong></td>
+                                                        <td id="concept-total-final" class="text-right font-extrabold">-$4,450.00</td>
+                                                        <td class="cell-note">Balance neto final del ejercicio</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="admin-kpi-grid">
+                                        <div class="kpi-mini-card kpi-nominas">
+                                            <span class="material-symbols-outlined">badge</span>
+                                            <div>
+                                                <span class="kpi-title">Nóminas Totales</span>
+                                                <h4 id="kpi-nominas-val">$13,780.00</h4>
+                                            </div>
+                                        </div>
+                                        <div class="kpi-mini-card kpi-balance">
+                                            <span class="material-symbols-outlined">calculate</span>
+                                            <div>
+                                                <span class="kpi-title">Balance Neto Final</span>
+                                                <h4 id="kpi-balance-val">-$4,450.00</h4>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SUB-FICHA 2: ADMINISTRACIÓN QUINCENAL (Nóminas - Imagen 3) -->
+                        <div class="admin-subpane" id="admin-subpane-quincenal">
+                            <div class="card table-card full-width-card">
+                                <div class="table-card-header">
+                                    <div class="table-title-area">
+                                        <h3>Nóminas Quincenales</h3>
+                                        <p>Control y cálculo de pagos de sueldo a colaboradores del equipo</p>
+                                    </div>
+                                    <div class="table-actions" style="display: flex; gap: 10px; align-items: center;" id="nomina-action-buttons">
+                                        <button class="btn btn-secondary" onclick="openModalArchivoDigital()" id="btn-archivo-digital">
+                                            <span class="material-symbols-outlined">folder</span> Archivo digital
+                                        </button>
+                                        <button class="btn btn-primary" style="background-color: #f59e0b; border-color: #f59e0b; color: white;" onclick="archivarQuincenaActual()" id="btn-archivar-quincena">
+                                            <span class="material-symbols-outlined">archive</span> Archivar Quincena
+                                        </button>
+                                        <button class="btn btn-primary" onclick="addNewNominaRow()">
+                                            <span class="material-symbols-outlined">person_add</span> Agregar Empleado / Nómina
+                                        </button>
+                                        <button class="btn btn-secondary" style="display: none; background-color: #ef4444; color: white; border-color: #ef4444;" onclick="exitArchiveMode()" id="btn-exit-archive">
+                                            <span class="material-symbols-outlined">close</span> Cerrar Archivo
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="admond-table excel-style-table" id="table-nominas">
+                                        <thead>
+                                            <tr>
+                                                <th>Folio</th>
+                                                <th>Proveedor / Empleado</th>
+                                                <th>Fecha</th>
+                                                <th>Servicio</th>
+                                                <th>Sub total</th>
+                                                <th>IVA</th>
+                                                <th>Retención 4%</th>
+                                                <th>Retención ISR</th>
+                                                <th>Total</th>
+                                                <th>P</th>
+                                                <th>Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-nominas">
+                                            <!-- Dynamic Nómina rows -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SUB-FICHA: ARCHIVO DIGITAL -->
+                        <div class="admin-subpane" id="admin-subpane-archivo-digital">
+                            <div class="card table-card full-width-card" style="backdrop-filter: blur(14px) !important; background: rgba(255, 255, 255, 0.85);">
+                                <div class="table-card-header">
+                                    <div class="table-title-area">
+                                        <h3>Archivo Digital de Nóminas</h3>
+                                        <p>Consulta, descarga o edita quincenas cerradas anteriormente</p>
+                                    </div>
+                                    <div class="table-actions">
+                                        <button class="btn btn-secondary" onclick="switchAdminFicha('quincenal')">
+                                            <span class="material-symbols-outlined">arrow_back</span> Regresar a Nóminas
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="admond-table excel-style-table" style="width: 100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>Nombre / Periodo</th>
+                                                <th>Fecha de Cierre</th>
+                                                <th style="text-align: center;">Registros</th>
+                                                <th>Total Pagado</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-archivo-digital">
+                                            <!-- Dynamic archived rows -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SUB-FICHA 3: PROVEEDORES (Imagen 4) -->
+                        <div class="admin-subpane" id="admin-subpane-proveedores">
+                            <div class="card table-card full-width-card">
+                                <div class="table-card-header">
+                                    <div class="table-title-area">
+                                        <h3>Control de Proveedores</h3>
+                                        <p>Gastos, facturas por pagar y retenciones logísticas</p>
+                                    </div>
+                                    <div class="table-actions">
+                                        <button class="btn btn-primary" onclick="addNewProveedorRow()">
+                                            <span class="material-symbols-outlined">add</span> Agregar Fila
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Supplier Filter Chips (Fichas por nombre de proveedores) -->
+                                <div class="proveedor-chips-bar">
+                                    <span class="chips-label">Filtrar Proveedor:</span>
+                                    <div class="proveedor-chips-list" id="proveedor-chips-container">
+                                        <!-- Dynamic chips rendered by JS -->
+                                    </div>
+                                    <button class="btn-add-chip" onclick="promptAddProveedor()" title="Añadir nuevo proveedor a la lista">
+                                        <span class="material-symbols-outlined">add_circle</span> + Añadir Proveedor
+                                    </button>
+                                </div>
+
+                                <div class="table-responsive">
+                                    <table class="admond-table excel-style-table" id="table-proveedores">
+                                        <thead>
+                                            <tr>
+                                                <th>Folio (FF-)</th>
+                                                <th>Proveedor</th>
+                                                <th>Fecha</th>
+                                                <th>Servicio</th>
+                                                <th>Sub total</th>
+                                                <th>IVA</th>
+                                                <th>Retención 4%</th>
+                                                <th>Retención ISR</th>
+                                                <th>Total</th>
+                                                <th>P</th>
+                                                <th>Folio (FE-)</th>
+                                                <th>OP</th>
+                                                <th>Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-proveedores">
+                                            <!-- Dynamic Proveedor rows -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SUB-FICHA 4: CONSECUTIVO 2026 -->
+                        <div class="admin-subpane" id="admin-subpane-consecutivo">
+                            <div class="card table-card full-width-card">
+                                <!-- Header & Action Controls -->
+                                <div class="table-card-header">
+                                    <div class="table-title-area">
+                                        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                                            <h3>Consecutivo 2026</h3>
+                                            <span class="consecutivo-badge-count" id="consecutivo-total-badge">253 Registros</span>
+                                        </div>
+                                        <p>Registro consecutivo de facturas emitidas, desglose de IVA (16%), servicios logísticos y comisiones Rodipak / Hugo</p>
+                                    </div>
+                                    <div class="table-actions">
+                                        <button class="btn btn-secondary" onclick="exportConsecutivoToCSV()">
+                                            <span class="material-symbols-outlined">download</span> Exportar CSV
+                                        </button>
+                                        <button class="btn btn-primary" onclick="addNewConsecutivoRow()">
+                                            <span class="material-symbols-outlined">add</span> Agregar Factura
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Summary KPI Cards -->
+                                <div class="consecutivo-kpi-grid">
+                                    <div class="kpi-mini-card kpi-subtotal">
+                                        <span class="material-symbols-outlined">payments</span>
+                                        <div>
+                                            <span class="kpi-title">Subtotal RDP</span>
+                                            <h4 id="consecutivo-kpi-subtotal">$0.00</h4>
+                                        </div>
+                                    </div>
+                                    <div class="kpi-mini-card kpi-iva">
+                                        <span class="material-symbols-outlined">percent</span>
+                                        <div>
+                                            <span class="kpi-title">IVA Total (16%)</span>
+                                            <h4 id="consecutivo-kpi-iva">$0.00</h4>
+                                        </div>
+                                    </div>
+                                    <div class="kpi-mini-card kpi-total">
+                                        <span class="material-symbols-outlined">account_balance_wallet</span>
+                                        <div>
+                                            <span class="kpi-title">Total Facturado</span>
+                                            <h4 id="consecutivo-kpi-total">$0.00</h4>
+                                        </div>
+                                    </div>
+                                    <div class="kpi-mini-card kpi-rodipak">
+                                        <span class="material-symbols-outlined">trending_up</span>
+                                        <div>
+                                            <span class="kpi-title">Ganancia Rodipak</span>
+                                            <h4 id="consecutivo-kpi-rodipak">$0.00</h4>
+                                        </div>
+                                    </div>
+                                    <div class="kpi-mini-card kpi-hugo">
+                                        <span class="material-symbols-outlined">badge</span>
+                                        <div>
+                                            <span class="kpi-title">Comisión Hugo</span>
+                                            <h4 id="consecutivo-kpi-hugo">$0.00</h4>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Filter & Search Bar -->
+                                <div class="consecutivo-filters-wrapper">
+                                    <div class="consecutivo-search-box">
+                                        <span class="material-symbols-outlined">search</span>
+                                        <input type="text" id="consecutivo-search-input" placeholder="Buscar por Factura (FE-...), Cliente, OP, Servicio, Operador..." oninput="handleConsecutivoSearch(this.value)">
+                                    </div>
+                                    
+                                    <div class="consecutivo-filter-pills">
+                                        <span class="filter-label">Estado:</span>
+                                        <button class="consecutivo-filter-btn active" data-st="all" onclick="filterConsecutivoByST('all', this)">Todos</button>
+                                        <button class="consecutivo-filter-btn" data-st="P" onclick="filterConsecutivoByST('P', this)">Pagados (P)</button>
+                                        <button class="consecutivo-filter-btn" data-st="C" onclick="filterConsecutivoByST('C', this)">Por Cobrar / C</button>
+                                        <button class="consecutivo-filter-btn" data-st="Cancelado" onclick="filterConsecutivoByST('Cancelado', this)">Cancelados</button>
+                                    </div>
+
+                                    <div class="consecutivo-client-select-wrap">
+                                        <span class="filter-label">Cliente:</span>
+                                        <select id="consecutivo-client-filter" onchange="filterConsecutivoByClient(this.value)">
+                                            <option value="all">Todos los clientes</option>
+                                            <option value="Victor Hugo">Victor Hugo</option>
+                                            <option value="Express">Express</option>
+                                            <option value="RAMA">RAMA</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Table Container with Fixed 100% Width (No Horizontal Scroll) -->
+                                <div class="table-responsive consecutivo-table-container">
+                                    <table class="admond-table excel-style-table consecutivo-table" id="table-consecutivo">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 2.8%; text-align: center;" title="Número Consecutivo">#</th>
+                                                <th style="width: 5.2%;" title="Folio de Factura">Factura</th>
+                                                <th style="width: 6.8%;" title="Fecha de Emisión">Emisión</th>
+                                                <th style="width: 7.2%;" title="Cliente">Cliente</th>
+                                                <th style="width: 4.8%;" title="Folio u OP del Cliente">Folio Cl.</th>
+                                                <th style="width: 6.8%; text-align: right;" title="Subtotal Rodipak">Subtotal</th>
+                                                <th style="width: 5.4%; text-align: right;" title="IVA 16%">IVA 16%</th>
+                                                <th style="width: 6.8%; text-align: right;" title="Total Factura (Subtotal + IVA)">Total</th>
+                                                <th style="width: 3.8%; text-align: center;" title="Estado (P = Pagado, C = Por Cobrar)">ST</th>
+                                                <th style="width: 6.8%;" title="Fecha de Pago">F. Pago</th>
+                                                <th style="width: 6.8%;" title="Referencia de Orden de Pago">Ref. OP</th>
+                                                <th style="width: 6.4%;" title="Tipo de Servicio">Servicio</th>
+                                                <th style="width: 7.2%;" title="Detalle, Destino u Operador">Detalle</th>
+                                                <th style="width: 3.8%;" title="Nota / Folio Prov.">Nota</th>
+                                                <th style="width: 3.8%; text-align: right;" title="% Margen Rodipak">% RDP</th>
+                                                <th style="width: 5.8%; text-align: right;" title="Ganancia Rodipak">Rodipak</th>
+                                                <th style="width: 5.8%; text-align: right;" title="Comisión Hugo">Hugo Com.</th>
+                                                <th style="width: 5.8%; text-align: right;" title="Total Cobro Hugo">Hugo Tot.</th>
+                                                <th style="width: 3.8%; text-align: right;" title="% Comisión Hugo">% Hugo</th>
+                                                <th style="width: 2.8%; text-align: center;" title="Acción">🗑</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-consecutivo">
+                                            <!-- Dynamic Consecutivo rows -->
+                                        </tbody>
+                                        <tfoot>
+                                            <tr class="excel-green-row" id="excel-consecutivo-totals-row">
+                                                <!-- Dynamic totals rendered by JS -->
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+
+                                <!-- Pagination Controls -->
+                                <div class="consecutivo-pagination-bar">
+                                    <div class="pagination-info">
+                                        Mostrando <span id="consecutivo-visible-range">1-50</span> de <span id="consecutivo-total-filtered">253</span> facturas
+                                    </div>
+                                    <div class="pagination-page-size">
+                                        <span>Mostrar:</span>
+                                        <select id="consecutivo-page-size" onchange="changeConsecutivoPageSize(this.value)">
+                                            <option value="50" selected>50 por página</option>
+                                            <option value="100">100 por página</option>
+                                            <option value="200">200 por página</option>
+                                            <option value="all">Todas</option>
+                                        </select>
+                                    </div>
+                                    <div class="pagination-buttons" id="consecutivo-pagination-btns">
+                                        <!-- Pagination buttons generated by JS -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+                
+                <!-- TAB 5: ADMINISTRACIÓN DE USUARIOS (SOLO GERENTE / MANAGER) -->
+                <section id="tab-users" class="tab-pane">
+                    <div class="card" style="padding: 22px; background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <h3 style="font-size: 17px; font-weight: 700; color: #0F172A; margin: 0 0 4px 0;">Perfiles de Usuarios y Colaboradores</h3>
+                                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Directorio de perfiles registrados en el sistema</p>
+                            </div>
+                            <button type="button" class="btn-primary-action" onclick="toggleNewUserForm()" style="font-size: 12px; padding: 9px 16px;">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">person_add</span> Alta de Usuario
+                            </button>
+                        </div>
+
+                        <!-- FORMULARIO DESPLEGABLE: REGISTRAR COLABORADOR -->
+                        <div id="new-user-form-container" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 20px; margin-bottom: 22px; display: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                                <h4 style="font-size: 15px; font-weight: 700; color: #0F172A; margin: 0;">Dar de Alta Nuevo Perfil</h4>
+                                <button type="button" onclick="toggleNewUserForm()" style="background: none; border: none; font-size: 12px; color: var(--text-secondary); cursor: pointer; font-weight: 600;">Cancelar</button>
+                            </div>
+                            <form id="form-supabase-register" onsubmit="handleSupabaseRegister(event)">
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
+                                    <div class="form-group">
+                                        <label style="font-size: 12px; font-weight: 600;">Nombre Completo:</label>
+                                        <input type="text" id="reg-nombre" placeholder="Ej. Víctor Hugo" required style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="font-size: 12px; font-weight: 600;">Correo Electrónico:</label>
+                                        <input type="email" id="reg-email" placeholder="usuario@rodipack.com" required style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="font-size: 12px; font-weight: 600;">Rol Asignado:</label>
+                                        <select id="reg-rol" class="custom-excel-select">
+                                            <option value="gerente">Gerente / Director (Acceso Total)</option>
+                                            <option value="administrador">Administrador (Finanzas & Nómina)</option>
+                                            <option value="colaborador" selected>Colaborador de Operaciones (Tareas & Chat)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="font-size: 12px; font-weight: 600;">Departamento:</label>
+                                        <input type="text" id="reg-depto" placeholder="Logística, Finanzas..." style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 16px;">
+                                    <label style="font-size: 12px; font-weight: 600;">Contraseña inicial (mínimo 6 caracteres):</label>
+                                    <input type="password" id="reg-password" placeholder="••••••••" minlength="6" required style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
+                                </div>
+                                <div id="reg-error-msg" class="auth-error-badge" style="display: none; margin-bottom: 12px;"></div>
+                                <div id="reg-success-msg" class="auth-success-badge" style="display: none; margin-bottom: 12px;"></div>
+                                <button type="submit" class="btn-primary-action" id="btn-submit-reg" style="padding: 10px 20px; font-size: 13px;">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">how_to_reg</span> Guardar Perfil en la Nube
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- CONTENEDOR DE LA LISTA DE PERFILES EN 3 COLUMNAS -->
+                        <div id="profiles-list-container" style="width: 100%;">
+                            <!-- Cargado dinámicamente con JS por secciones (Managers, Administrativos, Colaboradores) -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 6: CONFIGURACIÓN DE PERFIL PERSONAL -->
+                <section id="tab-profile" class="tab-pane">
+                    <div class="profile-tab-container card" style="padding: 30px 36px; background: #FFFFFF; border-radius: 16px; border: 1px solid #E2E8F0; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); max-width: 1100px; margin: 0 auto;">
+                        
+                        <!-- HEADER BANNER GERENTE -->
+                        <div class="profile-header-banner" style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid #E2E8F0; flex-wrap: wrap; gap: 16px;">
+                            <div style="display: flex; align-items: center; gap: 18px;">
+                                <div class="avatar" id="modal-gerente-avatar" style="width: 60px; height: 60px; font-size: 24px; display: flex; align-items: center; justify-content: center; background: rgba(37, 99, 235, 0.1); color: #2563EB; border: 2.5px solid #2563EB; font-weight: 800; border-radius: 50%; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.15);">G</div>
+                                <div>
+                                    <h3 id="modal-gerente-name" style="margin: 0 0 4px 0; font-size: 20px; font-weight: 800; color: #0F172A; letter-spacing: -0.3px;">Gerente Principal</h3>
+                                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                        <span id="modal-gerente-role-tag" class="badge" style="background: rgba(37, 99, 235, 0.1); color: #2563EB; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 4px;">
+                                            <span class="material-symbols-outlined" style="font-size: 14px;">admin_panel_settings</span> Administrador del Sistema
+                                        </span>
+                                        <span style="background: #ECFDF5; color: #059669; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid #A7F3D0;">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; color: #10B981;">check_circle</span> Sesión Activa
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <button type="button" class="btn-logout-pill" onclick="handleSupabaseLogout()" title="Cerrar Sesión del Gerente" style="padding: 10px 20px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border-radius: 10px; background: #FEF2F2; color: #EF4444; border: 1px solid #FCA5A5; cursor: pointer; transition: all 0.2s ease;">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">logout</span> Cerrar Sesión
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- DATOS DE MI PERFIL PERSONAL -->
+                        <div id="gerente-logged-in-view" style="display: block;">
+                            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #F1F5F9; padding-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                                    <h4 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+                                        <span class="material-symbols-outlined" style="color: #2563EB; font-size: 22px;">manage_accounts</span> Datos del Perfil y Seguridad
+                                    </h4>
+                                    <span style="font-size: 12px; font-weight: 700; color: #475569; background: #F1F5F9; padding: 4px 12px; border-radius: 12px; border: 1px solid #E2E8F0;">Configuración Personal</span>
+                                </div>
+                                
+                                <form id="form-edit-my-profile" onsubmit="handleSaveMyProfile(event)">
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-bottom: 20px;">
+                                        <div class="form-group" style="margin: 0;">
+                                            <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                                                <span class="material-symbols-outlined" style="font-size: 16px; color: #64748B;">person</span> Nombre Completo:
+                                            </label>
+                                            <input type="text" id="myprofile-edit-name" value="Gerente Principal" required style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 10px; font-size: 14px; font-weight: 500;">
+                                        </div>
+                                        <div class="form-group" style="margin: 0;">
+                                            <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                                                <span class="material-symbols-outlined" style="font-size: 16px; color: #64748B;">call</span> Teléfono / WhatsApp:
+                                            </label>
+                                            <input type="tel" id="myprofile-edit-phone" placeholder="+52 55 1234 5678" style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 10px; font-size: 14px; font-weight: 500;">
+                                        </div>
+                                        <div class="form-group" style="margin: 0;">
+                                            <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                                                <span class="material-symbols-outlined" style="font-size: 16px; color: #64748B;">mail</span> Correo Electrónico Registrado:
+                                            </label>
+                                            <input type="email" id="myprofile-edit-email" value="zalazardemiranda@gmail.com" readonly style="width: 100%; padding: 10px 14px; border: 1px solid #E2E8F0; background: #F8FAFC; border-radius: 10px; font-size: 14px; color: #64748B; font-weight: 500;">
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- SECCIÓN PARA VER LA CONTRASEÑA ACTUAL -->
+                                    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 20px; margin-bottom: 22px;">
+                                        <div style="display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                                            <div class="form-group" style="margin: 0; flex: 1; min-width: 240px;">
+                                                <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                                                    <span class="material-symbols-outlined" style="font-size: 18px; color: #2563EB;">key</span> Contraseña Actual:
+                                                </label>
+                                                <div style="position: relative;">
+                                                    <input type="password" id="myprofile-edit-pass" placeholder="Ingresa o guarda tu contraseña" readonly style="width: 100%; padding: 10px 42px 10px 14px; border: 1px solid #CBD5E1; border-radius: 10px; font-size: 14px; background: #FFFFFF; color: #0F172A; font-weight: 600;" title="Contraseña Actual Registrada">
+                                                    <button type="button" onclick="togglePasswordVisibility('myprofile-edit-pass', this)" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #2563EB; display: flex; align-items: center; justify-content: center; padding: 4px;" title="Mostrar / Ocultar Contraseña">
+                                                        <span class="material-symbols-outlined" style="font-size: 20px;">visibility</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                                <button type="button" onclick="handleRecoverPasswordByEmail()" class="btn-secondary" style="padding: 10px 16px; font-size: 13px; font-weight: 700; background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; border-radius: 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s ease;" title="Enviar enlace de recuperación o cambiar clave">
+                                                    <span class="material-symbols-outlined" style="font-size: 18px;">lock_reset</span> Cambiar / Restablecer Clave
+                                                </button>
+                                                <button type="submit" class="btn-primary-action" style="padding: 10px 22px; font-size: 13px; font-weight: 700; border-radius: 10px; background: #2563EB; color: #FFFFFF; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);">
+                                                    <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar Cambios
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="myprofile-update-msg" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 16px;"></div>
+                                </form>
+
+                                <!-- TARJETA INFORMATIVA RESUMEN SEGURIDAD -->
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; border-top: 1px dashed #E2E8F0; padding-top: 20px; margin-top: 10px;">
+                                    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 12px;">
+                                        <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(37, 99, 235, 0.1); color: #2563EB; display: flex; align-items: center; justify-content: center;">
+                                            <span class="material-symbols-outlined" style="font-size: 20px;">shield_lock</span>
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Seguridad de Cuenta</div>
+                                            <div style="font-size: 13px; font-weight: 700; color: #0F172A;">Protección Supabase</div>
+                                        </div>
+                                    </div>
+
+                                    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 12px;">
+                                        <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(16, 185, 129, 0.1); color: #10B981; display: flex; align-items: center; justify-content: center;">
+                                            <span class="material-symbols-outlined" style="font-size: 20px;">cloud_done</span>
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Sincronización Nube</div>
+                                            <div style="font-size: 13px; font-weight: 700; color: #0F172A;">Conectado y Actualizado</div>
+                                        </div>
+                                    </div>
+
+                                    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 12px;">
+                                        <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(245, 158, 11, 0.1); color: #D97706; display: flex; align-items: center; justify-content: center;">
+                                            <span class="material-symbols-outlined" style="font-size: 20px;">verified_user</span>
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Rol de Usuario</div>
+                                            <div style="font-size: 13px; font-weight: 700; color: #0F172A;">Administración Rodipack</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="gerente-login-view" style="max-width: 480px; display: none;">
+                            <div class="auth-header" style="margin-bottom: 16px;">
+                                <h4 style="font-size: 16px; font-weight: 700; color: #0F172A; margin: 0 0 4px 0;">Iniciar Sesión en la Nube</h4>
+                                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Inicia sesión con tus credenciales de Supabase para sincronizar datos en tiempo real.</p>
+                            </div>
+                            <form id="form-supabase-login" onsubmit="handleSupabaseLogin(event)">
+                                <div class="form-group" style="margin-bottom: 14px;">
+                                    <label style="font-size: 12px; font-weight: 600;">Correo Electrónico:</label>
+                                    <input type="email" id="login-email" placeholder="ejemplo@rodipack.com" required style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 16px;">
+                                    <label style="font-size: 12px; font-weight: 600;">Contraseña:</label>
+                                    <input type="password" id="login-password" placeholder="••••••••" required style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
+                                </div>
+                                <div id="login-error-msg" class="auth-error-badge" style="display: none; margin-bottom: 14px;"></div>
+                                <button type="submit" class="btn-primary-action" id="btn-submit-login" style="padding: 11px 24px; font-size: 13px;">
+                                    <span class="material-symbols-outlined">login</span> Iniciar Sesión
+                                </button>
+                            </form>
+                        </div>
+
+                    </div>
+                </section>
+
+    <!-- ========================================== -->
+    <!-- MODAL: CREAR GRUPO DE CHAT                 -->
+    <!-- ========================================== -->
+    <div id="create-group-modal" class="custom-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); z-index: 99999; align-items: center; justify-content: center;">
+        <div class="custom-modal-content" style="max-width: 480px; width: 90%; padding: 24px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+                    <span class="material-symbols-outlined" style="color: #2563EB;">groups</span> Crear Nuevo Grupo de Chat
+                </h3>
+                <button type="button" onclick="closeCreateGroupModal()" style="background: none; border: none; font-size: 18px; color: var(--text-secondary); cursor: pointer;">✕</button>
+            </div>
+            <form id="form-create-group" onsubmit="handleCreateChatGroup(event)">
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="font-size: 12px; font-weight: 600;">Nombre del Grupo / Canal:</label>
+                    <input type="text" id="new-group-name" placeholder="Ej: Operaciones Norte, Fletes..." required style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="font-size: 12px; font-weight: 700; color: #0F172A; margin-bottom: 8px; display: block;">Seleccionar Integrantes Iniciales:</label>
+                    <div id="group-members-checklist" style="display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto; background: #F8FAFC; padding: 10px; border: 1px solid #E2E8F0; border-radius: 14px;">
+                        <!-- Cargado dinámicamente -->
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" onclick="closeCreateGroupModal()" class="btn-secondary" style="padding: 9px 16px; font-size: 12px; background: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 8px; cursor: pointer;">Cancelar</button>
+                    <button type="submit" class="btn-primary-action" style="padding: 9px 20px; font-size: 12px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">group_add</span> Crear Grupo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: AÑADIR PARTICIPANTES AL CHAT        -->
+    <!-- ========================================== -->
+    <div id="add-member-modal" class="custom-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); z-index: 99999; align-items: center; justify-content: center;">
+        <div class="custom-modal-content" style="max-width: 480px; width: 90%; padding: 24px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+                    <span class="material-symbols-outlined" style="color: #2563EB;">person_add</span> Añadir Participantes
+                </h3>
+                <button type="button" onclick="closeAddMemberModal()" style="background: none; border: none; font-size: 18px; color: var(--text-secondary); cursor: pointer;">✕</button>
+            </div>
+            <form id="form-add-member" onsubmit="handleAddChatMember(event)">
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="font-size: 12px; font-weight: 700; color: #0F172A; margin-bottom: 8px; display: block;">Seleccionar Usuario a Añadir:</label>
+                    <div id="add-member-checklist" style="display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; background: #F8FAFC; padding: 10px; border: 1px solid #E2E8F0; border-radius: 14px;">
+                        <!-- Cargado dinámicamente -->
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" onclick="closeAddMemberModal()" class="btn-secondary" style="padding: 9px 16px; font-size: 12px; background: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 8px; cursor: pointer;">Cancelar</button>
+                    <button type="submit" class="btn-primary-action" style="padding: 9px 20px; font-size: 12px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">person_add</span> Añadir al Chat
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- PANTALLA DE INICIO DE SESIÓN GLOBAL        -->
+    <!-- ========================================== -->
+    <!-- ========================================== -->
+    <!-- PANTALLA DE INICIO DE SESIÓN GLOBAL (IMAGEN 2) -->
+    <!-- ========================================== -->
+    <div id="global-login-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 999999; align-items: center; justify-content: center; overflow: hidden;">
+        <div style="position: absolute; top: -5%; left: -5%; width: 110vw; height: 110vh; background: #EEF2F6 url('fondo sistema.png') no-repeat center center; background-size: cover; filter: blur(24px) brightness(1.02); -webkit-filter: blur(24px) brightness(1.02); z-index: -1; pointer-events: none;"></div>
+        <div style="max-width: 420px; width: 90%; background: #FFFFFF; border-radius: 24px; padding: 48px 36px 40px 36px; box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12); border: 1px solid rgba(255, 255, 255, 0.8); position: relative; z-index: 1;">
+            <div style="text-align: center; margin-bottom: 32px;">
+                <img src="Logo interno.png" alt="ROD Logo" style="max-height: 80px; width: auto; object-fit: contain; display: inline-block;">
+            </div>
+
+            <form id="form-global-login" onsubmit="handleGlobalLoginSubmit(event)">
+                <div class="form-group" style="margin-bottom: 18px;">
+                    <label style="font-size: 13px; font-weight: 600; color: #1E293B; margin-bottom: 8px; display: block;">Correo Electrónico</label>
+                    <div style="position: relative;">
+                        <span class="material-symbols-outlined" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94A3B8; font-size: 20px; pointer-events: none;">mail</span>
+                        <input type="email" id="login-global-email" placeholder="usuario@rodipack.com" value="" required style="width: 100%; padding: 12px 14px 12px 44px; border: 1px solid #CBD5E1; border-radius: 10px; font-size: 14px; background: #FFFFFF; color: #0F172A; transition: border-color 0.2s;" onfocus="this.style.borderColor='#132D46'" onblur="this.style.borderColor='#CBD5E1'">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 24px;">
+                    <label style="font-size: 13px; font-weight: 600; color: #1E293B; margin-bottom: 8px; display: block;">Contraseña</label>
+                    <div style="position: relative;">
+                        <span class="material-symbols-outlined" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94A3B8; font-size: 20px; pointer-events: none;">lock</span>
+                        <input type="password" id="login-global-pass" placeholder="••••••••" required style="width: 100%; padding: 12px 42px 12px 44px; border: 1px solid #CBD5E1; border-radius: 10px; font-size: 14px; background: #FFFFFF; color: #0F172A; transition: border-color 0.2s;" onfocus="this.style.borderColor='#132D46'" onblur="this.style.borderColor='#CBD5E1'">
+                        <button type="button" onclick="togglePasswordVisibility('login-global-pass', this)" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94A3B8; display: flex; align-items: center;" title="Mostrar / Ocultar contraseña">
+                            <span class="material-symbols-outlined" style="font-size: 20px;">visibility</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Campo oculto para rol autodetectado -->
+                <input type="hidden" id="login-global-role" value="gerente">
+
+                <div id="global-login-error" class="auth-error-badge" style="display: none; margin-bottom: 18px; padding: 10px 14px; border-radius: 8px; font-size: 12px; background: #FEE2E2; color: #DC2626; border: 1px solid #FCA5A5;"></div>
+
+                <button type="submit" class="btn-login-navy" id="btn-global-login-submit" style="width: 100%; padding: 13px; font-size: 14px; font-weight: 700; border-radius: 10px; background: #112940; color: #FFFFFF; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 14px rgba(17, 41, 64, 0.25);" onmouseover="this.style.background='#0B1B2B'" onmouseout="this.style.background='#112940'">
+                    <span>Iniciar Sesión</span>
+                    <span class="material-symbols-outlined" style="font-size: 18px;">arrow_forward</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: RESTABLECIMIENTO E INTERACTIVO     -->
+    <!-- ========================================== -->
+    <!-- ========================================== -->
+    <!-- MODAL: RESTABLECIMIENTO CON VERIFICACIÓN 2FA DOBLE -->
+    <!-- ========================================== -->
+    <div id="reset-password-modal" class="custom-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 999999; align-items: center; justify-content: center; overflow: hidden;">
+        <div style="position: absolute; top: -5%; left: -5%; width: 110vw; height: 110vh; background: #EEF2F6 url('fondo sistema.png') no-repeat center center; background-size: cover; filter: blur(24px) brightness(1.02); -webkit-filter: blur(24px) brightness(1.02); z-index: -1; pointer-events: none;"></div>
+        <div style="max-width: 440px; width: 90%; background: #FFFFFF; border-radius: 24px; padding: 36px 32px; box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12); border: 1px solid rgba(255, 255, 255, 0.8); position: relative; z-index: 1;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <img src="Logo interno.png" alt="ROD Logo" style="height: 38px; width: auto; object-fit: contain;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Rodipack CENTRAL</h3>
+                        <span style="font-size: 10px; font-weight: 700; color: #2563EB; letter-spacing: 0.5px; text-transform: uppercase;">Autenticación 2FA Segura</span>
+                    </div>
+                </div>
+                <button type="button" onclick="closeResetPasswordModal()" style="background: none; border: none; font-size: 18px; color: #64748B; cursor: pointer; padding: 4px;" title="Cerrar">✕</button>
+            </div>
+
+            <!-- PASO 1: VERIFICACIÓN POR CORREO ELECTRÓNICO -->
+            <div id="reset-step-1" style="display: block;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                    <h4 style="margin: 0; font-size: 15px; font-weight: 800; color: #0F172A;">Paso 1: Verificación de Correo</h4>
+                    <span style="font-size: 11px; font-weight: 700; color: #2563EB; background: #EFF6FF; padding: 2px 8px; border-radius: 10px;">Paso 1 de 2</span>
+                </div>
+                <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748B;">Revisa la bandeja de entrada de tu correo electrónico registrado:</p>
+
+                <div id="reset-email-notice"></div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 6px; display: block;">Código de 6 dígitos del Correo:</label>
+                    <input type="text" id="reset-code-email" maxlength="6" placeholder="000000" style="width: 100%; padding: 12px; font-size: 22px; font-weight: 800; letter-spacing: 8px; text-align: center; border: 2px solid #2563EB; border-radius: 10px; background: #FFFFFF; color: #0F172A; outline: none;">
+                </div>
+
+                <div id="reset-email-error" class="auth-error-badge" style="display: none; margin-bottom: 14px; padding: 10px; border-radius: 8px; font-size: 12px; background: #FEE2E2; color: #DC2626; border: 1px solid #FCA5A5;"></div>
+
+                <button type="button" onclick="verifyEmailResetCode()" class="btn-primary-action" style="width: 100%; padding: 12px; font-size: 13px; font-weight: 700; border-radius: 10px; background: #2563EB; color: #FFFFFF; border: none; cursor: pointer; justify-content: center; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">mark_email_read</span> Verificar Código de Correo
+                </button>
+                <div style="text-align: center; margin-top: 12px;">
+                    <button type="button" onclick="openInteractiveResetModal()" style="background: none; border: none; font-size: 11px; color: #2563EB; font-weight: 600; cursor: pointer;">¿No recibiste el código en tu correo? Reenviar</button>
+                </div>
+            </div>
+
+            <!-- PASO 2: VERIFICACIÓN POR SMS / WHATSAPP -->
+            <div id="reset-step-2" style="display: none;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                    <h4 style="margin: 0; font-size: 15px; font-weight: 800; color: #0F172A;">Paso 2: Verificación SMS / WhatsApp</h4>
+                    <span style="font-size: 11px; font-weight: 700; color: #059669; background: #ECFDF5; padding: 2px 8px; border-radius: 10px;">Paso 2 de 2</span>
+                </div>
+                <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748B;">Correo verificado. Revisa el código de seguridad enviado a tu teléfono:</p>
+
+                <div id="reset-sms-notice"></div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 6px; display: block;">Código de 6 dígitos del SMS / WhatsApp:</label>
+                    <input type="text" id="reset-code-sms" maxlength="6" placeholder="000000" style="width: 100%; padding: 12px; font-size: 22px; font-weight: 800; letter-spacing: 8px; text-align: center; border: 2px solid #10B981; border-radius: 10px; background: #FFFFFF; color: #0F172A; outline: none;">
+                </div>
+
+                <div id="reset-sms-error" class="auth-error-badge" style="display: none; margin-bottom: 14px; padding: 10px; border-radius: 8px; font-size: 12px; background: #FEE2E2; color: #DC2626; border: 1px solid #FCA5A5;"></div>
+
+                <button type="button" onclick="verifySmsResetCode()" class="btn-primary-action" style="width: 100%; padding: 12px; font-size: 13px; font-weight: 700; border-radius: 10px; background: #10B981; color: #FFFFFF; border: none; cursor: pointer; justify-content: center; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">verified</span> Verificar Código SMS y Continuar
+                </button>
+            </div>
+
+            <!-- PASO 3: INGRESAR Y CONFIRMAR NUEVA CONTRASEÑA -->
+            <div id="reset-step-3" style="display: none;">
+                <h4 style="margin: 0 0 4px 0; font-size: 15px; font-weight: 800; color: #0F172A;">Crear Nueva Contraseña</h4>
+                <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748B;">Autenticación 2FA verificada. Ingresa tu nueva clave de acceso:</p>
+
+                <form onsubmit="saveNewVerifiedPassword(event)">
+                    <div class="form-group" style="margin-bottom: 14px;">
+                        <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px; display: block;">Nueva Contraseña:</label>
+                        <div style="position: relative;">
+                            <span class="material-symbols-outlined" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94A3B8; font-size: 18px; pointer-events: none;">lock</span>
+                            <input type="password" id="reset-pass-1" placeholder="Mínimo 6 caracteres" required style="width: 100%; padding: 10px 38px 10px 38px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; color: #0F172A;">
+                            <button type="button" onclick="togglePasswordVisibility('reset-pass-1', this)" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94A3B8;" title="Mostrar / Ocultar">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">visibility</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 18px;">
+                        <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px; display: block;">Confirmar Nueva Contraseña:</label>
+                        <div style="position: relative;">
+                            <span class="material-symbols-outlined" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94A3B8; font-size: 18px; pointer-events: none;">lock_reset</span>
+                            <input type="password" id="reset-pass-2" placeholder="Repite la nueva contraseña" required style="width: 100%; padding: 10px 38px 10px 38px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; color: #0F172A;">
+                            <button type="button" onclick="togglePasswordVisibility('reset-pass-2', this)" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94A3B8;" title="Mostrar / Ocultar">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">visibility</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="reset-step3-error" style="display: none; padding: 10px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; margin-bottom: 14px; background: #FEE2E2; color: #DC2626; border: 1px solid #FCA5A5;"></div>
+
+                    <button type="submit" id="btn-save-new-pass" class="btn-primary-action" style="width: 100%; padding: 12px; font-size: 13px; font-weight: 700; border-radius: 10px; background: #10B981; color: #FFFFFF; border: none; cursor: pointer; justify-content: center; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">check_circle</span> Confirmar y Actualizar Contraseña
+                    </button>
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Supabase JS Client & App Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase_config.js"></script>
+    <script src="consecutivo_data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
