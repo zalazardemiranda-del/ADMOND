@@ -10,10 +10,10 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 2. TABLA DE PERFILES DE USUARIOS (Profiles)
 CREATE TABLE IF NOT EXISTS public.profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     nombre TEXT NOT NULL,
-    rol TEXT NOT NULL DEFAULT 'colaborador' CHECK (rol IN ('gerente', 'colaborador')),
+    rol TEXT NOT NULL DEFAULT 'colaborador' CHECK (rol IN ('gerente', 'administrador', 'colaborador')),
     departamento TEXT DEFAULT 'Operaciones',
     cargo TEXT DEFAULT 'Colaborador',
     avatar_url TEXT,
@@ -24,15 +24,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- Habilitar RLS en profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Los perfiles son visibles para todos los usuarios autenticados"
-ON public.profiles FOR SELECT 
-TO authenticated 
-USING (true);
+DROP POLICY IF EXISTS "Los perfiles son visibles para todos los usuarios autenticados" ON public.profiles;
+CREATE POLICY "Permitir ver perfiles" ON public.profiles FOR SELECT USING (true);
 
-CREATE POLICY "Los usuarios pueden actualizar su propio perfil"
-ON public.profiles FOR UPDATE 
-TO authenticated 
-USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Permitir crear perfiles" ON public.profiles;
+CREATE POLICY "Permitir crear perfiles" ON public.profiles FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Los usuarios pueden actualizar su propio perfil" ON public.profiles;
+CREATE POLICY "Permitir actualizar perfiles" ON public.profiles FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Permitir eliminar perfiles" ON public.profiles;
+CREATE POLICY "Permitir eliminar perfiles" ON public.profiles FOR DELETE USING (true);
 
 -- Trigger para crear perfil automáticamente al registrarse en Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
