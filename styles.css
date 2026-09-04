@@ -2609,25 +2609,45 @@ select option {
 
 /* Custom Excel Select Styling */
 select.custom-excel-select {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    background-image: url(data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2364748B'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e);
-    background-repeat: no-repeat;
-    background-position: right 6px center;
-    background-size: 16px;
-    padding-right: 24px !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    background-color: #FFFFFF !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 12px center !important;
+    background-size: 14px 14px !important;
+    padding: 9px 38px 9px 14px !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: #0F172A !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    width: 100% !important;
+}
+
+select.custom-excel-select:hover {
+    border-color: #2563EB !important;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12) !important;
 }
 
 select.custom-excel-select:focus {
-    background-image: url(data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563EB'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e) !important;
+    border-color: #2563EB !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18) !important;
 }
 
 select.custom-excel-select option {
     background: #FFFFFF;
     color: #0F172A;
-    padding: 8px 12px;
-    font-size: 12px;
+    padding: 10px 14px;
+    font-size: 13px;
     font-weight: 500;
 }
 
