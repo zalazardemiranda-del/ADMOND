@@ -2390,10 +2390,17 @@ async function initAuthAndRealtime() {
         }
 
         const isSessionActive = localStorage.getItem("rp_session_active") === "true";
+        const storedUser = localStorage.getItem("rp_logged_user");
         const { data: { session }, error } = await client.auth.getSession();
         
         if (session && session.user && isSessionActive) {
             await handleUserSession(session.user);
+        } else if (isSessionActive && storedUser) {
+            try {
+                appState.currentUser = JSON.parse(storedUser);
+                updateUserSessionUI();
+                updateCloudStatusUI(true, appState.currentUser);
+            } catch (e) {}
         } else {
             updateCloudStatusUI(true, null);
             if (!isSessionActive && !window.location.hash.includes('type=recovery')) {
@@ -2411,12 +2418,20 @@ async function initAuthAndRealtime() {
                 return;
             }
             const active = localStorage.getItem("rp_session_active") === "true";
+            const localUser = localStorage.getItem("rp_logged_user");
+
             if (session && session.user && active) {
                 await handleUserSession(session.user);
-            } else {
+            } else if (active && localUser) {
+                try {
+                    appState.currentUser = JSON.parse(localUser);
+                    updateUserSessionUI();
+                    updateCloudStatusUI(true, appState.currentUser);
+                } catch (e) {}
+            } else if (!active) {
                 appState.currentUser = null;
                 updateCloudStatusUI(true, null);
-                if (!active && !window.location.hash.includes('type=recovery')) showGlobalLoginOverlay();
+                if (!window.location.hash.includes('type=recovery')) showGlobalLoginOverlay();
             }
         });
         
