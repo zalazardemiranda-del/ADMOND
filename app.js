@@ -3022,11 +3022,46 @@ window.handleGlobalLoginSubmit = async function(event) {
                     return;
                 }
 
+                if (error.message && error.message.includes("Email not confirmed")) {
+                    console.log("Supabase credentials valid, bypassing pending email confirmation for user:", email);
+                    let profileData = null;
+                    try {
+                        const { data: prof } = await client.from('profiles').select('*').ilike('email', email).maybeSingle();
+                        if (prof) profileData = prof;
+                    } catch (pErr) {
+                        console.warn("Could not fetch profile on email confirmation bypass:", pErr);
+                    }
+                    
+                    const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
+                    const finalName = profileData?.nombre || matchedProfile?.nombre || email.split('@')[0];
+                    const finalRol = profileData?.rol || matchedProfile?.rol || 'colaborador';
+                    const finalDepto = profileData?.departamento || matchedProfile?.departamento || 'Operaciones';
+                    const finalId = profileData?.id || matchedProfile?.id || `usr-${Date.now()}`;
+                    
+                    const userObj = {
+                        id: finalId,
+                        email: email,
+                        nombre: finalName,
+                        rol: finalRol,
+                        departamento: finalDepto,
+                        password: password
+                    };
+                    
+                    appState.currentUser = userObj;
+                    sessionStorage.setItem("rp_session_pass", password);
+                    localStorage.setItem("rp_user_pass", password);
+                    localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
+                    localStorage.setItem("rp_session_active", "true");
+                    setRole(userObj.rol);
+                    hideGlobalLoginOverlay();
+                    updateUserSessionUI();
+                    if (typeof openAuthModal === 'function') openAuthModal();
+                    return;
+                }
+
                 if (errorEl) {
                     let userMsg = error.message;
-                    if (userMsg.includes("Email not confirmed")) {
-                        userMsg = "El correo electrónico no ha sido confirmado. Revisa la bandeja de entrada del colaborador o confírmalo desde el panel de Supabase (Authentication -> Users).";
-                    } else if (userMsg.includes("Invalid login credentials")) {
+                    if (userMsg.includes("Invalid login credentials")) {
                         userMsg = "Correo electrónico o contraseña incorrectos.";
                     }
                     errorEl.innerText = `Error de autenticación: ${userMsg}`;
