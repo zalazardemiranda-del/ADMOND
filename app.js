@@ -3023,7 +3023,13 @@ window.handleGlobalLoginSubmit = async function(event) {
                 }
 
                 if (errorEl) {
-                    errorEl.innerText = `Error de autenticación: ${error.message}`;
+                    let userMsg = error.message;
+                    if (userMsg.includes("Email not confirmed")) {
+                        userMsg = "El correo electrónico no ha sido confirmado. Revisa la bandeja de entrada del colaborador o confírmalo desde el panel de Supabase (Authentication -> Users).";
+                    } else if (userMsg.includes("Invalid login credentials")) {
+                        userMsg = "Correo electrónico o contraseña incorrectos.";
+                    }
+                    errorEl.innerText = `Error de autenticación: ${userMsg}`;
                     errorEl.style.display = "block";
                 }
                 btnSubmit.disabled = false;
