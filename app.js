@@ -1367,12 +1367,12 @@ window.handleCreateChatGroup = function(event) {
     
     if (!appState.chats[chanId]) appState.chats[chanId] = [];
     
-    // Initial system greeting message
+    const sysMsgText = `📢 Grupo #${cleanName} creado. Participantes: ${memberNames.join(', ') || 'Gerente Principal'}.`;
     appState.chats[chanId].push({
         id: `msg-system-${Date.now()}`,
         sender: 'Sistema Rodipack',
         role: 'sistema',
-        text: `📢 Grupo #${cleanName} creado. Participantes: ${memberNames.join(', ') || 'Gerente Principal'}.`,
+        text: sysMsgText,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     });
     
@@ -1381,6 +1381,20 @@ window.handleCreateChatGroup = function(event) {
     selectChannel(chanId);
     closeCreateGroupModal();
     nameInput.value = "";
+
+    // Cloud Realtime Sync for Group Creation
+    if (window.isSupabaseActive()) {
+        const client = window.SUPABASE_CONFIG.client;
+        client.from('messages').insert([{
+            chat_id: chanId,
+            emisor_id: appState.currentUser?.id || null,
+            emisor_nombre: 'Sistema Rodipack',
+            emisor_role: 'sistema',
+            contenido: sysMsgText
+        }]).then(({ error }) => {
+            if (error) console.warn("Error sending group message to Supabase:", error);
+        });
+    }
 };
 
 window.openAddMemberModal = function() {
@@ -1418,17 +1432,32 @@ window.handleAddChatMember = function(event) {
     if (!appState.chats[currentChan]) appState.chats[currentChan] = [];
     
     const addedText = selectedNames.join(', ');
+    const sysMsgText = `👤 ${addedText} ${selectedNames.length > 1 ? 'fueron añadidos' : 'ha sido añadido(a)'} al chat por el Gerente.`;
     appState.chats[currentChan].push({
         id: `msg-system-${Date.now()}`,
         sender: 'Sistema Rodipack',
         role: 'sistema',
-        text: `👤 ${addedText} ${selectedNames.length > 1 ? 'fueron añadidos' : 'ha sido añadido(a)'} al chat por el Gerente.`,
+        text: sysMsgText,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     });
     
     saveToStorage();
     renderChatMessages();
     closeAddMemberModal();
+
+    // Cloud Realtime Sync for System Member Addition
+    if (window.isSupabaseActive()) {
+        const client = window.SUPABASE_CONFIG.client;
+        client.from('messages').insert([{
+            chat_id: currentChan,
+            emisor_id: appState.currentUser?.id || null,
+            emisor_nombre: 'Sistema Rodipack',
+            emisor_role: 'sistema',
+            contenido: sysMsgText
+        }]).then(({ error }) => {
+            if (error) console.warn("Error sending add member message to Supabase:", error);
+        });
+    }
 };
 
 window.handleSendChatMessage = function(event) {
@@ -1464,6 +1493,7 @@ window.handleSendChatMessage = function(event) {
             chat_id: appState.currentChannel,
             emisor_id: appState.currentUser?.id || null,
             emisor_nombre: senderName,
+            emisor_role: senderRole,
             contenido: text
         }]).then(({ error }) => {
             if (error) console.warn("Error sending message to Supabase:", error);
@@ -2467,10 +2497,11 @@ function setupRealtimeSubscriptions() {
             
             const alreadyExists = appState.chats[channelKey].some(m => m.id === row.id);
             if (!alreadyExists) {
+                const senderRole = row.emisor_role || (row.emisor_nombre === 'Sistema Rodipack' ? 'sistema' : 'colaborador');
                 appState.chats[channelKey].push({
                     id: row.id,
                     sender: row.emisor_nombre || 'Usuario',
-                    role: 'colaborador',
+                    role: senderRole,
                     text: row.contenido,
                     time: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 });
@@ -2519,10 +2550,11 @@ async function fetchCloudData() {
                 const channelKey = row.chat_id || 'general';
                 if (!appState.chats[channelKey]) appState.chats[channelKey] = [];
                 if (!appState.chats[channelKey].some(m => m.id === row.id)) {
+                    const senderRole = row.emisor_role || (row.emisor_nombre === 'Sistema Rodipack' ? 'sistema' : 'colaborador');
                     appState.chats[channelKey].push({
                         id: row.id,
                         sender: row.emisor_nombre || 'Usuario',
-                        role: 'colaborador',
+                        role: senderRole,
                         text: row.contenido,
                         time: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                     });

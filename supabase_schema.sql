@@ -100,9 +100,9 @@ CREATE TABLE IF NOT EXISTS public.chats (
 
 ALTER TABLE public.chats ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Usuarios autenticados pueden ver chats"
+DROP POLICY IF EXISTS "Usuarios autenticados pueden ver chats" ON public.chats;
+CREATE POLICY "Ver y crear chats"
 ON public.chats FOR ALL 
-TO authenticated 
 USING (true);
 
 
@@ -116,27 +116,32 @@ CREATE TABLE IF NOT EXISTS public.chat_members (
 
 ALTER TABLE public.chat_members ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Ver miembros de chat" ON public.chat_members;
 CREATE POLICY "Ver miembros de chat"
 ON public.chat_members FOR ALL 
-TO authenticated 
 USING (true);
 
 
 -- 6. TABLA DE MENSAJES DE CHAT (Messages)
+-- NOTA IMPORTANTE PARA BASE DE DATOS EXISTENTE EN SUPABASE:
+-- Si la tabla public.messages ya fue creada anteriormente, ejecuta estas consultas en el SQL Editor de Supabase:
+--   ALTER TABLE public.messages ALTER COLUMN chat_id TYPE TEXT;
+--   ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS emisor_role TEXT DEFAULT 'colaborador';
 CREATE TABLE IF NOT EXISTS public.messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    chat_id UUID REFERENCES public.chats(id) ON DELETE CASCADE NOT NULL,
+    chat_id TEXT NOT NULL DEFAULT 'general',
     emisor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     emisor_nombre TEXT,
+    emisor_role TEXT DEFAULT 'colaborador',
     contenido TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Ver y enviar mensajes" ON public.messages;
 CREATE POLICY "Ver y enviar mensajes"
 ON public.messages FOR ALL 
-TO authenticated 
 USING (true);
 
 
