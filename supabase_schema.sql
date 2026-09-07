@@ -125,6 +125,7 @@ USING (true);
 -- 6. TABLA DE MENSAJES DE CHAT (Messages)
 -- NOTA IMPORTANTE PARA BASE DE DATOS EXISTENTE EN SUPABASE:
 -- Si la tabla public.messages ya fue creada anteriormente, ejecuta estas consultas en el SQL Editor de Supabase:
+--   ALTER TABLE public.messages DROP CONSTRAINT IF EXISTS messages_chat_id_fkey;
 --   ALTER TABLE public.messages ALTER COLUMN chat_id TYPE TEXT;
 --   ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS emisor_role TEXT DEFAULT 'colaborador';
 CREATE TABLE IF NOT EXISTS public.messages (
