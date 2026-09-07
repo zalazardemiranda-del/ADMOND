@@ -84,13 +84,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (storedMeetings && storedMeetings.some(m => m.id === 'meet-1' || m.id === 'meet-2')) {
         localStorage.removeItem('rp_meetings');
     }
-    const storedChats = JSON.parse(localStorage.getItem('rp_chats'));
+    let storedChats = JSON.parse(localStorage.getItem('rp_chats'));
     if (storedChats && (storedChats['cubicacion-ayuda'] || storedChats['tracking-status'])) {
-        localStorage.removeItem('rp_chats');
+        delete storedChats['cubicacion-ayuda'];
+        delete storedChats['tracking-status'];
+        localStorage.setItem('rp_chats', JSON.stringify(storedChats));
     }
 
     appState.tasks = JSON.parse(localStorage.getItem('rp_tasks')) || [];
     appState.chats = JSON.parse(localStorage.getItem('rp_chats')) || { general: [] };
+    appState.customChannels = JSON.parse(localStorage.getItem('rp_custom_channels')) || [];
     appState.meetings = JSON.parse(localStorage.getItem('rp_meetings')) || [];
     
     // Load Administration Data
@@ -225,6 +228,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 function saveToStorage() {
     if (appState.tasks) localStorage.setItem('rp_tasks', JSON.stringify(appState.tasks));
     if (appState.chats) localStorage.setItem('rp_chats', JSON.stringify(appState.chats));
+    if (appState.customChannels) localStorage.setItem('rp_custom_channels', JSON.stringify(appState.customChannels));
     if (appState.meetings) localStorage.setItem('rp_meetings', JSON.stringify(appState.meetings));
     if (appState.proveedores) localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
     if (appState.nominas) localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
