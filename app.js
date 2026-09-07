@@ -2607,14 +2607,18 @@ function updateAssigneeDropdown(profiles) {
 // ---------------------------------------------------------------------------------
 
 window.openAuthModal = function() {
-    // Update Header with Gerente data
-    const nameEl = document.getElementById("modal-gerente-name");
-    const avatarEl = document.getElementById("modal-gerente-avatar");
+    if (!appState.currentUser) {
+        const storedUser = localStorage.getItem("rp_logged_user");
+        if (storedUser) {
+            try { appState.currentUser = JSON.parse(storedUser); } catch (e) {}
+        }
+    }
+
+    const isSessionActive = localStorage.getItem("rp_session_active") === "true";
     const loggedInView = document.getElementById("gerente-logged-in-view");
     const loginView = document.getElementById("gerente-login-view");
-    const loggedEmail = document.getElementById("logged-email-text");
     const cloudIndicator = document.getElementById("modal-cloud-indicator");
-    
+
     if (cloudIndicator) {
         if (window.isSupabaseActive()) {
             cloudIndicator.innerHTML = '<span style="width: 7px; height: 7px; border-radius: 50%; background: #10B981;"></span> Nube Activa';
@@ -2628,20 +2632,17 @@ window.openAuthModal = function() {
             cloudIndicator.style.borderColor = '#FDE68A';
         }
     }
-    
-    if (appState.currentUser || appState.currentRole === 'gerente') {
-        if (nameEl) nameEl.innerText = appState.currentUser ? (appState.currentUser.nombre || "Gerente Principal") : "Gerente Principal";
-        if (avatarEl) avatarEl.innerText = appState.currentUser ? (appState.currentUser.nombre || "G").charAt(0).toUpperCase() : "G";
+
+    updateUserSessionUI();
+
+    if (appState.currentUser || isSessionActive) {
         if (loggedInView) loggedInView.style.display = "block";
         if (loginView) loginView.style.display = "none";
-        if (loggedEmail) loggedEmail.innerText = appState.currentUser ? appState.currentUser.email : "zalazardemiranda@gmail.com";
     } else {
-        if (nameEl) nameEl.innerText = "Gerente Principal";
-        if (avatarEl) avatarEl.innerText = "G";
         if (loggedInView) loggedInView.style.display = "none";
         if (loginView) loginView.style.display = "block";
     }
-    
+
     switchAuthTab('myprofile');
     loadProfilesList();
 };
@@ -3433,6 +3434,13 @@ window.handleSaveMyProfile = async function(event) {
 };
 
 window.updateUserSessionUI = function() {
+    if (!appState.currentUser) {
+        const storedUser = localStorage.getItem("rp_logged_user");
+        if (storedUser) {
+            try { appState.currentUser = JSON.parse(storedUser); } catch (e) {}
+        }
+    }
+
     const footerName = document.querySelector(".user-info h4");
     const footerRole = document.querySelector(".user-info span");
     const footerAvatar = document.querySelector(".user-footer .avatar");
@@ -3444,17 +3452,28 @@ window.updateUserSessionUI = function() {
     const editPassInput = document.getElementById("myprofile-edit-pass");
     const loggedEmailText = document.getElementById("logged-email-text");
     const loggedRoleText = document.getElementById("logged-role-text");
-    
-    const user = appState.currentUser || { nombre: "Gerente Principal", email: "zalazardemiranda@gmail.com", rol: "gerente" };
+
+    const defaultName = appState.currentRole === 'gerente' ? "Gerente Principal" : "Colaborador";
+    const defaultEmail = appState.currentRole === 'gerente' ? "zalazardemiranda@gmail.com" : "colaborador@rodipack.com";
+
+    const user = appState.currentUser || { nombre: defaultName, email: defaultEmail, rol: appState.currentRole || "colaborador" };
     const currentPass = (user && user.password) || sessionStorage.getItem("rp_session_pass") || localStorage.getItem("rp_user_pass") || "";
-    
-    if (footerName) footerName.innerText = user.nombre || "Gerente Principal";
-    if (footerRole) footerRole.innerText = (user.rol === 'gerente') ? "Administrador del Sistema" : "Colaborador";
-    if (footerAvatar) footerAvatar.innerText = (user.nombre || "G").charAt(0).toUpperCase();
-    
-    if (headerName) headerName.innerText = user.nombre || "Gerente Principal";
-    if (headerAvatar) headerAvatar.innerText = (user.nombre || "G").charAt(0).toUpperCase();
-    
+
+    if (footerName) footerName.innerText = user.nombre || defaultName;
+    if (footerRole) footerRole.innerText = (user.rol === 'gerente') ? "Administrador del Sistema" : ((user.rol === 'administrador') ? "Administrador (Finanzas)" : "Colaborador");
+    if (footerAvatar) {
+        footerAvatar.innerText = (user.nombre || defaultName).charAt(0).toUpperCase();
+        footerAvatar.style.borderColor = user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B');
+        footerAvatar.style.color = user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B');
+    }
+
+    if (headerName) headerName.innerText = user.nombre || defaultName;
+    if (headerAvatar) {
+        headerAvatar.innerText = (user.nombre || defaultName).charAt(0).toUpperCase();
+        headerAvatar.style.borderColor = user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B');
+        headerAvatar.style.color = user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B');
+    }
+
     const headerRoleTag = document.getElementById("modal-gerente-role-tag");
     if (headerRoleTag) {
         const r = (user.rol || '').toLowerCase();
@@ -3472,22 +3491,21 @@ window.updateUserSessionUI = function() {
             headerRoleTag.style.color = '#475569';
         }
     }
-    
-    if (editNameInput) editNameInput.value = user.nombre || "Gerente Principal";
-    if (editPhoneInput && user.telefono) editPhoneInput.value = user.telefono;
-    if (editEmailInput) editEmailInput.value = user.email || "zalazardemiranda@gmail.com";
-    
+
+    if (editNameInput) editNameInput.value = user.nombre || defaultName;
+    if (editPhoneInput) editPhoneInput.value = user.telefono || "";
+    if (editEmailInput) editEmailInput.value = user.email || defaultEmail;
+
     if (editPassInput) {
         if (currentPass) {
             editPassInput.value = currentPass;
-            editPassInput.type = "text";
         } else {
             editPassInput.value = "";
             editPassInput.placeholder = "Ingresa o guarda tu contraseña";
         }
     }
-    
-    if (loggedEmailText) loggedEmailText.innerText = user.email || "zalazardemiranda@gmail.com";
+
+    if (loggedEmailText) loggedEmailText.innerText = user.email || defaultEmail;
     if (loggedRoleText) loggedRoleText.innerText = user.rol === 'gerente' ? "Gerente / Administrador" : "Colaborador de Operaciones";
 };
 
