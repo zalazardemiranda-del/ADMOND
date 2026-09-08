@@ -203,6 +203,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         chatBadge.innerText = "0";
     }
 
+    // Escuchadores de scroll y cambio de tamaño para actualización de navegación horizontal de tareas
+    const tasksSlider = document.getElementById("tasks-slider-container");
+    if (tasksSlider) {
+        tasksSlider.addEventListener("scroll", () => {
+            if (typeof updateTasksScrollNavState === 'function') updateTasksScrollNavState();
+        });
+    }
+    window.addEventListener("resize", () => {
+        if (typeof updateTasksScrollNavState === 'function') updateTasksScrollNavState();
+    });
+
     // Cargar y almacenar en caché la lista de perfiles de usuario al iniciar
     if (typeof loadProfilesList === 'function') {
         loadProfilesList();
@@ -1204,6 +1215,34 @@ window.filterTasks = function(filter, buttonElement) {
     renderTasks();
 };
 
+window.scrollTasksGrid = function(direction) {
+    const container = document.getElementById("tasks-slider-container");
+    if (!container) return;
+    const scrollAmount = container.clientWidth;
+    if (direction === 'left') {
+        container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+    } else {
+        container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+    setTimeout(updateTasksScrollNavState, 350);
+};
+
+window.updateTasksScrollNavState = function() {
+    const container = document.getElementById("tasks-slider-container");
+    const prevBtn = document.getElementById("btn-tasks-prev");
+    const nextBtn = document.getElementById("btn-tasks-next");
+    if (!container || !prevBtn || !nextBtn) return;
+
+    const maxScroll = container.scrollWidth - container.clientWidth;
+    if (maxScroll <= 10) {
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+    } else {
+        prevBtn.disabled = container.scrollLeft <= 10;
+        nextBtn.disabled = container.scrollLeft >= maxScroll - 10;
+    }
+};
+
 function renderTasks() {
     const gridList = document.getElementById("tasks-grid-list");
     if (!gridList) return;
@@ -1230,10 +1269,18 @@ function renderTasks() {
             <p style="margin: 0; font-size: 14px; font-weight: 600; color: #0F172A;">No hay tareas en esta vista</p>
             <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-secondary);">${emptyHelpText}</p>
         </div>`;
+        updateTasksScrollNavState();
         return;
     }
     
-    filteredTasks.forEach(task => {
+    filteredTasks.forEach((task, index) => {
+        const pageIndex = Math.floor(index / 4);
+        const posInPage = index % 4;
+        const rowInPage = Math.floor(posInPage / 2) + 1;
+        const colInPage = (posInPage % 2) + 1;
+        const gridRow = rowInPage;
+        const gridCol = pageIndex * 2 + colInPage;
+
         const isCompleted = task.status === 'completed';
         const assigneeName = task.assignee || 'Sin asignar';
         const initials = assigneeName.split(" ").filter(Boolean).map(n => n[0]).join("").substring(0, 2).toUpperCase() || 'T';
@@ -1250,6 +1297,8 @@ function renderTasks() {
 
         const taskCard = document.createElement("div");
         taskCard.className = `task-card priority-${task.priority} status-${task.status}`;
+        taskCard.style.gridRow = `${gridRow}`;
+        taskCard.style.gridColumn = `${gridCol}`;
         taskCard.innerHTML = `
             <div class="task-card-header">
                 <h4>${task.title}</h4>
@@ -1272,6 +1321,8 @@ function renderTasks() {
     
     const countPill = document.getElementById("visible-tasks-count");
     if (countPill) countPill.innerText = `${filteredTasks.length} tarea(s) filtrada(s)`;
+    
+    setTimeout(updateTasksScrollNavState, 50);
 }
 
 // ---------------------------------------------------------------------------------

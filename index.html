@@ -235,11 +235,23 @@
                                         <button type="button" class="filter-btn" data-filter="completed" onclick="filterTasks('completed', this)"><span class="material-symbols-outlined icon-mini">check_circle</span> Completadas</button>
                                     </div>
                                 </div>
-                                <span class="tasks-count-pill" id="visible-tasks-count">0 tareas</span>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span class="tasks-count-pill" id="visible-tasks-count">0 tareas</span>
+                                    <div class="tasks-scroll-nav" id="tasks-scroll-nav">
+                                        <button type="button" class="tasks-nav-btn" id="btn-tasks-prev" onclick="scrollTasksGrid('left')" title="Ver tareas anteriores" disabled>
+                                            <span class="material-symbols-outlined">chevron_left</span>
+                                        </button>
+                                        <button type="button" class="tasks-nav-btn" id="btn-tasks-next" onclick="scrollTasksGrid('right')" title="Ver más tareas">
+                                            <span class="material-symbols-outlined">chevron_right</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                             
-                            <div class="tasks-grid" id="tasks-grid-list">
-                                <!-- Dynamic task items here -->
+                            <div class="tasks-slider-container" id="tasks-slider-container">
+                                <div class="tasks-grid" id="tasks-grid-list">
+                                    <!-- Dynamic task items here -->
+                                </div>
                             </div>
                         </div>
                     </div>
