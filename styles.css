@@ -3013,3 +3013,122 @@ select.custom-excel-select option {
     box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
 }
 
+/* ============================================================================== */
+/* TASK ASSIGNEE AUTOCOMPLETE DROPDOWN                                            */
+/* ============================================================================== */
+.assignee-autocomplete-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.assignee-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 100%;
+    max-height: 240px;
+    overflow-y: auto;
+    background: #FFFFFF;
+    border: 1.5px solid #CBD5E1;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+    z-index: 1000;
+    display: none;
+    padding: 6px;
+    list-style: none;
+    margin: 0;
+}
+
+.assignee-dropdown-menu.open {
+    display: block;
+}
+
+.assignee-dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+    user-select: none;
+}
+
+.assignee-dropdown-item:hover,
+.assignee-dropdown-item.active {
+    background: #F1F5F9;
+}
+
+.assignee-item-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+}
+
+.assignee-item-avatar {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 50%;
+    font-weight: 800;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid currentColor;
+}
+
+.assignee-item-details {
+    min-width: 0;
+    flex: 1;
+}
+
+.assignee-item-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0F172A;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+.assignee-item-sub {
+    font-size: 11px;
+    color: #64748B;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+.assignee-badge-self {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: #EFF6FF;
+    color: #2563EB;
+    border: 1px solid #BFDBFE;
+    white-space: nowrap;
+}
+
+.assignee-badge-role {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 5px;
+    white-space: nowrap;
+}
+
+.assignee-dropdown-empty {
+    padding: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: #64748B;
+}
+
+

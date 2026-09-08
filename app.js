@@ -1076,16 +1076,19 @@ window.deleteProveedorRecord = function(index) {
 // ---------------------------------------------------------------------------------
 window.handleCreateTask = function(event) {
     event.preventDefault();
-    const title = document.getElementById("task-title").value;
-    const desc = document.getElementById("task-desc").value;
-    const assignee = document.getElementById("task-assignee").value;
-    const priority = document.getElementById("task-priority").value;
+    const title = document.getElementById("task-title").value.trim();
+    const desc = document.getElementById("task-desc").value.trim();
+    const assigneeInput = document.getElementById("task-assignee");
+    const assignee = assigneeInput ? assigneeInput.value.trim() : '';
+    const priority = document.getElementById("task-priority").value || 'alta';
+    
+    if (!title) return;
     
     const newTask = {
         id: `task-${Date.now()}`,
         title,
         desc,
-        assignee,
+        assignee: assignee || 'Sin asignar',
         priority,
         status: 'pending',
         createdAt: new Date().toISOString()
@@ -1095,8 +1098,9 @@ window.handleCreateTask = function(event) {
     saveToStorage();
     document.getElementById("new-task-form").reset();
     
-    // Reset custom inputs
-    selectCustomOption('assignee', 'Juan Pérez', 'JP', 'Colaborador');
+    // Reset inputs cleanly (sin nombre determinado como Juan Pérez)
+    if (assigneeInput) assigneeInput.value = "";
+    if (typeof closeAssigneeDropdown === 'function') closeAssigneeDropdown();
     setTaskPrioritySegment('alta');
     
     renderTasks();
@@ -1105,15 +1109,25 @@ window.handleCreateTask = function(event) {
     // Cloud Sync
     if (window.isSupabaseActive()) {
         const client = window.SUPABASE_CONFIG.client;
+        const dbPriority = priority.charAt(0).toUpperCase() + priority.slice(1).toLowerCase();
         client.from('tasks').insert([{
             titulo: title,
             descripcion: desc,
-            prioridad: priority,
+            prioridad: dbPriority,
             estado: 'pendiente',
-            asignado_nombre: assignee
+            asignado_nombre: assignee || 'Sin asignar'
         }]).then(({ error }) => {
             if (error) console.warn("Error saving task to Supabase:", error);
         });
+
+        // Transmisión instantánea en tiempo real por WebSockets
+        if (window.chatRealtimeChannel) {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'task_event',
+                payload: { action: 'created', task: newTask }
+            }).catch(e => console.warn("Broadcast task warning:", e));
+        }
     }
 };
 
@@ -1133,6 +1147,14 @@ window.toggleTaskComplete = function(taskId) {
             client.from('tasks').update({ estado: newStatus }).eq('id', taskId).then(({ error }) => {
                 if (error) console.warn("Error updating task status on Supabase:", error);
             });
+
+            if (window.chatRealtimeChannel) {
+                window.chatRealtimeChannel.send({
+                    type: 'broadcast',
+                    event: 'task_event',
+                    payload: { action: 'updated', id: taskId, status: newStatus }
+                }).catch(e => console.warn("Broadcast task warning:", e));
+            }
         }
     }
 };
@@ -1149,6 +1171,14 @@ window.deleteTask = function(taskId) {
         client.from('tasks').delete().eq('id', taskId).then(({ error }) => {
             if (error) console.warn("Error deleting task on Supabase:", error);
         });
+
+        if (window.chatRealtimeChannel) {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'task_event',
+                payload: { action: 'deleted', id: taskId }
+            }).catch(e => console.warn("Broadcast task warning:", e));
+        }
     }
 };
 
@@ -1190,7 +1220,8 @@ function renderTasks() {
     
     filteredTasks.forEach(task => {
         const isCompleted = task.status === 'completed';
-        const initials = task.assignee.split(" ").map(n => n[0]).join("");
+        const assigneeName = task.assignee || 'Sin asignar';
+        const initials = assigneeName.split(" ").filter(Boolean).map(n => n[0]).join("").substring(0, 2).toUpperCase() || 'T';
         const deleteButton = appState.currentRole === 'gerente' 
             ? `<button class="btn-delete-task" onclick="deleteTask('${task.id}')" title="Eliminar tarea">
                  <span class="material-symbols-outlined">delete</span>
@@ -1383,16 +1414,42 @@ window.handleCreateChatGroup = function(event) {
     nameInput.value = "";
 
     // Cloud Realtime Sync for Group Creation
+    if (window.chatRealtimeChannel) {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'new_group',
+            payload: newChan
+        }).catch(err => console.warn("Broadcast group warning:", err));
+
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'new_message',
+            payload: {
+                id: `msg-system-${Date.now()}`,
+                channel: chanId,
+                sender: 'Sistema Rodipack',
+                role: 'sistema',
+                text: sysMsgText,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                timestamp: new Date().toISOString()
+            }
+        }).catch(err => console.warn("Broadcast group msg warning:", err));
+    }
+
     if (window.isSupabaseActive()) {
         const client = window.SUPABASE_CONFIG.client;
+        const validUUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const rawUserId = appState.currentUser?.id;
+        const validUserId = (rawUserId && validUUIDRegex.test(rawUserId)) ? rawUserId : null;
+
         client.from('messages').insert([{
             chat_id: chanId,
-            emisor_id: appState.currentUser?.id || null,
+            emisor_id: validUserId,
             emisor_nombre: 'Sistema Rodipack',
             emisor_role: 'sistema',
             contenido: sysMsgText
         }]).then(({ error }) => {
-            if (error) console.warn("Error sending group message to Supabase:", error);
+            if (error) console.warn("Notice: group message to Supabase:", error.message || error);
         });
     }
 };
@@ -1433,29 +1490,48 @@ window.handleAddChatMember = function(event) {
     
     const addedText = selectedNames.join(', ');
     const sysMsgText = `👤 ${addedText} ${selectedNames.length > 1 ? 'fueron añadidos' : 'ha sido añadido(a)'} al chat por el Gerente.`;
-    appState.chats[currentChan].push({
-        id: `msg-system-${Date.now()}`,
+    const sysMsgId = `msg-system-${Date.now()}`;
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const sysMsgObj = {
+        id: sysMsgId,
+        channel: currentChan,
         sender: 'Sistema Rodipack',
         role: 'sistema',
         text: sysMsgText,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    });
-    
+        time: timeStr,
+        timestamp: new Date().toISOString()
+    };
+
+    appState.chats[currentChan].push(sysMsgObj);
     saveToStorage();
     renderChatMessages();
     closeAddMemberModal();
 
+    // Broadcast instantáneo
+    if (window.chatRealtimeChannel) {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'new_message',
+            payload: sysMsgObj
+        }).catch(err => console.warn("Broadcast add member warning:", err));
+    }
+
     // Cloud Realtime Sync for System Member Addition
     if (window.isSupabaseActive()) {
         const client = window.SUPABASE_CONFIG.client;
+        const validUUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const rawUserId = appState.currentUser?.id;
+        const validUserId = (rawUserId && validUUIDRegex.test(rawUserId)) ? rawUserId : null;
+
         client.from('messages').insert([{
             chat_id: currentChan,
-            emisor_id: appState.currentUser?.id || null,
+            emisor_id: validUserId,
             emisor_nombre: 'Sistema Rodipack',
             emisor_role: 'sistema',
             contenido: sysMsgText
         }]).then(({ error }) => {
-            if (error) console.warn("Error sending add member message to Supabase:", error);
+            if (error) console.warn("Notice: add member message to Supabase:", error.message || error);
         });
     }
 };
@@ -1468,35 +1544,66 @@ window.handleSendChatMessage = function(event) {
     
     const senderName = appState.currentUser ? appState.currentUser.nombre : (appState.currentRole === 'gerente' ? 'Gerente Principal' : 'Colaborador');
     const senderRole = appState.currentUser ? appState.currentUser.rol : appState.currentRole;
+    const currentChan = appState.currentChannel || 'general';
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowIso = new Date().toISOString();
+
+    function generateUUID() {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            return crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    const newMsgId = generateUUID();
     
     const newMsg = {
-        id: `msg-${Date.now()}`,
+        id: newMsgId,
+        channel: currentChan,
         sender: senderName,
         role: senderRole,
         text,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        time: timeStr,
+        timestamp: nowIso
     };
     
-    if (!appState.chats[appState.currentChannel]) {
-        appState.chats[appState.currentChannel] = [];
+    if (!appState.chats[currentChan]) {
+        appState.chats[currentChan] = [];
     }
     
-    appState.chats[appState.currentChannel].push(newMsg);
+    appState.chats[currentChan].push(newMsg);
     saveToStorage();
     inputField.value = "";
     renderChatMessages();
     
-    // Cloud Realtime Sync
+    // 1. Transmisión Instantánea por WebSockets Broadcast (Tablet <-> PC en tiempo real)
+    if (window.chatRealtimeChannel) {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'new_message',
+            payload: newMsg
+        }).catch(err => console.warn("Broadcast warning:", err));
+    }
+    
+    // 2. Persistencia en Base de Datos Supabase (PostgreSQL messages)
     if (window.isSupabaseActive()) {
         const client = window.SUPABASE_CONFIG.client;
+        const validUUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const rawUserId = appState.currentUser?.id;
+        const validUserId = (rawUserId && validUUIDRegex.test(rawUserId)) ? rawUserId : null;
+
         client.from('messages').insert([{
-            chat_id: appState.currentChannel,
-            emisor_id: appState.currentUser?.id || null,
+            id: newMsgId,
+            chat_id: currentChan,
+            emisor_id: validUserId,
             emisor_nombre: senderName,
             emisor_role: senderRole,
             contenido: text
         }]).then(({ error }) => {
-            if (error) console.warn("Error sending message to Supabase:", error);
+            if (error) console.warn("Notice: Message cloud sync to PostgreSQL:", error.message || error);
         });
     }
 };
@@ -2235,7 +2342,147 @@ document.addEventListener("click", function(event) {
     if (!event.target.closest(".custom-select-wrapper")) {
         document.querySelectorAll(".custom-select-wrapper").forEach(w => w.classList.remove("open"));
     }
+    const assigneeWrapper = document.querySelector(".assignee-autocomplete-wrapper");
+    if (assigneeWrapper && !assigneeWrapper.contains(event.target)) {
+        if (typeof closeAssigneeDropdown === 'function') closeAssigneeDropdown();
+    }
 });
+
+// ==============================================================================
+// TASK ASSIGNEE AUTOCOMPLETE & DROPDOWN LOGIC
+// ==============================================================================
+function getAvailableAssignees() {
+    const list = [];
+    const seenEmails = new Set();
+    const seenNames = new Set();
+
+    // 1. Usuario actual en sesión ("Tú / Asignarme a mí") destacado en 1er lugar
+    const current = appState.currentUser;
+    if (current && (current.nombre || current.email)) {
+        list.push({
+            id: current.id,
+            nombre: current.nombre || (current.email ? current.email.split('@')[0] : 'Mi Usuario'),
+            email: current.email || '',
+            rol: current.rol || 'gerente',
+            departamento: current.departamento || 'General',
+            isSelf: true
+        });
+        if (current.email) seenEmails.add(current.email.toLowerCase());
+        if (current.nombre) seenNames.add(current.nombre.toLowerCase());
+    } else {
+        const defaultName = appState.currentRole === 'gerente' ? 'Gerente Principal' : 'Colaborador';
+        list.push({
+            id: 'self-user',
+            nombre: defaultName,
+            email: '',
+            rol: appState.currentRole || 'gerente',
+            departamento: 'General',
+            isSelf: true
+        });
+        seenNames.add(defaultName.toLowerCase());
+    }
+
+    // 2. Colaboradores registrados en el sistema
+    const allProfiles = [
+        ...(window.cachedProfilesList || []),
+        ...(window.cloudProfilesCache || []),
+        ...(JSON.parse(localStorage.getItem('rp_local_profiles') || '[]'))
+    ];
+
+    allProfiles.forEach(p => {
+        if (!p || (!p.nombre && !p.email)) return;
+        const emailLower = (p.email || '').toLowerCase();
+        const nameLower = (p.nombre || '').toLowerCase();
+        if (emailLower && seenEmails.has(emailLower)) return;
+        if (nameLower && seenNames.has(nameLower)) return;
+        if (emailLower) seenEmails.add(emailLower);
+        if (nameLower) seenNames.add(nameLower);
+
+        list.push({
+            id: p.id,
+            nombre: p.nombre || (p.email ? p.email.split('@')[0] : 'Colaborador'),
+            email: p.email || '',
+            rol: p.rol || 'colaborador',
+            departamento: p.departamento || 'Operaciones',
+            isSelf: false
+        });
+    });
+
+    return list;
+}
+
+window.openAssigneeDropdown = function() {
+    const input = document.getElementById("task-assignee");
+    window.filterAssigneeDropdown(input ? input.value : '');
+};
+
+window.closeAssigneeDropdown = function() {
+    const menu = document.getElementById("task-assignee-dropdown");
+    if (menu) menu.classList.remove("open");
+};
+
+window.filterAssigneeDropdown = function(query) {
+    const menu = document.getElementById("task-assignee-dropdown");
+    if (!menu) return;
+
+    const assignees = getAvailableAssignees();
+    const q = (query || '').trim().toLowerCase();
+
+    const filtered = assignees.filter(u => {
+        if (!q) return true;
+        return (u.nombre && u.nombre.toLowerCase().includes(q)) ||
+               (u.email && u.email.toLowerCase().includes(q)) ||
+               (u.rol && u.rol.toLowerCase().includes(q)) ||
+               (u.departamento && u.departamento.toLowerCase().includes(q)) ||
+               (u.isSelf && ('yo'.includes(q) || 'mi'.includes(q) || 'mismo'.includes(q) || 'tu'.includes(q)));
+    });
+
+    if (filtered.length === 0) {
+        menu.innerHTML = `<li class="assignee-dropdown-empty">No se encontraron colaboradores para "${query}"</li>`;
+        menu.classList.add("open");
+        return;
+    }
+
+    menu.innerHTML = filtered.map(u => {
+        const initial = (u.nombre || u.email || 'U').charAt(0).toUpperCase();
+        const r = (u.rol || '').toLowerCase();
+        const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
+        const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
+        const roleColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
+        const roleBg = isGerente ? 'rgba(37, 99, 235, 0.1)' : (isAdmin ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)');
+        const roleLabel = isGerente ? 'Gerente' : (isAdmin ? 'Admin' : 'Colaborador');
+        const escapedName = (u.nombre || '').replace(/'/g, "\\'");
+
+        const badgeHtml = u.isSelf 
+            ? `<span class="assignee-badge-self">⭐ Tú (Asignarme a mí)</span>`
+            : `<span class="assignee-badge-role" style="background: ${roleBg}; color: ${roleColor};">${roleLabel}</span>`;
+
+        return `
+            <li class="assignee-dropdown-item" onmousedown="selectTaskAssignee('${escapedName}')">
+                <div class="assignee-item-user">
+                    <div class="assignee-item-avatar" style="background: ${roleBg}; color: ${roleColor}; border-color: ${roleColor};">
+                        ${initial}
+                    </div>
+                    <div class="assignee-item-details">
+                        <span class="assignee-item-name">${u.nombre}</span>
+                        <span class="assignee-item-sub">${u.email || u.departamento}</span>
+                    </div>
+                </div>
+                ${badgeHtml}
+            </li>
+        `;
+    }).join('');
+
+    menu.classList.add("open");
+};
+
+window.selectTaskAssignee = function(name) {
+    const input = document.getElementById("task-assignee");
+    if (input) {
+        input.value = name;
+    }
+    window.closeAssigneeDropdown();
+};
 
 window.setTaskPrioritySegment = function(priority) {
     const input = document.getElementById("task-priority");
@@ -2502,45 +2749,135 @@ function updateCloudStatusUI(isConnected, user) {
 function setupRealtimeSubscriptions() {
     if (!window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG.client;
-    
-    // 1. Realtime Messages
-    client.channel('public:messages')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-            const row = payload.new;
-            const channelKey = row.chat_id || 'general';
-            if (!appState.chats[channelKey]) appState.chats[channelKey] = [];
-            
-            const alreadyExists = appState.chats[channelKey].some(m => m.id === row.id);
-            if (!alreadyExists) {
-                const senderRole = row.emisor_role || (row.emisor_nombre === 'Sistema Rodipack' ? 'sistema' : 'colaborador');
-                appState.chats[channelKey].push({
-                    id: row.id,
-                    sender: row.emisor_nombre || 'Usuario',
-                    role: senderRole,
-                    text: row.contenido,
-                    time: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                });
-                saveToStorage();
+
+    // Remover canal previo si existiera para evitar duplicados
+    if (window.chatRealtimeChannel) {
+        try { client.removeChannel(window.chatRealtimeChannel); } catch (e) {}
+    }
+
+    // Canal Hub en Tiempo Real: WebSockets Broadcast (sub-50ms) + PostgreSQL Changes
+    window.chatRealtimeChannel = client.channel('rodipack-realtime-hub', {
+        config: {
+            broadcast: { self: false } // El emisor ya agregó el mensaje localmente
+        }
+    });
+
+    // 1. Recibir Mensaje Instantáneo por Broadcast (WebSockets directos entre dispositivos)
+    window.chatRealtimeChannel.on('broadcast', { event: 'new_message' }, payload => {
+        const msg = payload.payload;
+        if (!msg || !msg.channel) return;
+        const channelKey = msg.channel;
+        if (!appState.chats[channelKey]) appState.chats[channelKey] = [];
+
+        const alreadyExists = appState.chats[channelKey].some(m => 
+            m.id === msg.id || 
+            (m.text === msg.text && m.sender === msg.sender && Math.abs(new Date(m.timestamp || 0) - new Date(msg.timestamp || 0)) < 4000)
+        );
+
+        if (!alreadyExists) {
+            appState.chats[channelKey].push({
+                id: msg.id,
+                sender: msg.sender,
+                role: msg.role,
+                text: msg.text,
+                time: msg.time,
+                timestamp: msg.timestamp || new Date().toISOString()
+            });
+            saveToStorage();
+            if (appState.currentChannel === channelKey) {
                 renderChatMessages();
-                
-                // Show badge if not currently in chat tab
-                if (appState.currentTab !== 'chat') {
-                    const badge = document.getElementById("unread-chat-count");
-                    if (badge) {
-                        badge.style.display = "inline-flex";
-                        badge.innerText = parseInt(badge.innerText || '0', 10) + 1;
-                    }
+            }
+            if (appState.currentTab !== 'chat') {
+                const badge = document.getElementById("unread-chat-count");
+                if (badge) {
+                    badge.style.display = "inline-flex";
+                    badge.innerText = parseInt(badge.innerText || '0', 10) + 1;
                 }
             }
-        })
-        .subscribe();
-        
-    // 2. Realtime Tasks
-    client.channel('public:tasks')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, async () => {
-            await fetchTasksFromCloud();
-        })
-        .subscribe();
+        }
+    });
+
+    // 2. Recibir Nuevo Grupo por Broadcast
+    window.chatRealtimeChannel.on('broadcast', { event: 'new_group' }, payload => {
+        const grp = payload.payload;
+        if (!grp || !grp.id) return;
+        if (!appState.customChannels) appState.customChannels = [];
+        if (!appState.customChannels.some(c => c.id === grp.id)) {
+            appState.customChannels.push(grp);
+            saveToStorage();
+            renderChatChannels();
+        }
+    });
+
+    // 3. Recibir Eventos de Tareas por Broadcast
+    window.chatRealtimeChannel.on('broadcast', { event: 'task_event' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        if (data.action === 'created' && data.task) {
+            if (!appState.tasks.some(t => t.id === data.task.id)) {
+                appState.tasks.unshift(data.task);
+                saveToStorage();
+                renderTasks();
+                updateGlobalStats();
+            }
+        } else if (data.action === 'updated' && data.id) {
+            const t = appState.tasks.find(x => x.id === data.id);
+            if (t) {
+                t.status = data.status;
+                saveToStorage();
+                renderTasks();
+                updateGlobalStats();
+            }
+        } else if (data.action === 'deleted' && data.id) {
+            appState.tasks = appState.tasks.filter(x => x.id !== data.id);
+            saveToStorage();
+            renderTasks();
+            updateGlobalStats();
+        }
+    });
+
+    // 4. Cambios de base de datos PostgreSQL en mensajes (canal secundario)
+    window.chatRealtimeChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+        const row = payload.new;
+        if (!row) return;
+        const channelKey = row.chat_id || 'general';
+        if (!appState.chats[channelKey]) appState.chats[channelKey] = [];
+
+        const alreadyExists = appState.chats[channelKey].some(m => m.id === row.id);
+        if (!alreadyExists) {
+            const senderRole = row.emisor_role || (row.emisor_nombre === 'Sistema Rodipack' ? 'sistema' : 'colaborador');
+            appState.chats[channelKey].push({
+                id: row.id,
+                sender: row.emisor_nombre || 'Usuario',
+                role: senderRole,
+                text: row.contenido,
+                time: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+            saveToStorage();
+            if (appState.currentChannel === channelKey) {
+                renderChatMessages();
+            }
+            if (appState.currentTab !== 'chat') {
+                const badge = document.getElementById("unread-chat-count");
+                if (badge) {
+                    badge.style.display = "inline-flex";
+                    badge.innerText = parseInt(badge.innerText || '0', 10) + 1;
+                }
+            }
+        }
+    });
+
+    // 5. Cambios de base de datos PostgreSQL en tareas
+    window.chatRealtimeChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, async () => {
+        await fetchTasksFromCloud();
+    });
+
+    window.chatRealtimeChannel.subscribe((status) => {
+        console.log("⚡ [Realtime Hub Subscripción]:", status);
+        if (status === 'SUBSCRIBED') {
+            updateCloudStatusUI(true, appState.currentUser);
+        }
+    });
 }
 
 async function fetchCloudData() {
@@ -2548,18 +2885,19 @@ async function fetchCloudData() {
     const client = window.SUPABASE_CONFIG.client;
     
     try {
-        // Fetch profiles for assigning tasks & creating groups
-        const { data: profiles } = await client.from('profiles').select('*');
+        // Cargar perfiles desde Supabase
+        const { data: profiles, error: pError } = await client.from('profiles').select('*');
         if (profiles && profiles.length > 0) {
             cloudProfilesCache = profiles;
+            window.cloudProfilesCache = profiles;
             updateAssigneeDropdown(profiles);
         }
         
-        // Fetch tasks
+        // Sincronizar tareas
         await fetchTasksFromCloud();
         
-        // Fetch messages for current channel
-        const { data: msgs } = await client.from('messages').select('*').order('created_at', { ascending: true });
+        // Sincronizar mensajes de chat
+        const { data: msgs, error: mError } = await client.from('messages').select('*').order('created_at', { ascending: true });
         if (msgs && msgs.length > 0) {
             msgs.forEach(row => {
                 const channelKey = row.chat_id || 'general';
@@ -2578,6 +2916,25 @@ async function fetchCloudData() {
             saveToStorage();
             renderChatMessages();
         }
+
+        // Subir mensajes locales no sincronizados a Supabase
+        const currentMsgs = appState.chats[appState.currentChannel || 'general'] || [];
+        const cloudMsgIds = new Set((msgs || []).map(m => m.id));
+        currentMsgs.forEach(m => {
+            if (!cloudMsgIds.has(m.id) && m.text && !m.syncedToCloud) {
+                m.syncedToCloud = true;
+                const validUUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                const rawUserId = appState.currentUser?.id;
+                const validUserId = (rawUserId && validUUIDRegex.test(rawUserId)) ? rawUserId : null;
+                client.from('messages').insert([{
+                    chat_id: appState.currentChannel || 'general',
+                    emisor_id: validUserId,
+                    emisor_nombre: m.sender || 'Usuario',
+                    emisor_role: m.role || 'colaborador',
+                    contenido: m.text
+                }]).then(() => {});
+            }
+        });
     } catch (err) {
         console.warn("⚠️ Error fetching cloud data:", err);
     }
@@ -2590,18 +2947,56 @@ async function fetchTasksFromCloud() {
     try {
         const { data: dbTasks, error } = await client.from('tasks').select('*').order('created_at', { ascending: false });
         if (dbTasks && dbTasks.length > 0) {
-            appState.tasks = dbTasks.map(t => ({
-                id: t.id,
-                title: t.titulo,
-                desc: t.descripcion,
-                priority: t.prioridad,
-                status: t.estado,
-                assignee: t.asignado_nombre || 'Sin asignar',
-                createdAt: t.created_at
-            }));
+            // Combinar con tareas existentes deduplicando
+            const cloudMap = new Map();
+            dbTasks.forEach(t => {
+                cloudMap.set(t.id, {
+                    id: t.id,
+                    title: t.titulo,
+                    desc: t.descripcion,
+                    priority: (t.prioridad || 'media').toLowerCase(),
+                    status: t.estado,
+                    assignee: t.asignado_nombre || 'Sin asignar',
+                    createdAt: t.created_at
+                });
+            });
+
+            // Si hay tareas locales que aún no estaban en la nube y somos gerente, subirlas
+            if (appState.currentRole === 'gerente') {
+                appState.tasks.forEach(lt => {
+                    if (!cloudMap.has(lt.id) && !lt.uploadedToCloud) {
+                        lt.uploadedToCloud = true;
+                        const dbPriority = (lt.priority || 'alta').charAt(0).toUpperCase() + (lt.priority || 'alta').slice(1).toLowerCase();
+                        client.from('tasks').insert([{
+                            titulo: lt.title,
+                            descripcion: lt.desc,
+                            prioridad: dbPriority,
+                            estado: lt.status || 'pendiente',
+                            asignado_nombre: lt.assignee || 'Sin asignar'
+                        }]).then(() => {});
+                    }
+                });
+            }
+
+            appState.tasks = Array.from(cloudMap.values());
             saveToStorage();
             renderTasks();
             updateGlobalStats();
+        } else if ((!dbTasks || dbTasks.length === 0) && appState.tasks.length > 0 && appState.currentRole === 'gerente') {
+            // Subir tareas locales existentes a Supabase para que las vean las tablets
+            appState.tasks.forEach(t => {
+                if (!t.uploadedToCloud) {
+                    t.uploadedToCloud = true;
+                    const dbPriority = (t.priority || 'alta').charAt(0).toUpperCase() + (t.priority || 'alta').slice(1).toLowerCase();
+                    client.from('tasks').insert([{
+                        titulo: t.title,
+                        descripcion: t.desc,
+                        prioridad: dbPriority,
+                        estado: t.status || 'pendiente',
+                        asignado_nombre: t.assignee || 'Sin asignar'
+                    }]).then(() => {});
+                }
+            });
         }
     } catch (err) {
         console.warn("Error fetching cloud tasks:", err);
@@ -2609,13 +3004,34 @@ async function fetchTasksFromCloud() {
 }
 
 function updateAssigneeDropdown(profiles) {
-    const select = document.getElementById("task-assignee");
-    if (!select || !profiles || profiles.length === 0) return;
-    
-    const existingVal = select.value;
-    select.innerHTML = profiles.map(p => `<option value="${p.nombre}">${p.nombre} (${p.cargo || p.rol})</option>`).join('');
-    if (existingVal) select.value = existingVal;
+    if (profiles && profiles.length > 0) {
+        cloudProfilesCache = profiles;
+        window.cloudProfilesCache = profiles;
+    }
 }
+
+// Reconexión y re-sincronización automática para Tablets (iPad/Android) al desbloquear pantalla
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && window.isSupabaseActive()) {
+        console.log("⚡ [Tablet/Pantalla Activa]: Re-sincronizando chat y tareas en vivo...");
+        fetchCloudData();
+    }
+});
+
+window.addEventListener('online', () => {
+    if (window.isSupabaseActive()) {
+        console.log("⚡ [Red Reconectada]: Restaurando conexión en vivo...");
+        setupRealtimeSubscriptions();
+        fetchCloudData();
+    }
+});
+
+// Sincronización periódica en segundo plano para asegurar que tablets y móviles nunca pierdan mensajes
+setInterval(() => {
+    if (window.isSupabaseActive() && document.visibilityState === 'visible') {
+        fetchCloudData();
+    }
+}, 8000);
 
 // ---------------------------------------------------------------------------------
 // GERENTE PROFILE & USER ADMINISTRATION CONTROLS

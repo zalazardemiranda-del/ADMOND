@@ -77,15 +77,17 @@ CREATE TABLE IF NOT EXISTS public.tasks (
 
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Cualquier usuario autenticado puede ver las tareas"
-ON public.tasks FOR SELECT 
-TO authenticated 
-USING (true);
+DROP POLICY IF EXISTS "Cualquier usuario autenticado puede ver las tareas" ON public.tasks;
+DROP POLICY IF EXISTS "Cualquier usuario autenticado puede crear y actualizar tareas" ON public.tasks;
+DROP POLICY IF EXISTS "Permitir ver tareas" ON public.tasks;
+DROP POLICY IF EXISTS "Permitir crear tareas" ON public.tasks;
+DROP POLICY IF EXISTS "Permitir actualizar tareas" ON public.tasks;
+DROP POLICY IF EXISTS "Permitir eliminar tareas" ON public.tasks;
 
-CREATE POLICY "Cualquier usuario autenticado puede crear y actualizar tareas"
-ON public.tasks FOR ALL 
-TO authenticated 
-USING (true);
+CREATE POLICY "Permitir ver tareas" ON public.tasks FOR SELECT USING (true);
+CREATE POLICY "Permitir crear tareas" ON public.tasks FOR INSERT WITH CHECK (true);
+CREATE POLICY "Permitir actualizar tareas" ON public.tasks FOR UPDATE USING (true);
+CREATE POLICY "Permitir eliminar tareas" ON public.tasks FOR DELETE USING (true);
 
 
 -- 4. TABLA DE CHATS Y CANALES (Chats)
@@ -141,9 +143,16 @@ CREATE TABLE IF NOT EXISTS public.messages (
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Ver y enviar mensajes" ON public.messages;
-CREATE POLICY "Ver y enviar mensajes"
-ON public.messages FOR ALL 
-USING (true);
+DROP POLICY IF EXISTS "Usuarios autenticados pueden ver y enviar mensajes" ON public.messages;
+DROP POLICY IF EXISTS "Permitir ver mensajes" ON public.messages;
+DROP POLICY IF EXISTS "Permitir enviar mensajes" ON public.messages;
+DROP POLICY IF EXISTS "Permitir actualizar mensajes" ON public.messages;
+DROP POLICY IF EXISTS "Permitir eliminar mensajes" ON public.messages;
+
+CREATE POLICY "Permitir ver mensajes" ON public.messages FOR SELECT USING (true);
+CREATE POLICY "Permitir enviar mensajes" ON public.messages FOR INSERT WITH CHECK (true);
+CREATE POLICY "Permitir actualizar mensajes" ON public.messages FOR UPDATE USING (true);
+CREATE POLICY "Permitir eliminar mensajes" ON public.messages FOR DELETE USING (true);
 
 
 -- 7. TABLA DE REUNIONES (Meetings)
@@ -160,10 +169,16 @@ CREATE TABLE IF NOT EXISTS public.meetings (
 
 ALTER TABLE public.meetings ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Ver y programar reuniones"
-ON public.meetings FOR ALL 
-TO authenticated 
-USING (true);
+DROP POLICY IF EXISTS "Ver y programar reuniones" ON public.meetings;
+DROP POLICY IF EXISTS "Permitir ver reuniones" ON public.meetings;
+DROP POLICY IF EXISTS "Permitir programar reuniones" ON public.meetings;
+DROP POLICY IF EXISTS "Permitir actualizar reuniones" ON public.meetings;
+DROP POLICY IF EXISTS "Permitir eliminar reuniones" ON public.meetings;
+
+CREATE POLICY "Permitir ver reuniones" ON public.meetings FOR SELECT USING (true);
+CREATE POLICY "Permitir programar reuniones" ON public.meetings FOR INSERT WITH CHECK (true);
+CREATE POLICY "Permitir actualizar reuniones" ON public.meetings FOR UPDATE USING (true);
+CREATE POLICY "Permitir eliminar reuniones" ON public.meetings FOR DELETE USING (true);
 
 
 -- 8. TABLA DE CONSECUTIVO DE FACTURACIÓN 2026 (Consecutivo)
