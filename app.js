@@ -93,6 +93,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     appState.tasks = JSON.parse(localStorage.getItem('rp_tasks')) || [];
     appState.chats = JSON.parse(localStorage.getItem('rp_chats')) || { general: [] };
+    if (appState.chats && typeof appState.chats === 'object') {
+        Object.keys(appState.chats).forEach(k => {
+            if (Array.isArray(appState.chats[k])) {
+                const seen = new Set();
+                appState.chats[k] = appState.chats[k].filter(m => {
+                    if (!m || !m.text) return false;
+                    const sig = `${(m.sender || '').trim()}_${(m.text || '').trim()}_${(m.time || '').trim()}`;
+                    if (seen.has(sig)) return false;
+                    seen.add(sig);
+                    return true;
+                });
+            }
+        });
+        localStorage.setItem('rp_chats', JSON.stringify(appState.chats));
+    }
     appState.customChannels = JSON.parse(localStorage.getItem('rp_custom_channels')) || [];
     appState.meetings = JSON.parse(localStorage.getItem('rp_meetings')) || [];
     
@@ -175,7 +190,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     renderTasks();
-    renderChatMessages();
+    renderChatMessages(true);
     renderMeetings();
     renderAdministracion();
     updateGlobalStats();
@@ -387,7 +402,7 @@ window.switchTab = function(tabName) {
         subtitleEl.innerText = "Resuelve dudas técnicas o conversa en tiempo real con el equipo";
         document.getElementById("unread-chat-count").style.display = "none";
         renderChatChannels();
-        renderChatMessages();
+        renderChatMessages(true);
     } else if (tabName === 'meetings') {
         titleEl.innerText = "Calendario de Reuniones";
         subtitleEl.innerText = "Planifica y agenda llamadas de coordinación del equipo";
@@ -1313,7 +1328,7 @@ window.selectChannel = function(channelId) {
     if (chatInput && headerTitle) {
         chatInput.placeholder = `Escribe un mensaje en ${headerTitle.innerText}...`;
     }
-    renderChatMessages();
+    renderChatMessages(true);
 };
 
 // ---------------------------------------------------------------------------------
@@ -1505,7 +1520,7 @@ window.handleAddChatMember = function(event) {
 
     appState.chats[currentChan].push(sysMsgObj);
     saveToStorage();
-    renderChatMessages();
+    renderChatMessages(true);
     closeAddMemberModal();
 
     // Broadcast instantáneo
@@ -1577,7 +1592,7 @@ window.handleSendChatMessage = function(event) {
     appState.chats[currentChan].push(newMsg);
     saveToStorage();
     inputField.value = "";
-    renderChatMessages();
+    renderChatMessages(true);
     
     // 1. Transmisión Instantánea por WebSockets Broadcast (Tablet <-> PC en tiempo real)
     if (window.chatRealtimeChannel) {
@@ -1608,12 +1623,42 @@ window.handleSendChatMessage = function(event) {
     }
 };
 
-function renderChatMessages() {
+function renderChatMessages(forceScroll = false) {
     const msgContainer = document.getElementById("chat-messages-container");
     if (!msgContainer) return;
-    msgContainer.innerHTML = "";
-    const currentMsgs = appState.chats[appState.currentChannel] || [];
     
+    const currentChan = appState.currentChannel || 'general';
+    if (!appState.chats[currentChan]) appState.chats[currentChan] = [];
+
+    // Deduplicar mensajes en memoria para este canal
+    const uniqueList = [];
+    const seenSignatures = new Set();
+    appState.chats[currentChan].forEach(msg => {
+        if (!msg || !msg.text) return;
+        const cleanText = (msg.text || '').trim();
+        const timeKey = (msg.time || '').trim();
+        const senderKey = (msg.sender || '').trim();
+        const sig = `${senderKey}_${cleanText}_${timeKey}`;
+        if (!seenSignatures.has(sig)) {
+            seenSignatures.add(sig);
+            uniqueList.push(msg);
+        }
+    });
+    appState.chats[currentChan] = uniqueList;
+
+    const currentMsgs = uniqueList;
+    const currentHash = `${currentChan}__${currentMsgs.map(m => `${m.id || ''}_${m.sender}_${m.text}_${m.time}`).join('||')}`;
+
+    // Si los mensajes no han cambiado y no se forzó el scroll, no tocar el DOM para mantener intacto el scroll del usuario
+    if (!forceScroll && msgContainer.dataset.renderedHash === currentHash) {
+        return;
+    }
+
+    // Verificar si el usuario estaba leyendo cerca del final antes de re-renderizar
+    const wasNearBottom = (msgContainer.scrollHeight - msgContainer.scrollTop - msgContainer.clientHeight) < 100;
+
+    msgContainer.dataset.renderedHash = currentHash;
+
     if (currentMsgs.length === 0) {
         msgContainer.innerHTML = `<div style="text-align: center; padding: 48px 20px; color: var(--text-secondary);">
             <span class="material-symbols-outlined" style="font-size: 36px; color: #94A3B8; margin-bottom: 6px;">forum</span>
@@ -1623,17 +1668,19 @@ function renderChatMessages() {
         return;
     }
     
+    msgContainer.innerHTML = "";
     currentMsgs.forEach(msg => {
-        const initials = msg.sender.split(" ").map(n => n[0]).join("");
+        const initials = (msg.sender || 'U').split(" ").filter(Boolean).map(n => n[0]).join("").toUpperCase().slice(0, 2) || 'U';
+        const role = (msg.role || 'colaborador').toLowerCase();
         const msgCard = document.createElement("div");
-        msgCard.className = `chat-msg-card ${msg.role}`;
+        msgCard.className = `chat-msg-card ${role}`;
         msgCard.innerHTML = `
             <div class="msg-avatar">${initials}</div>
             <div class="msg-content-wrapper">
                 <div class="msg-header">
-                    <span class="msg-sender">${msg.sender}</span>
-                    <span class="msg-sender-role ${msg.role}">${msg.role}</span>
-                    <span class="msg-time">${msg.time}</span>
+                    <span class="msg-sender">${msg.sender || 'Usuario'}</span>
+                    <span class="msg-sender-role ${role}">${role}</span>
+                    <span class="msg-time">${msg.time || ''}</span>
                 </div>
                 <div class="msg-bubble">
                     ${msg.text}
@@ -1643,7 +1690,11 @@ function renderChatMessages() {
         msgContainer.appendChild(msgCard);
     });
     
-    msgContainer.scrollTop = msgContainer.scrollHeight;
+    if (forceScroll || wasNearBottom) {
+        requestAnimationFrame(() => {
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------------
@@ -2785,7 +2836,7 @@ function setupRealtimeSubscriptions() {
             });
             saveToStorage();
             if (appState.currentChannel === channelKey) {
-                renderChatMessages();
+                renderChatMessages(false);
             }
             if (appState.currentTab !== 'chat') {
                 const badge = document.getElementById("unread-chat-count");
@@ -2855,7 +2906,7 @@ function setupRealtimeSubscriptions() {
             });
             saveToStorage();
             if (appState.currentChannel === channelKey) {
-                renderChatMessages();
+                renderChatMessages(false);
             }
             if (appState.currentTab !== 'chat') {
                 const badge = document.getElementById("unread-chat-count");
@@ -2899,40 +2950,73 @@ async function fetchCloudData() {
         // Sincronizar mensajes de chat
         const { data: msgs, error: mError } = await client.from('messages').select('*').order('created_at', { ascending: true });
         if (msgs && msgs.length > 0) {
+            let addedAny = false;
             msgs.forEach(row => {
                 const channelKey = row.chat_id || 'general';
                 if (!appState.chats[channelKey]) appState.chats[channelKey] = [];
-                if (!appState.chats[channelKey].some(m => m.id === row.id)) {
+
+                const cleanContent = (row.contenido || '').trim();
+                const senderName = row.emisor_nombre || 'Usuario';
+                const timeStr = new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                // Deduplicar tanto por ID como por contenido y autor
+                const existingIndex = appState.chats[channelKey].findIndex(m => 
+                    m.id === row.id || 
+                    (m.sender === senderName && (m.text || '').trim() === cleanContent)
+                );
+
+                if (existingIndex >= 0) {
+                    appState.chats[channelKey][existingIndex].id = row.id;
+                    appState.chats[channelKey][existingIndex].syncedToCloud = true;
+                } else {
                     const senderRole = row.emisor_role || (row.emisor_nombre === 'Sistema Rodipack' ? 'sistema' : 'colaborador');
                     appState.chats[channelKey].push({
                         id: row.id,
-                        sender: row.emisor_nombre || 'Usuario',
+                        sender: senderName,
                         role: senderRole,
-                        text: row.contenido,
-                        time: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        text: cleanContent,
+                        time: timeStr,
+                        timestamp: row.created_at,
+                        syncedToCloud: true
                     });
+                    addedAny = true;
                 }
             });
-            saveToStorage();
-            renderChatMessages();
+            if (addedAny) {
+                saveToStorage();
+                renderChatMessages(false);
+            }
         }
 
-        // Subir mensajes locales no sincronizados a Supabase
+        // Subir mensajes locales no sincronizados a Supabase (con protección estricta anti-duplicados)
         const currentMsgs = appState.chats[appState.currentChannel || 'general'] || [];
         const cloudMsgIds = new Set((msgs || []).map(m => m.id));
+        const cloudSignatures = new Set((msgs || []).map(m => `${m.emisor_nombre || 'Usuario'}_${(m.contenido || '').trim()}`));
+
         currentMsgs.forEach(m => {
-            if (!cloudMsgIds.has(m.id) && m.text && !m.syncedToCloud) {
+            const cleanText = (m.text || '').trim();
+            const sig = `${m.sender || 'Usuario'}_${cleanText}`;
+            if (!cloudMsgIds.has(m.id) && !cloudSignatures.has(sig) && cleanText && !m.syncedToCloud) {
                 m.syncedToCloud = true;
                 const validUUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
                 const rawUserId = appState.currentUser?.id;
                 const validUserId = (rawUserId && validUUIDRegex.test(rawUserId)) ? rawUserId : null;
-                client.from('messages').insert([{
+                const newId = (m.id && validUUIDRegex.test(m.id)) ? m.id : undefined;
+
+                const payload = {
                     chat_id: appState.currentChannel || 'general',
                     emisor_id: validUserId,
                     emisor_nombre: m.sender || 'Usuario',
                     emisor_role: m.role || 'colaborador',
-                    contenido: m.text
-                }]).then(() => {});
+                    contenido: cleanText
+                };
+                if (newId) payload.id = newId;
+
+                client.from('messages').insert([payload]).then(({ error }) => {
+                    if (error) console.warn("Notice: Message auto-sync:", error.message || error);
+                });
+            } else {
+                m.syncedToCloud = true;
             }
         });
     } catch (err) {

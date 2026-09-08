@@ -1038,7 +1038,9 @@ select option {
 .chat-layout {
     display: grid;
     grid-template-columns: 260px 1fr;
-    height: calc(100vh - 170px);
+    height: calc(100vh - 175px);
+    min-height: 460px;
+    max-height: calc(100vh - 175px);
     padding: 0;
     overflow: hidden;
 }
@@ -1049,6 +1051,8 @@ select option {
     padding: 20px 16px;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .chat-section-header {
@@ -1116,7 +1120,11 @@ select option {
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    max-height: 100%;
     background: #FFFFFF;
+    overflow: hidden;
+    position: relative;
 }
 
 .chat-header {
@@ -1125,6 +1133,7 @@ select option {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .chat-header-info h3 {
@@ -1154,12 +1163,17 @@ select option {
 }
 
 .chat-messages {
-    flex-grow: 1;
+    flex: 1 1 0%;
+    min-height: 0;
+    max-height: 100%;
     padding: 20px 24px;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 16px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 .chat-msg-card {
@@ -1240,20 +1254,34 @@ select option {
 }
 
 .chat-input-bar {
-    padding: 16px 24px;
+    padding: 14px 20px;
     border-top: 1px solid var(--border-subtle);
     display: flex;
+    align-items: center;
     gap: 12px;
     background: #F8FAFC;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 20;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.03);
 }
 
 .chat-input-bar input {
     flex-grow: 1;
     background: #FFFFFF;
-    border: 1px solid rgba(15, 23, 42, 0.12);
-    border-radius: var(--radius-sm);
-    padding: 10px 14px;
-    font-size: 13px;
+    border: 1.5px solid rgba(15, 23, 42, 0.16);
+    border-radius: 8px;
+    padding: 11px 16px;
+    font-size: 13.5px;
+    outline: none;
+    font-family: inherit;
+    color: #0F172A;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.chat-input-bar input:focus {
+    border-color: #2563EB;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .chat-send-btn {
