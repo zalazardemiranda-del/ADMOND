@@ -2704,7 +2704,7 @@ window.loadProfilesList = async function() {
     const container = document.getElementById("profiles-list-container");
     
     const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [
-        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT" }
+        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" }
     ];
     
     let mergedProfiles = [...localProfiles];
@@ -2900,7 +2900,7 @@ window.handleSupabaseRegister = async function(event) {
 
     // 1. Guardar localmente siempre
     const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [
-        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT" }
+        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" }
     ];
     const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === email.toLowerCase());
     if (existingIdx >= 0) {
@@ -3040,7 +3040,7 @@ window.handleGlobalLoginSubmit = async function(event) {
                 const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
                 
                 if (matchedProfile) {
-                    if (matchedProfile.password && matchedProfile.password !== password) {
+                    if (matchedProfile.password !== password) {
                         if (errorEl) {
                             errorEl.innerText = "Error de autenticación: Contraseña incorrecta. Por favor verifica tus datos.";
                             errorEl.style.display = "block";
@@ -3130,9 +3130,9 @@ window.handleGlobalLoginSubmit = async function(event) {
             const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
             const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
             
-            if (matchedProfile && matchedProfile.password && matchedProfile.password !== password) {
+            if (!matchedProfile || matchedProfile.password !== password) {
                 if (errorEl) {
-                    errorEl.innerText = "Error de autenticación: Contraseña incorrecta. Por favor verifica tus datos.";
+                    errorEl.innerText = "Error de autenticación: Correo o contraseña incorrectos. Por favor verifica tus datos.";
                     errorEl.style.display = "block";
                 }
                 btnSubmit.disabled = false;
