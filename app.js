@@ -130,26 +130,50 @@ document.addEventListener("DOMContentLoaded", async () => {
             status: 'pending',
             assignee: 'Roberto Miranda Perez',
             createdAt: '2026-09-08T13:30:00.000Z'
+        },
+        {
+            id: 'task-roditrack-email-recov',
+            title: 'Roditrack online',
+            desc: 'Crear y conectar correo electronico para recuperacion de contraseñas',
+            priority: 'alta',
+            status: 'pending',
+            assignee: 'Roberto Miranda Perez',
+            createdAt: '2026-09-08T13:40:00.000Z'
         }
     ];
 
     let storedTasks = JSON.parse(localStorage.getItem('rp_tasks')) || [];
-    // Filtrar únicamente IDs de prueba obsoletos
     storedTasks = storedTasks.filter(t => t && t.id !== 'task-1' && t.id !== 'task-2');
 
-    // Fusionar tareas predeterminadas recuperadas con tareas locales sin borrar nada
+    // Fusionar tareas predeterminadas con tareas locales basándose en ID o firma (título + descripción)
     const tasksMap = new Map();
     defaultUserTasks.forEach(dt => {
-        const normKey = (dt.title || '').trim().toLowerCase();
-        tasksMap.set(normKey, dt);
+        const sig = `${(dt.title || '').trim().toLowerCase()}____${(dt.desc || '').trim().toLowerCase()}`;
+        tasksMap.set(dt.id, dt);
+        tasksMap.set(sig, dt);
     });
     storedTasks.forEach(st => {
         if (!st || !st.title) return;
-        const normKey = (st.title || '').trim().toLowerCase();
-        tasksMap.set(normKey, st);
+        const sig = `${(st.title || '').trim().toLowerCase()}____${(st.desc || '').trim().toLowerCase()}`;
+        tasksMap.set(st.id, st);
+        tasksMap.set(sig, st);
     });
 
-    appState.tasks = Array.from(tasksMap.values());
+    // Reconstruir array deduplicado
+    const initialTasksList = [];
+    const seenIds = new Set();
+    const seenSigs = new Set();
+    Array.from(tasksMap.values()).forEach(t => {
+        if (!t || !t.title) return;
+        const sig = `${(t.title || '').trim().toLowerCase()}____${(t.desc || '').trim().toLowerCase()}`;
+        if (!seenIds.has(t.id) && !seenSigs.has(sig)) {
+            seenIds.add(t.id);
+            seenSigs.add(sig);
+            initialTasksList.push(t);
+        }
+    });
+
+    appState.tasks = initialTasksList;
     localStorage.setItem('rp_tasks', JSON.stringify(appState.tasks));
 
     const storedMeetings = JSON.parse(localStorage.getItem('rp_meetings'));
@@ -1177,7 +1201,8 @@ window.handleCreateTask = function(event) {
     const desc = document.getElementById("task-desc").value.trim();
     const assigneeInput = document.getElementById("task-assignee");
     const assignee = assigneeInput ? assigneeInput.value.trim() : '';
-    const priority = document.getElementById("task-priority").value || 'alta';
+    const rawPriority = document.getElementById("task-priority").value || 'alta';
+    const priority = rawPriority.trim().toLowerCase();
     
     if (!title) return;
     
@@ -1195,12 +1220,22 @@ window.handleCreateTask = function(event) {
     saveToStorage();
     document.getElementById("new-task-form").reset();
     
-    // Reset inputs cleanly (sin nombre determinado como Juan Pérez)
+    // Reset inputs cleanly
     if (assigneeInput) assigneeInput.value = "";
     if (typeof closeAssigneeDropdown === 'function') closeAssigneeDropdown();
     setTaskPrioritySegment('alta');
     
-    renderTasks();
+    // Si la prioridad de la nueva tarea no coincide con el filtro activo, cambiar al filtro correspondiente o a "Todas" para mostrar la tarea
+    if (appState.currentFilter !== 'all' && appState.currentFilter !== priority) {
+        const targetBtn = document.querySelector(`.filter-btn[data-filter='${priority}']`) || document.querySelector(`.filter-btn[data-filter='all']`);
+        if (targetBtn) {
+            filterTasks(priority, targetBtn);
+        } else {
+            renderTasks();
+        }
+    } else {
+        renderTasks();
+    }
     updateGlobalStats();
     
     // Cloud Sync
@@ -3153,16 +3188,24 @@ async function fetchTasksFromCloud() {
     try {
         const { data: dbTasks, error } = await client.from('tasks').select('*').order('created_at', { ascending: false });
         
-        const cloudTasks = (dbTasks || []).map(t => ({
-            id: t.id,
-            title: t.titulo,
-            desc: t.descripcion,
-            priority: (t.prioridad || 'media').toLowerCase(),
-            status: t.estado || 'pending',
-            assignee: t.asignado_nombre || 'Sin asignar',
-            createdAt: t.created_at,
-            uploadedToCloud: true
-        }));
+        const cloudTasks = (dbTasks || []).map(t => {
+            const rawP = (t.prioridad || '').toString().trim().toLowerCase();
+            let normP = 'alta';
+            if (rawP.includes('alt')) normP = 'alta';
+            else if (rawP.includes('med')) normP = 'media';
+            else if (rawP.includes('baj')) normP = 'baja';
+
+            return {
+                id: t.id,
+                title: t.titulo,
+                desc: t.descripcion,
+                priority: normP,
+                status: t.estado || 'pending',
+                assignee: t.asignado_nombre || 'Sin asignar',
+                createdAt: t.created_at,
+                uploadedToCloud: true
+            };
+        });
 
         // Mapa combinado para fusionar tareas locales y remotas
         const mergedMap = new Map();
@@ -3170,18 +3213,23 @@ async function fetchTasksFromCloud() {
         // 1. Agregar tareas locales actuales
         (appState.tasks || []).forEach(lt => {
             if (!lt || !lt.title) return;
-            const normTitle = (lt.title || '').trim().toLowerCase();
+            const cleanTitle = (lt.title || '').trim().toLowerCase();
+            const cleanDesc = (lt.desc || '').trim().toLowerCase();
+            const sig = `${cleanTitle}____${cleanDesc}`;
             mergedMap.set(lt.id, lt);
-            mergedMap.set(`title_${normTitle}`, lt);
+            mergedMap.set(sig, lt);
         });
 
         // 2. Fusionar tareas provenientes de Supabase
         cloudTasks.forEach(ct => {
             if (!ct || !ct.title) return;
-            const normTitle = (ct.title || '').trim().toLowerCase();
-            const existingLocal = mergedMap.get(ct.id) || mergedMap.get(`title_${normTitle}`);
+            const cleanTitle = (ct.title || '').trim().toLowerCase();
+            const cleanDesc = (ct.desc || '').trim().toLowerCase();
+            const sig = `${cleanTitle}____${cleanDesc}`;
+            const existingLocal = mergedMap.get(ct.id) || mergedMap.get(sig);
             if (existingLocal) {
                 existingLocal.id = ct.id;
+                existingLocal.priority = ct.priority || existingLocal.priority;
                 existingLocal.status = ct.status || existingLocal.status;
                 existingLocal.uploadedToCloud = true;
             } else {
@@ -3189,18 +3237,20 @@ async function fetchTasksFromCloud() {
             }
         });
 
-        // Reconstruir lista limpia deduplicada
+        // Reconstruir lista limpia deduplicada por ID y por (título + descripción)
         const finalTasksList = [];
         const seenIds = new Set();
-        const seenTitles = new Set();
+        const seenSignatures = new Set();
 
         Array.from(mergedMap.values()).forEach(t => {
             if (!t || !t.title) return;
-            const cleanTitle = (t.title || '').trim();
-            const normTitle = cleanTitle.toLowerCase();
-            if (!seenIds.has(t.id) && !seenTitles.has(normTitle)) {
+            const cleanTitle = (t.title || '').trim().toLowerCase();
+            const cleanDesc = (t.desc || '').trim().toLowerCase();
+            const sig = `${cleanTitle}____${cleanDesc}`;
+
+            if (!seenIds.has(t.id) && !seenSignatures.has(sig)) {
                 seenIds.add(t.id);
-                seenTitles.add(normTitle);
+                seenSignatures.add(sig);
                 finalTasksList.push(t);
             }
         });
