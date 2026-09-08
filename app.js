@@ -75,11 +75,83 @@ let pieChartInstance = null;
 
 // Initialize Application
 document.addEventListener("DOMContentLoaded", async () => {
-    // Limpieza automática de datos demo/falsos previamente almacenados
-    const storedTasks = JSON.parse(localStorage.getItem('rp_tasks'));
-    if (storedTasks && storedTasks.some(t => t.id === 'task-1' || t.id === 'task-2' || t.assignee === 'Juan Pérez')) {
-        localStorage.removeItem('rp_tasks');
-    }
+    // Lista de tareas base creadas por el usuario para recuperación automática
+    const defaultUserTasks = [
+        {
+            id: 'task-rodiload-pagos',
+            title: 'rodiload" sistema"',
+            desc: 'Habilitar sistema de pagos anuales y mensuales para iniciar secion . para ello conectar api de sistema de pagos.',
+            priority: 'baja',
+            status: 'pending',
+            assignee: 'Roberto Miranda',
+            createdAt: '2026-09-08T12:00:00.000Z'
+        },
+        {
+            id: 'task-rodiload-email',
+            title: 'rodiload "Sistema"',
+            desc: 'Conectar sistema a correo electronico para recuperacion de contraseña ( para ello hacer un correo electronico con el dominio y usar thunderbird para la gestion de correos internos)',
+            priority: 'baja',
+            status: 'pending',
+            assignee: 'Roberto Miranda',
+            createdAt: '2026-09-08T12:05:00.000Z'
+        },
+        {
+            id: 'task-rodiload-medidas',
+            title: 'Rodiload "sistema"',
+            desc: '- Revisar y ajustar medidas de unidades',
+            priority: 'baja',
+            status: 'pending',
+            assignee: 'Roberto Miranda',
+            createdAt: '2026-09-08T12:10:00.000Z'
+        },
+        {
+            id: 'task-roditrack-apk-ios',
+            title: 'Roditrack online "sistema"',
+            desc: '- Testeo de roditrack con el apk -Subir sistema a IOS ( Para ello pagar computadora en linea y pagar anualidad ( 99 usd) -Conectar a api de sistema de pagos - Conectar correo electronico del sistema para la recuperacion de contraseñas',
+            priority: 'alta',
+            status: 'pending',
+            assignee: 'Roberto Miranda',
+            createdAt: '2026-09-08T12:15:00.000Z'
+        },
+        {
+            id: 'task-roditrack-web',
+            title: 'roditrack (web)',
+            desc: '- poner el sistema descargable - poner direccion de correo electronico ( roditrack@.com) - Hacer pagina en linkedin de roditrack o rodipack - poner links y planes del sistema',
+            priority: 'media',
+            status: 'pending',
+            assignee: 'Roberto Miranda',
+            createdAt: '2026-09-08T12:20:00.000Z'
+        },
+        {
+            id: 'task-roditrack-uber',
+            title: 'Roditrack online',
+            desc: 'Testeo del nuevo apk ( revisar que este haciendo el rastreo tipo uber )',
+            priority: 'alta',
+            status: 'pending',
+            assignee: 'Roberto Miranda Perez',
+            createdAt: '2026-09-08T13:30:00.000Z'
+        }
+    ];
+
+    let storedTasks = JSON.parse(localStorage.getItem('rp_tasks')) || [];
+    // Filtrar únicamente IDs de prueba obsoletos
+    storedTasks = storedTasks.filter(t => t && t.id !== 'task-1' && t.id !== 'task-2');
+
+    // Fusionar tareas predeterminadas recuperadas con tareas locales sin borrar nada
+    const tasksMap = new Map();
+    defaultUserTasks.forEach(dt => {
+        const normKey = (dt.title || '').trim().toLowerCase();
+        tasksMap.set(normKey, dt);
+    });
+    storedTasks.forEach(st => {
+        if (!st || !st.title) return;
+        const normKey = (st.title || '').trim().toLowerCase();
+        tasksMap.set(normKey, st);
+    });
+
+    appState.tasks = Array.from(tasksMap.values());
+    localStorage.setItem('rp_tasks', JSON.stringify(appState.tasks));
+
     const storedMeetings = JSON.parse(localStorage.getItem('rp_meetings'));
     if (storedMeetings && storedMeetings.some(m => m.id === 'meet-1' || m.id === 'meet-2')) {
         localStorage.removeItem('rp_meetings');
@@ -91,7 +163,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         localStorage.setItem('rp_chats', JSON.stringify(storedChats));
     }
 
-    appState.tasks = JSON.parse(localStorage.getItem('rp_tasks')) || [];
     appState.chats = JSON.parse(localStorage.getItem('rp_chats')) || { general: [] };
     if (appState.chats && typeof appState.chats === 'object') {
         Object.keys(appState.chats).forEach(k => {
@@ -3081,46 +3152,70 @@ async function fetchTasksFromCloud() {
     
     try {
         const { data: dbTasks, error } = await client.from('tasks').select('*').order('created_at', { ascending: false });
-        if (dbTasks && dbTasks.length > 0) {
-            // Combinar con tareas existentes deduplicando
-            const cloudMap = new Map();
-            dbTasks.forEach(t => {
-                cloudMap.set(t.id, {
-                    id: t.id,
-                    title: t.titulo,
-                    desc: t.descripcion,
-                    priority: (t.prioridad || 'media').toLowerCase(),
-                    status: t.estado,
-                    assignee: t.asignado_nombre || 'Sin asignar',
-                    createdAt: t.created_at
-                });
-            });
+        
+        const cloudTasks = (dbTasks || []).map(t => ({
+            id: t.id,
+            title: t.titulo,
+            desc: t.descripcion,
+            priority: (t.prioridad || 'media').toLowerCase(),
+            status: t.estado || 'pending',
+            assignee: t.asignado_nombre || 'Sin asignar',
+            createdAt: t.created_at,
+            uploadedToCloud: true
+        }));
 
-            // Si hay tareas locales que aún no estaban en la nube y somos gerente, subirlas
-            if (appState.currentRole === 'gerente') {
-                appState.tasks.forEach(lt => {
-                    if (!cloudMap.has(lt.id) && !lt.uploadedToCloud) {
-                        lt.uploadedToCloud = true;
-                        const dbPriority = (lt.priority || 'alta').charAt(0).toUpperCase() + (lt.priority || 'alta').slice(1).toLowerCase();
-                        client.from('tasks').insert([{
-                            titulo: lt.title,
-                            descripcion: lt.desc,
-                            prioridad: dbPriority,
-                            estado: lt.status || 'pendiente',
-                            asignado_nombre: lt.assignee || 'Sin asignar'
-                        }]).then(() => {});
-                    }
-                });
+        // Mapa combinado para fusionar tareas locales y remotas
+        const mergedMap = new Map();
+
+        // 1. Agregar tareas locales actuales
+        (appState.tasks || []).forEach(lt => {
+            if (!lt || !lt.title) return;
+            const normTitle = (lt.title || '').trim().toLowerCase();
+            mergedMap.set(lt.id, lt);
+            mergedMap.set(`title_${normTitle}`, lt);
+        });
+
+        // 2. Fusionar tareas provenientes de Supabase
+        cloudTasks.forEach(ct => {
+            if (!ct || !ct.title) return;
+            const normTitle = (ct.title || '').trim().toLowerCase();
+            const existingLocal = mergedMap.get(ct.id) || mergedMap.get(`title_${normTitle}`);
+            if (existingLocal) {
+                existingLocal.id = ct.id;
+                existingLocal.status = ct.status || existingLocal.status;
+                existingLocal.uploadedToCloud = true;
+            } else {
+                mergedMap.set(ct.id, ct);
             }
+        });
 
-            appState.tasks = Array.from(cloudMap.values());
-            saveToStorage();
-            renderTasks();
-            updateGlobalStats();
-        } else if ((!dbTasks || dbTasks.length === 0) && appState.tasks.length > 0 && appState.currentRole === 'gerente') {
-            // Subir tareas locales existentes a Supabase para que las vean las tablets
+        // Reconstruir lista limpia deduplicada
+        const finalTasksList = [];
+        const seenIds = new Set();
+        const seenTitles = new Set();
+
+        Array.from(mergedMap.values()).forEach(t => {
+            if (!t || !t.title) return;
+            const cleanTitle = (t.title || '').trim();
+            const normTitle = cleanTitle.toLowerCase();
+            if (!seenIds.has(t.id) && !seenTitles.has(normTitle)) {
+                seenIds.add(t.id);
+                seenTitles.add(normTitle);
+                finalTasksList.push(t);
+            }
+        });
+
+        appState.tasks = finalTasksList;
+        saveToStorage();
+        renderTasks();
+        updateGlobalStats();
+
+        // Subir a Supabase cualquier tarea local no sincronizada
+        if (appState.currentRole === 'gerente') {
+            const cloudTitleSet = new Set((dbTasks || []).map(t => (t.titulo || '').trim().toLowerCase()));
             appState.tasks.forEach(t => {
-                if (!t.uploadedToCloud) {
+                const normT = (t.title || '').trim().toLowerCase();
+                if (!cloudTitleSet.has(normT) && !t.uploadedToCloud) {
                     t.uploadedToCloud = true;
                     const dbPriority = (t.priority || 'alta').charAt(0).toUpperCase() + (t.priority || 'alta').slice(1).toLowerCase();
                     client.from('tasks').insert([{
@@ -3129,7 +3224,9 @@ async function fetchTasksFromCloud() {
                         prioridad: dbPriority,
                         estado: t.status || 'pendiente',
                         asignado_nombre: t.assignee || 'Sin asignar'
-                    }]).then(() => {});
+                    }]).then(({ error: insertErr }) => {
+                        if (insertErr) console.warn("Notice: Task cloud sync:", insertErr.message || insertErr);
+                    });
                 }
             });
         }
