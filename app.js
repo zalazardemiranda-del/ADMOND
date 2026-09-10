@@ -142,21 +142,30 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     ];
 
+    appState.deletedTaskIds = JSON.parse(localStorage.getItem('rp_deleted_task_ids')) || [];
     let storedTasks = JSON.parse(localStorage.getItem('rp_tasks')) || [];
-    storedTasks = storedTasks.filter(t => t && t.id !== 'task-1' && t.id !== 'task-2');
+    
+    const isTaskDeleted = (task) => {
+        if (!task || !task.title) return true;
+        const sig = `${(task.title || '').trim().toLowerCase()}____${(task.desc || '').trim().toLowerCase()}`;
+        return (appState.deletedTaskIds || []).some(d => d === task.id || (sig && d === sig));
+    };
+
+    storedTasks = storedTasks.filter(t => t && t.id !== 'task-1' && t.id !== 'task-2' && !isTaskDeleted(t));
 
     // Fusionar tareas predeterminadas con tareas locales basándose en ID o firma (título + descripción)
     const tasksMap = new Map();
     defaultUserTasks.forEach(dt => {
+        if (isTaskDeleted(dt)) return;
         const sig = `${(dt.title || '').trim().toLowerCase()}____${(dt.desc || '').trim().toLowerCase()}`;
         tasksMap.set(dt.id, dt);
-        tasksMap.set(sig, dt);
+        if (sig) tasksMap.set(sig, dt);
     });
     storedTasks.forEach(st => {
-        if (!st || !st.title) return;
+        if (!st || !st.title || isTaskDeleted(st)) return;
         const sig = `${(st.title || '').trim().toLowerCase()}____${(st.desc || '').trim().toLowerCase()}`;
         tasksMap.set(st.id, st);
-        tasksMap.set(sig, st);
+        if (sig) tasksMap.set(sig, st);
     });
 
     // Reconstruir array deduplicado
@@ -164,11 +173,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const seenIds = new Set();
     const seenSigs = new Set();
     Array.from(tasksMap.values()).forEach(t => {
-        if (!t || !t.title) return;
+        if (!t || !t.title || isTaskDeleted(t)) return;
         const sig = `${(t.title || '').trim().toLowerCase()}____${(t.desc || '').trim().toLowerCase()}`;
-        if (!seenIds.has(t.id) && !seenSigs.has(sig)) {
+        if (!seenIds.has(t.id) && (!sig || !seenSigs.has(sig))) {
             seenIds.add(t.id);
-            seenSigs.add(sig);
+            if (sig) seenSigs.add(sig);
             initialTasksList.push(t);
         }
     });
@@ -1266,8 +1275,9 @@ window.handleCreateTask = function(event) {
 window.toggleTaskComplete = function(taskId) {
     const taskIndex = appState.tasks.findIndex(t => t.id === taskId);
     if (taskIndex !== -1) {
-        const currentStatus = appState.tasks[taskIndex].status;
-        const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+        const currentStatus = (appState.tasks[taskIndex].status || '').toLowerCase();
+        const isCurrentlyCompleted = currentStatus === 'completed' || currentStatus === 'completada';
+        const newStatus = isCurrentlyCompleted ? 'pending' : 'completed';
         appState.tasks[taskIndex].status = newStatus;
         saveToStorage();
         renderTasks();
@@ -1276,7 +1286,8 @@ window.toggleTaskComplete = function(taskId) {
         // Cloud Sync
         if (window.isSupabaseActive()) {
             const client = window.SUPABASE_CONFIG.client;
-            client.from('tasks').update({ estado: newStatus }).eq('id', taskId).then(({ error }) => {
+            const dbStatus = newStatus === 'completed' ? 'completada' : 'pendiente';
+            client.from('tasks').update({ estado: dbStatus }).eq('id', taskId).then(({ error }) => {
                 if (error) console.warn("Error updating task status on Supabase:", error);
             });
 
@@ -1292,6 +1303,18 @@ window.toggleTaskComplete = function(taskId) {
 };
 
 window.deleteTask = function(taskId) {
+    if (!appState.deletedTaskIds) appState.deletedTaskIds = JSON.parse(localStorage.getItem('rp_deleted_task_ids')) || [];
+    
+    const targetTask = appState.tasks.find(t => t.id === taskId);
+    if (targetTask) {
+        const sig = `${(targetTask.title || '').trim().toLowerCase()}____${(targetTask.desc || '').trim().toLowerCase()}`;
+        if (!appState.deletedTaskIds.includes(taskId)) appState.deletedTaskIds.push(taskId);
+        if (sig && !appState.deletedTaskIds.includes(sig)) appState.deletedTaskIds.push(sig);
+    } else {
+        if (!appState.deletedTaskIds.includes(taskId)) appState.deletedTaskIds.push(taskId);
+    }
+
+    localStorage.setItem('rp_deleted_task_ids', JSON.stringify(appState.deletedTaskIds));
     appState.tasks = appState.tasks.filter(t => t.id !== taskId);
     saveToStorage();
     renderTasks();
@@ -1310,6 +1333,76 @@ window.deleteTask = function(taskId) {
                 event: 'task_event',
                 payload: { action: 'deleted', id: taskId }
             }).catch(e => console.warn("Broadcast task warning:", e));
+        }
+    }
+};
+
+window.openEditTaskModal = function(taskId) {
+    const task = appState.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const modal = document.getElementById("edit-task-modal");
+    const idInput = document.getElementById("edit-task-id");
+    const titleInput = document.getElementById("edit-task-title");
+    const descInput = document.getElementById("edit-task-desc");
+    const assigneeInput = document.getElementById("edit-task-assignee");
+    const priorityInput = document.getElementById("edit-task-priority");
+
+    if (idInput) idInput.value = task.id;
+    if (titleInput) titleInput.value = task.title || "";
+    if (descInput) descInput.value = task.desc || "";
+    if (assigneeInput) assigneeInput.value = task.assignee || "Sin asignar";
+    if (priorityInput) priorityInput.value = task.priority || "alta";
+
+    if (modal) modal.style.display = "flex";
+};
+
+window.closeEditTaskModal = function() {
+    const modal = document.getElementById("edit-task-modal");
+    if (modal) modal.style.display = "none";
+};
+
+window.handleSaveTaskEdit = function(event) {
+    event.preventDefault();
+    const taskId = document.getElementById("edit-task-id").value;
+    const title = document.getElementById("edit-task-title").value.trim();
+    const desc = document.getElementById("edit-task-desc").value.trim();
+    const assignee = document.getElementById("edit-task-assignee").value.trim();
+    const priority = document.getElementById("edit-task-priority").value || 'alta';
+
+    if (!title || !taskId) return;
+
+    const taskIndex = appState.tasks.findIndex(t => t.id === taskId);
+    if (taskIndex !== -1) {
+        appState.tasks[taskIndex].title = title;
+        appState.tasks[taskIndex].desc = desc;
+        appState.tasks[taskIndex].assignee = assignee || 'Sin asignar';
+        appState.tasks[taskIndex].priority = priority.toLowerCase();
+        
+        saveToStorage();
+        closeEditTaskModal();
+        renderTasks();
+        updateGlobalStats();
+
+        if (window.isSupabaseActive()) {
+            const client = window.SUPABASE_CONFIG.client;
+            const dbPriority = priority.charAt(0).toUpperCase() + priority.slice(1).toLowerCase();
+            client.from('tasks').update({
+                titulo: title,
+                descripcion: desc,
+                prioridad: dbPriority,
+                asignado_nombre: assignee || 'Sin asignar'
+            }).eq('id', taskId).then(({ error }) => {
+                if (error) console.warn("Error updating task on Supabase:", error);
+            });
+
+            if (window.chatRealtimeChannel) {
+                window.chatRealtimeChannel.send({
+                    type: 'broadcast',
+                    event: 'task_event',
+                    payload: { action: 'updated', id: taskId, task: appState.tasks[taskIndex] }
+                }).catch(e => console.warn("Broadcast task warning:", e));
+            }
         }
     }
 };
@@ -1354,15 +1447,25 @@ function renderTasks() {
     if (!gridList) return;
     gridList.innerHTML = "";
     
-    let filteredTasks = [...appState.tasks];
-    
-    if (appState.currentFilter === 'alta' || appState.currentFilter === 'media' || appState.currentFilter === 'baja') {
-        filteredTasks = filteredTasks.filter(t => t.priority === appState.currentFilter);
-    } else if (appState.currentFilter === 'pending') {
-        filteredTasks = filteredTasks.filter(t => t.status === 'pending');
-    } else if (appState.currentFilter === 'completed') {
-        filteredTasks = filteredTasks.filter(t => t.status === 'completed');
-    }
+    // Filtrar tareas según el filtro activo y asegurar que las completadas SOLO se muestren en "completed"
+    let filteredTasks = (appState.tasks || []).filter(t => {
+        if (!t || !t.title) return false;
+        const st = (t.status || '').toLowerCase();
+        const isCompleted = st === 'completed' || st === 'completada';
+        t.status = isCompleted ? 'completed' : 'pending';
+
+        if (appState.currentFilter === 'completed') {
+            return isCompleted;
+        } else {
+            // "Todas", "Alta", "Media", "Baja", "Pendientes": Ocultan tareas completadas
+            if (isCompleted) return false;
+            
+            if (appState.currentFilter === 'alta' || appState.currentFilter === 'media' || appState.currentFilter === 'baja') {
+                return t.priority === appState.currentFilter;
+            }
+            return true;
+        }
+    });
     
     if (filteredTasks.length === 0) {
         const isColaborador = appState.currentRole !== 'gerente';
@@ -1396,6 +1499,12 @@ function renderTasks() {
                </button>` 
             : '';
             
+        const editButton = (appState.currentRole === 'gerente' || appState.currentRole === 'administrador')
+            ? `<button class="btn-edit-task" onclick="openEditTaskModal('${task.id}')" title="Editar tarea">
+                 <span class="material-symbols-outlined">edit</span>
+               </button>`
+            : '';
+
         const actionButton = `<button class="btn-complete-task" onclick="toggleTaskComplete('${task.id}')">
             <span class="material-symbols-outlined">${isCompleted ? 'check_circle' : 'circle'}</span>
             ${isCompleted ? 'Completada' : 'Marcar Completada'}
@@ -1408,6 +1517,7 @@ function renderTasks() {
         taskCard.innerHTML = `
             <div class="task-card-header">
                 <h4>${task.title}</h4>
+                ${editButton}
                 <span class="priority-badge ${task.priority}">${task.priority}</span>
             </div>
             <p class="task-desc-p">${task.desc}</p>
@@ -1939,9 +2049,17 @@ function renderMeetings() {
 // 10. GLOBAL STATS UPDATER
 // ---------------------------------------------------------------------------------
 function updateGlobalStats() {
-    const pending = appState.tasks.filter(t => t.status === 'pending').length;
-    const completed = appState.tasks.filter(t => t.status === 'completed').length;
-    const total = appState.tasks.length;
+    const pending = (appState.tasks || []).filter(t => {
+        const st = (t.status || '').toLowerCase();
+        return st === 'pending' || st === 'pendiente';
+    }).length;
+
+    const completed = (appState.tasks || []).filter(t => {
+        const st = (t.status || '').toLowerCase();
+        return st === 'completed' || st === 'completada';
+    }).length;
+
+    const total = pending + completed;
     
     const pendingEl = document.getElementById("stats-pending");
     const completedEl = document.getElementById("stats-completed");
@@ -3184,6 +3302,7 @@ async function fetchCloudData() {
 async function fetchTasksFromCloud() {
     if (!window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG.client;
+    if (!appState.deletedTaskIds) appState.deletedTaskIds = JSON.parse(localStorage.getItem('rp_deleted_task_ids')) || [];
     
     try {
         const { data: dbTasks, error } = await client.from('tasks').select('*').order('created_at', { ascending: false });
@@ -3195,16 +3314,27 @@ async function fetchTasksFromCloud() {
             else if (rawP.includes('med')) normP = 'media';
             else if (rawP.includes('baj')) normP = 'baja';
 
+            const rawState = (t.estado || '').toString().trim().toLowerCase();
+            let normStatus = 'pending';
+            if (rawState === 'completada' || rawState === 'completed') normStatus = 'completed';
+
             return {
                 id: t.id,
                 title: t.titulo,
                 desc: t.descripcion,
                 priority: normP,
-                status: t.estado || 'pending',
+                status: normStatus,
                 assignee: t.asignado_nombre || 'Sin asignar',
                 createdAt: t.created_at,
                 uploadedToCloud: true
             };
+        });
+
+        // Filtrar tareas que hayan sido eliminadas
+        const filteredCloudTasks = cloudTasks.filter(ct => {
+            if (!ct || !ct.title) return false;
+            const sig = `${(ct.title || '').trim().toLowerCase()}____${(ct.desc || '').trim().toLowerCase()}`;
+            return !appState.deletedTaskIds.includes(ct.id) && !appState.deletedTaskIds.includes(sig);
         });
 
         // Mapa combinado para fusionar tareas locales y remotas
@@ -3216,13 +3346,18 @@ async function fetchTasksFromCloud() {
             const cleanTitle = (lt.title || '').trim().toLowerCase();
             const cleanDesc = (lt.desc || '').trim().toLowerCase();
             const sig = `${cleanTitle}____${cleanDesc}`;
+            if (appState.deletedTaskIds.includes(lt.id) || appState.deletedTaskIds.includes(sig)) return;
+
+            // Normalizar estado por seguridad
+            if (lt.status === 'completada') lt.status = 'completed';
+            if (lt.status === 'pendiente') lt.status = 'pending';
+
             mergedMap.set(lt.id, lt);
             mergedMap.set(sig, lt);
         });
 
         // 2. Fusionar tareas provenientes de Supabase
-        cloudTasks.forEach(ct => {
-            if (!ct || !ct.title) return;
+        filteredCloudTasks.forEach(ct => {
             const cleanTitle = (ct.title || '').trim().toLowerCase();
             const cleanDesc = (ct.desc || '').trim().toLowerCase();
             const sig = `${cleanTitle}____${cleanDesc}`;
@@ -3247,6 +3382,7 @@ async function fetchTasksFromCloud() {
             const cleanTitle = (t.title || '').trim().toLowerCase();
             const cleanDesc = (t.desc || '').trim().toLowerCase();
             const sig = `${cleanTitle}____${cleanDesc}`;
+            if (appState.deletedTaskIds.includes(t.id) || appState.deletedTaskIds.includes(sig)) return;
 
             if (!seenIds.has(t.id) && !seenSignatures.has(sig)) {
                 seenIds.add(t.id);
@@ -3265,14 +3401,18 @@ async function fetchTasksFromCloud() {
             const cloudTitleSet = new Set((dbTasks || []).map(t => (t.titulo || '').trim().toLowerCase()));
             appState.tasks.forEach(t => {
                 const normT = (t.title || '').trim().toLowerCase();
+                const sig = `${normT}____${(t.desc || '').trim().toLowerCase()}`;
+                if (appState.deletedTaskIds.includes(t.id) || appState.deletedTaskIds.includes(sig)) return;
+
                 if (!cloudTitleSet.has(normT) && !t.uploadedToCloud) {
                     t.uploadedToCloud = true;
                     const dbPriority = (t.priority || 'alta').charAt(0).toUpperCase() + (t.priority || 'alta').slice(1).toLowerCase();
+                    const dbStatus = t.status === 'completed' ? 'completada' : 'pendiente';
                     client.from('tasks').insert([{
                         titulo: t.title,
                         descripcion: t.desc,
                         prioridad: dbPriority,
-                        estado: t.status || 'pendiente',
+                        estado: dbStatus,
                         asignado_nombre: t.assignee || 'Sin asignar'
                     }]).then(({ error: insertErr }) => {
                         if (insertErr) console.warn("Notice: Task cloud sync:", insertErr.message || insertErr);

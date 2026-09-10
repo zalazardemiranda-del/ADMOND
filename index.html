@@ -1151,6 +1151,57 @@
     </div>
 
     <!-- ========================================== -->
+    <!-- MODAL: EDITAR TAREA (PÉNCIL ICON TOOL)    -->
+    <!-- ========================================== -->
+    <div id="edit-task-modal" class="custom-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 99999; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px);">
+        <div style="max-width: 480px; width: 90%; background: #FFFFFF; border-radius: 20px; padding: 28px 24px; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2); border: 1px solid #E2E8F0; position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="material-symbols-outlined" style="font-size: 22px; color: #2563EB; background: rgba(37, 99, 235, 0.1); padding: 6px; border-radius: 8px;">edit</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Editar Tarea</h3>
+                        <span style="font-size: 11px; color: #64748B;">Modifica las instrucciones y la asignación</span>
+                    </div>
+                </div>
+                <button type="button" onclick="closeEditTaskModal()" style="background: none; border: none; font-size: 18px; color: #64748B; cursor: pointer; padding: 4px;" title="Cerrar">✕</button>
+            </div>
+
+            <form id="edit-task-form" onsubmit="handleSaveTaskEdit(event)">
+                <input type="hidden" id="edit-task-id">
+
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px; display: block;">Título de la Tarea:</label>
+                    <input type="text" id="edit-task-title" required placeholder="Ej: Revisar cubicación..." style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; color: #0F172A;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px; display: block;">Descripción / Instrucciones:</label>
+                    <textarea id="edit-task-desc" rows="3" placeholder="Detalles de la tarea..." style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; color: #0F172A; resize: vertical;"></textarea>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px; display: block;">Asignar a (Responsable):</label>
+                    <input type="text" id="edit-task-assignee" placeholder="Nombre del colaborador..." style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; color: #0F172A;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px; display: block;">Prioridad:</label>
+                    <select id="edit-task-priority" style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; color: #0F172A;">
+                        <option value="alta">Alta</option>
+                        <option value="media">Media</option>
+                        <option value="baja">Baja</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" onclick="closeEditTaskModal()" class="btn" style="background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" style="padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
     <!-- MODAL: RESTABLECIMIENTO E INTERACTIVO     -->
     <!-- ========================================== -->
     <!-- ========================================== -->
