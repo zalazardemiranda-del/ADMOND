@@ -51,6 +51,13 @@
             <nav class="sidebar-nav">
                 <ul>
                     <li>
+                        <a href="#" class="nav-item" id="nav-emails" onclick="switchTab('emails')">
+                            <span class="material-symbols-outlined">mark_email_unread</span>
+                            <span>Centro de Correos</span>
+                            <span class="chat-badge email-badge" id="unread-email-count" style="display: none; background: #EF4444;">0</span>
+                        </a>
+                    </li>
+                    <li>
                         <a href="#" class="nav-item active" id="nav-tasks" onclick="switchTab('tasks')">
                             <span class="material-symbols-outlined">assignment</span>
                             <span>Tablero de Tareas</span>
@@ -164,6 +171,225 @@
             <!-- Dynamic Tab Content Views -->
             <div class="content-body">
                 
+                <!-- TAB 0: CENTRO DE CORREOS (WEBMAIL INTERNO RODIPACK) -->
+                <section id="tab-emails" class="tab-pane">
+                    <div class="email-layout card">
+                        <!-- Columna 1: Carpetas y Categorías -->
+                        <aside class="email-sidebar-pane">
+                            <button type="button" class="btn-email-compose" onclick="openComposeModal()">
+                                <span class="material-symbols-outlined">edit_square</span>
+                                <span>Redactar Correo</span>
+                            </button>
+
+                            <div class="email-folder-group">
+                                <span class="email-group-title">BANDEJAS</span>
+                                <ul class="email-folder-list">
+                                    <li class="email-folder-item active" id="folder-inbox" onclick="selectEmailFolder('inbox')">
+                                        <span class="material-symbols-outlined">inbox</span>
+                                        <span class="folder-name">Bandeja de Entrada</span>
+                                        <span class="folder-badge" id="badge-folder-inbox" style="display: none;">0</span>
+                                    </li>
+                                    <li class="email-folder-item" id="folder-starred" onclick="selectEmailFolder('starred')">
+                                        <span class="material-symbols-outlined">star</span>
+                                        <span class="folder-name">Destacados</span>
+                                        <span class="folder-badge" id="badge-folder-starred" style="display: none;">0</span>
+                                    </li>
+                                    <li class="email-folder-item" id="folder-sent" onclick="selectEmailFolder('sent')">
+                                        <span class="material-symbols-outlined">send</span>
+                                        <span class="folder-name">Enviados</span>
+                                        <span class="folder-badge" id="badge-folder-sent" style="display: none;">0</span>
+                                    </li>
+                                    <li class="email-folder-item" id="folder-drafts" onclick="selectEmailFolder('drafts')">
+                                        <span class="material-symbols-outlined">draft</span>
+                                        <span class="folder-name">Borradores</span>
+                                        <span class="folder-badge" id="badge-folder-drafts" style="display: none;">0</span>
+                                    </li>
+                                    <li class="email-folder-item" id="folder-notifications" onclick="selectEmailFolder('notifications')">
+                                        <span class="material-symbols-outlined">notifications</span>
+                                        <span class="folder-name">Notificaciones</span>
+                                        <span class="folder-badge" id="badge-folder-notifications" style="display: none;">0</span>
+                                    </li>
+                                    <li class="email-folder-item" id="folder-trash" onclick="selectEmailFolder('trash')">
+                                        <span class="material-symbols-outlined">delete</span>
+                                        <span class="folder-name">Papelera</span>
+                                        <span class="folder-badge" id="badge-folder-trash" style="display: none;">0</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div class="email-folder-group">
+                                <span class="email-group-title">DEPARTAMENTOS</span>
+                                <div class="email-tags-list">
+                                    <button type="button" class="email-tag-chip active" id="tag-all" onclick="filterEmailByCategory('all')">
+                                        <span class="tag-dot" style="background: #64748B;"></span> Todos
+                                    </button>
+                                    <button type="button" class="email-tag-chip" id="tag-operaciones" onclick="filterEmailByCategory('Operaciones')">
+                                        <span class="tag-dot" style="background: #2563EB;"></span> Operaciones
+                                    </button>
+                                    <button type="button" class="email-tag-chip" id="tag-facturacion" onclick="filterEmailByCategory('Facturación')">
+                                        <span class="tag-dot" style="background: #10B981;"></span> Facturación
+                                    </button>
+                                    <button type="button" class="email-tag-chip" id="tag-gerencia" onclick="filterEmailByCategory('Gerencia')">
+                                        <span class="tag-dot" style="background: #8B5CF6;"></span> Gerencia
+                                    </button>
+                                    <button type="button" class="email-tag-chip" id="tag-soporte" onclick="filterEmailByCategory('Soporte')">
+                                        <span class="tag-dot" style="background: #F59E0B;"></span> Soporte
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Estado del buzón corporativo -->
+                            <div class="email-account-status">
+                                <div class="status-indicator-dot online"></div>
+                                <div class="status-account-info">
+                                    <span class="account-title">Buzón Interno Rodipack</span>
+                                    <span class="account-email" id="email-account-address">roberto@rodipack.online</span>
+                                </div>
+                            </div>
+                        </aside>
+
+                        <!-- Columna 2: Lista de Mensajes -->
+                        <section class="email-list-pane">
+                            <div class="email-list-header">
+                                <div class="email-search-bar">
+                                    <span class="material-symbols-outlined search-icon">search</span>
+                                    <input type="text" id="email-search-input" placeholder="Buscar por asunto, persona o mensaje..." oninput="handleEmailSearch(event)">
+                                    <button type="button" id="email-search-clear" onclick="clearEmailSearch()" style="display: none;" title="Limpiar búsqueda">✕</button>
+                                </div>
+                                
+                                <div class="email-quick-filter-chips">
+                                    <button type="button" class="filter-chip active" id="chip-filter-all" onclick="setEmailQuickFilter('all')">Todos</button>
+                                    <button type="button" class="filter-chip" id="chip-filter-unread" onclick="setEmailQuickFilter('unread')">No leídos</button>
+                                    <button type="button" class="filter-chip" id="chip-filter-starred" onclick="setEmailQuickFilter('starred')">Destacados</button>
+                                    <button type="button" class="filter-chip" id="chip-filter-attachments" onclick="setEmailQuickFilter('attachments')">Con adjuntos</button>
+                                </div>
+
+                                <div class="email-actions-toolbar">
+                                    <label class="select-all-checkbox-container" title="Seleccionar todos">
+                                        <input type="checkbox" id="email-select-all" onchange="toggleSelectAllEmails(this.checked)">
+                                        <span class="checkmark"></span>
+                                    </label>
+                                    <div class="toolbar-btn-group">
+                                        <button type="button" class="toolbar-btn" onclick="batchMarkEmailsRead(true)" title="Marcar como leídos">
+                                            <span class="material-symbols-outlined">drafts</span>
+                                        </button>
+                                        <button type="button" class="toolbar-btn" onclick="batchMarkEmailsRead(false)" title="Marcar como no leídos">
+                                            <span class="material-symbols-outlined">mark_email_unread</span>
+                                        </button>
+                                        <button type="button" class="toolbar-btn text-danger" onclick="batchDeleteEmails()" title="Mover a papelera">
+                                            <span class="material-symbols-outlined">delete</span>
+                                        </button>
+                                        <button type="button" class="toolbar-btn" onclick="refreshEmails()" title="Actualizar buzón">
+                                            <span class="material-symbols-outlined">refresh</span>
+                                        </button>
+                                    </div>
+                                    <span class="email-counter-display" id="email-counter-display">0 correos</span>
+                                </div>
+                            </div>
+
+                            <div class="email-list-content" id="email-list-content">
+                                <!-- Correos renderizados dinámicamente -->
+                            </div>
+                        </section>
+
+                        <!-- Columna 3: Visor de Lectura Detallado -->
+                        <section class="email-reading-pane" id="email-reading-pane">
+                            <!-- Estado Vacío -->
+                            <div class="email-reader-empty" id="email-reader-empty">
+                                <div class="empty-icon-wrap">
+                                    <span class="material-symbols-outlined">mark_email_read</span>
+                                </div>
+                                <h3>Selecciona un correo para leerlo</h3>
+                                <p>Explora tu correspondencia interna corporativa o redacta un nuevo mensaje para tu equipo.</p>
+                                <button type="button" class="btn-primary-action" onclick="openComposeModal()" style="margin-top: 14px; padding: 10px 18px; font-size: 13px;">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Redactar Nuevo Mensaje
+                                </button>
+                            </div>
+
+                            <!-- Contenido del Correo Abierto -->
+                            <div class="email-reader-view" id="email-reader-view" style="display: none;">
+                                <div class="email-reader-header">
+                                    <div class="reader-subject-row">
+                                        <h2 id="reader-subject">Asunto del Correo</h2>
+                                        <div class="reader-badges">
+                                            <span class="badge" id="reader-category-badge">General</span>
+                                            <span class="badge" id="reader-priority-badge" style="display: none;">Alta</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="reader-actions-bar">
+                                        <button type="button" class="reader-action-btn" onclick="handleReplyCurrentEmail()" title="Responder">
+                                            <span class="material-symbols-outlined">reply</span> <span>Responder</span>
+                                        </button>
+                                        <button type="button" class="reader-action-btn" onclick="handleForwardCurrentEmail()" title="Reenviar">
+                                            <span class="material-symbols-outlined">forward</span> <span>Reenviar</span>
+                                        </button>
+                                        <button type="button" class="reader-action-btn" id="reader-star-btn" onclick="toggleCurrentEmailStar()" title="Destacar">
+                                            <span class="material-symbols-outlined">star_border</span>
+                                        </button>
+                                        <button type="button" class="reader-action-btn" onclick="toggleCurrentEmailUnread()" title="Marcar como no leído">
+                                            <span class="material-symbols-outlined">mark_email_unread</span>
+                                        </button>
+                                        <button type="button" class="reader-action-btn text-danger" onclick="deleteCurrentEmail()" title="Eliminar">
+                                            <span class="material-symbols-outlined">delete</span>
+                                        </button>
+                                        <button type="button" class="reader-action-btn" onclick="printCurrentEmail()" title="Imprimir correo">
+                                            <span class="material-symbols-outlined">print</span>
+                                        </button>
+                                    </div>
+
+                                    <div class="reader-meta-box">
+                                        <div class="reader-sender-avatar" id="reader-sender-avatar">G</div>
+                                        <div class="reader-sender-details">
+                                            <div class="sender-name-row">
+                                                <strong id="reader-sender-name">Remitente</strong>
+                                                <span class="sender-email-tag" id="reader-sender-email">&lt;remitente@rodipack.online&gt;</span>
+                                            </div>
+                                            <div class="recipient-row">
+                                                <span>Para: <strong id="reader-recipient-name">Destinatario</strong> <span id="reader-recipient-email">&lt;destinatario@rodipack.online&gt;</span></span>
+                                                <span id="reader-cc-wrapper" style="display: none; margin-left: 8px;">| CC: <span id="reader-cc-emails"></span></span>
+                                            </div>
+                                        </div>
+                                        <div class="reader-date-time" id="reader-date-time">11 Sep 2026, 14:30</div>
+                                    </div>
+                                </div>
+
+                                <div class="email-reader-body" id="reader-body">
+                                    <!-- Contenido del correo -->
+                                </div>
+
+                                <!-- Adjuntos -->
+                                <div class="email-reader-attachments" id="reader-attachments-section" style="display: none;">
+                                    <div class="attachments-header">
+                                        <span class="material-symbols-outlined">attach_file</span>
+                                        <span id="reader-attachments-count">Archivos Adjuntos (0)</span>
+                                    </div>
+                                    <div class="attachments-grid" id="reader-attachments-grid">
+                                        <!-- Tarjetas de adjunto -->
+                                    </div>
+                                </div>
+
+                                <!-- Respuesta Rápida Integrada -->
+                                <div class="email-quick-reply-box">
+                                    <div class="quick-reply-header">
+                                        <span class="material-symbols-outlined">quickreply</span>
+                                        <span>Respuesta rápida a <strong id="quick-reply-target-name">remitente</strong>:</span>
+                                    </div>
+                                    <textarea id="quick-reply-input" placeholder="Escribe tu respuesta aquí..." rows="2"></textarea>
+                                    <div class="quick-reply-actions">
+                                        <button type="button" class="btn-secondary" onclick="openFullReplyModal()" style="font-size: 12px; padding: 6px 12px; cursor: pointer; border-radius: 8px; border: 1px solid #CBD5E1; background: #FFFFFF; display: inline-flex; align-items: center; gap: 4px;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px;">open_in_full</span> Modo Completo
+                                        </button>
+                                        <button type="button" class="btn-primary-action" onclick="sendQuickReply()" style="font-size: 12px; padding: 6px 14px; cursor: pointer; border-radius: 8px; border: none; background: #2563EB; color: #FFFFFF; display: inline-flex; align-items: center; gap: 4px;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px;">send</span> Enviar Respuesta
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </section>
+
                 <!-- TAB 1: TAREAS -->
                 <section id="tab-tasks" class="tab-pane active">
                     <div class="tasks-layout">
@@ -1305,6 +1531,140 @@
                 </form>
             </div>
 
+    <!-- ========================================== -->
+    <!-- MODAL: REDACTAR CORREO ELECTRÓNICO INTERNO -->
+    <!-- ========================================== -->
+    <div id="modal-compose-email" class="custom-modal-overlay compose-modal-overlay" style="display: none;">
+        <div class="compose-modal-card">
+            <div class="compose-modal-header">
+                <div class="compose-title-group">
+                    <span class="material-symbols-outlined compose-header-icon">outgoing_mail</span>
+                    <h3 id="compose-modal-title">Redactar Correo Interno</h3>
+                </div>
+                <div class="compose-header-buttons">
+                    <button type="button" class="compose-btn-icon" onclick="toggleComposeMinimize()" title="Minimizar">
+                        <span class="material-symbols-outlined">minimize</span>
+                    </button>
+                    <button type="button" class="compose-btn-icon" onclick="closeComposeModal()" title="Cerrar">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+            </div>
+
+            <form id="compose-email-form" onsubmit="handleSendComposeEmail(event)">
+                <input type="hidden" id="compose-draft-id" value="">
+                <input type="hidden" id="compose-reply-to-id" value="">
+
+                <!-- Fila Destinatario "Para" con Autocomplete -->
+                <div class="compose-field-row" style="position: relative;">
+                    <label for="compose-to-input">Para:</label>
+                    <div class="compose-input-wrapper">
+                        <input type="text" id="compose-to-input" placeholder="Nombre o correo del colaborador..." autocomplete="off" required oninput="handleComposeRecipientSearch(event)" onfocus="handleComposeRecipientSearch(event)">
+                        <button type="button" class="btn-text-action" onclick="toggleComposeCcRow()" id="btn-toggle-cc">CC</button>
+                    </div>
+                    <!-- Dropdown de colaboradores sugeridos -->
+                    <div class="compose-recipient-dropdown" id="compose-recipient-dropdown" style="display: none;">
+                        <!-- Opciones dinámicas -->
+                    </div>
+                </div>
+
+                <!-- Fila Opcional "CC" -->
+                <div class="compose-field-row" id="compose-cc-row" style="display: none;">
+                    <label for="compose-cc-input">CC:</label>
+                    <div class="compose-input-wrapper">
+                        <input type="text" id="compose-cc-input" placeholder="Con copia a (separar con comas)..." autocomplete="off">
+                    </div>
+                </div>
+
+                <!-- Fila Asunto -->
+                <div class="compose-field-row">
+                    <label for="compose-subject-input">Asunto:</label>
+                    <div class="compose-input-wrapper">
+                        <input type="text" id="compose-subject-input" placeholder="Escribe el asunto del correo..." required>
+                    </div>
+                </div>
+
+                <!-- Opciones Rápidas: Categoría y Prioridad -->
+                <div class="compose-meta-options">
+                    <div class="compose-select-group">
+                        <span class="material-symbols-outlined">label</span>
+                        <select id="compose-category-select">
+                            <option value="General">General</option>
+                            <option value="Operaciones">Operaciones</option>
+                            <option value="Facturación">Facturación</option>
+                            <option value="Gerencia">Gerencia</option>
+                            <option value="Soporte">Soporte</option>
+                        </select>
+                    </div>
+
+                    <div class="compose-select-group">
+                        <span class="material-symbols-outlined">flag</span>
+                        <select id="compose-priority-select">
+                            <option value="Normal">Prioridad Normal</option>
+                            <option value="Alta">Prioridad Alta</option>
+                            <option value="Urgente">Prioridad Urgente</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Barra de Herramientas de Formato -->
+                <div class="compose-formatting-bar">
+                    <button type="button" class="format-btn" onclick="applyComposeFormat('bold')" title="Negrita">
+                        <span class="material-symbols-outlined">format_bold</span>
+                    </button>
+                    <button type="button" class="format-btn" onclick="applyComposeFormat('italic')" title="Cursiva">
+                        <span class="material-symbols-outlined">format_italic</span>
+                    </button>
+                    <button type="button" class="format-btn" onclick="applyComposeFormat('underline')" title="Subrayado">
+                        <span class="material-symbols-outlined">format_underlined</span>
+                    </button>
+                    <span class="format-separator"></span>
+                    <button type="button" class="format-btn" onclick="applyComposeFormat('insertUnorderedList')" title="Lista con viñetas">
+                        <span class="material-symbols-outlined">format_list_bulleted</span>
+                    </button>
+                    <button type="button" class="format-btn" onclick="applyComposeFormat('insertOrderedList')" title="Lista numerada">
+                        <span class="material-symbols-outlined">format_list_numbered</span>
+                    </button>
+                    <span class="format-separator"></span>
+                    <button type="button" class="format-btn" onclick="triggerComposeFileUpload()" title="Adjuntar archivo">
+                        <span class="material-symbols-outlined">attach_file</span>
+                    </button>
+                    <input type="file" id="compose-file-input" multiple style="display: none;" onchange="handleComposeFilesSelected(event)">
+                </div>
+
+                <!-- Área de Contenido Editable -->
+                <div class="compose-body-container">
+                    <div id="compose-body-editor" class="compose-editor" contenteditable="true" placeholder="Escribe tu mensaje aquí..."></div>
+                </div>
+
+                <!-- Contenedor de Archivos Adjuntos Seleccionados -->
+                <div class="compose-attachments-tray" id="compose-attachments-tray" style="display: none;">
+                    <div class="attachments-tray-header">
+                        <span class="material-symbols-outlined">attachment</span>
+                        <span id="compose-attachments-summary">Archivos seleccionados</span>
+                    </div>
+                    <div class="compose-attachments-list" id="compose-attachments-list">
+                        <!-- Chips de archivos adjuntos -->
+                    </div>
+                </div>
+
+                <!-- Footer con Botones de Envío y Opciones -->
+                <div class="compose-modal-footer">
+                    <div class="compose-footer-left">
+                        <button type="submit" id="btn-send-email" class="btn-send-mail">
+                            <span class="material-symbols-outlined">send</span> Enviar Correo
+                        </button>
+                        <button type="button" class="btn-save-draft" onclick="handleSaveDraftEmail()">
+                            <span class="material-symbols-outlined">save</span> Guardar Borrador
+                        </button>
+                    </div>
+                    <div class="compose-footer-right">
+                        <button type="button" class="btn-discard" onclick="closeComposeModal()" title="Descartar mensaje">
+                            <span class="material-symbols-outlined">delete</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
         </div>
     </div>
 

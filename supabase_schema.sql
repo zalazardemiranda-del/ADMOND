@@ -267,7 +267,47 @@ TO authenticated
 USING (true);
 
 
--- 11. HABILITAR SUPABASE REALTIME EN TABLAS CLAVE
+-- 11. TABLA DE CORREOS INTERNOS (Emails)
+CREATE TABLE IF NOT EXISTS public.emails (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    emisor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    emisor_email TEXT NOT NULL,
+    emisor_nombre TEXT NOT NULL,
+    destinatario_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    destinatario_email TEXT NOT NULL,
+    destinatario_nombre TEXT NOT NULL,
+    cc_emails TEXT DEFAULT '',
+    asunto TEXT NOT NULL,
+    contenido TEXT NOT NULL,
+    categoria TEXT DEFAULT 'General',
+    prioridad TEXT DEFAULT 'Normal' CHECK (prioridad IN ('Normal', 'Alta', 'Urgente')),
+    carpeta TEXT NOT NULL DEFAULT 'inbox' CHECK (carpeta IN ('inbox', 'sent', 'drafts', 'trash', 'notifications')),
+    leido BOOLEAN DEFAULT FALSE,
+    destacado BOOLEAN DEFAULT FALSE,
+    archivos_adjuntos JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.emails ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Permitir ver correos" ON public.emails;
+DROP POLICY IF EXISTS "Permitir enviar correos" ON public.emails;
+DROP POLICY IF EXISTS "Permitir actualizar correos" ON public.emails;
+DROP POLICY IF EXISTS "Permitir eliminar correos" ON public.emails;
+
+CREATE POLICY "Permitir ver correos" ON public.emails FOR SELECT USING (true);
+CREATE POLICY "Permitir enviar correos" ON public.emails FOR INSERT WITH CHECK (true);
+CREATE POLICY "Permitir actualizar correos" ON public.emails FOR UPDATE USING (true);
+CREATE POLICY "Permitir eliminar correos" ON public.emails FOR DELETE USING (true);
+
+CREATE INDEX IF NOT EXISTS idx_emails_destinatario ON public.emails(destinatario_email);
+CREATE INDEX IF NOT EXISTS idx_emails_emisor ON public.emails(emisor_email);
+CREATE INDEX IF NOT EXISTS idx_emails_carpeta ON public.emails(carpeta);
+CREATE INDEX IF NOT EXISTS idx_emails_created_at ON public.emails(created_at DESC);
+
+
+-- 12. HABILITAR SUPABASE REALTIME EN TABLAS CLAVE
 DO $$
 BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
@@ -289,5 +329,11 @@ END $$;
 DO $$
 BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.consecutivo;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.emails;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
