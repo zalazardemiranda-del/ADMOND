@@ -413,6 +413,10 @@ window.setRole = function(role) {
     appState.currentRole = role || 'gerente';
     localStorage.setItem("rp_current_role", appState.currentRole);
 
+    const r = (appState.currentRole || '').toLowerCase();
+    const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
+    const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
+
     const sidebarAdminItem = document.getElementById("sidebar-item-administracion");
     const sidebarUsersItem = document.getElementById("sidebar-item-users");
     const newTaskCard = document.getElementById("new-task-card");
@@ -422,7 +426,7 @@ window.setRole = function(role) {
     const adminLockScreen = document.getElementById("administracion-lock-screen");
     const btnCreateGroup = document.querySelector("#tab-chat button[onclick*='openCreateGroupModal']");
     
-    if (appState.currentRole === 'gerente') {
+    if (isGerente) {
         if (newTaskCard) newTaskCard.style.display = "block";
         if (tasksControlPanel) tasksControlPanel.style.display = "flex";
         if (tasksLayout) tasksLayout.classList.remove("full-width-tasks");
@@ -431,8 +435,8 @@ window.setRole = function(role) {
         if (adminWorkspace) adminWorkspace.style.display = "block";
         if (adminLockScreen) adminLockScreen.style.display = "none";
         if (btnCreateGroup) btnCreateGroup.style.display = "inline-flex";
-    } else if (appState.currentRole === 'administrador') {
-        // Administrador: Acceso a Finanzas & Administración, sin asignación de tareas operativas ni creación de grupos
+    } else if (isAdmin) {
+        // Administrador / Administrativo: Acceso completo a Finanzas & Administración, sin asignación de tareas operativas ni usuarios
         if (newTaskCard) newTaskCard.style.display = "none";
         if (tasksControlPanel) tasksControlPanel.style.display = "none";
         if (tasksLayout) tasksLayout.classList.add("full-width-tasks");
@@ -441,6 +445,12 @@ window.setRole = function(role) {
         if (adminWorkspace) adminWorkspace.style.display = "block";
         if (adminLockScreen) adminLockScreen.style.display = "none";
         if (btnCreateGroup) btnCreateGroup.style.display = "none";
+        
+        // Si estaba en la pestaña de usuarios (solo gerentes), redirigir a administración
+        if (appState.currentTab === 'users') {
+            switchTab('administracion');
+            return;
+        }
     } else {
         // Colaborador de Operaciones
         if (newTaskCard) newTaskCard.style.display = "none";
@@ -449,7 +459,7 @@ window.setRole = function(role) {
         if (sidebarAdminItem) sidebarAdminItem.style.display = "none";
         if (sidebarUsersItem) sidebarUsersItem.style.display = "none";
         if (adminWorkspace) adminWorkspace.style.display = "none";
-        if (adminLockScreen) adminLockScreen.style.display = "none";
+        if (adminLockScreen) adminLockScreen.style.display = "block";
         if (btnCreateGroup) btnCreateGroup.style.display = "none";
         
         // Si estaba en administración o usuarios, redirigir a tareas
@@ -462,7 +472,7 @@ window.setRole = function(role) {
     // Ajustar encabezado y selector de colaborador según el rol
     const userFilterHeading = document.getElementById("user-filter-heading");
     const userFilterWrap = document.querySelector(".user-filter-select-wrap");
-    if (appState.currentRole === 'gerente') {
+    if (isGerente) {
         if (userFilterHeading) userFilterHeading.innerText = "Filtrar por Colaborador:";
         if (userFilterWrap) userFilterWrap.style.display = "block";
         if (typeof window.populateTaskUserFilterOptions === 'function') {
@@ -490,27 +500,33 @@ window.updateUserSessionUI = function() {
     
     if (appState.currentUser) {
         const u = appState.currentUser;
+        const r = (u.rol || '').toLowerCase();
+        const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
+        const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
+
         if (userNameEl) userNameEl.innerText = u.nombre || u.email;
         if (userRoleEl) {
-            if (u.rol === 'gerente') userRoleEl.innerText = 'Gerente / Director';
-            else if (u.rol === 'administrador') userRoleEl.innerText = 'Administrador (Finanzas)';
+            if (isGerente) userRoleEl.innerText = 'Gerente / Director';
+            else if (isAdmin) userRoleEl.innerText = 'Administrativo (Finanzas & Nómina)';
             else userRoleEl.innerText = `Colaborador (${u.departamento || 'Equipo'})`;
         }
         if (userAvatarEl) {
             const initial = (u.nombre || u.email || 'G').charAt(0).toUpperCase();
+            const avatarColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
             userAvatarEl.innerText = initial;
-            userAvatarEl.style.borderColor = u.rol === 'gerente' ? '#2563EB' : (u.rol === 'administrador' ? '#10B981' : '#64748B');
-            userAvatarEl.style.color = u.rol === 'gerente' ? '#2563EB' : (u.rol === 'administrador' ? '#10B981' : '#64748B');
+            userAvatarEl.style.borderColor = avatarColor;
+            userAvatarEl.style.color = avatarColor;
         }
         if (authNavIcon) authNavIcon.innerText = "logout";
         if (authNavLabel) authNavLabel.innerText = "Cerrar Sesión";
     } else {
         // Adaptar avatar y texto de sesión según el rol activo actual si no hay currentUser explícito
-        const isGerente = appState.currentRole === 'gerente';
-        const isAdmin = appState.currentRole === 'administrador';
+        const r = (appState.currentRole || '').toLowerCase();
+        const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
+        const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
         
-        const roleName = isGerente ? 'Gerente Principal' : (isAdmin ? 'Administrador' : 'Perfil Colaborador');
-        const roleLabel = isGerente ? 'Gerente / Director' : (isAdmin ? 'Administrador (Finanzas)' : 'Colaborador (Operaciones)');
+        const roleName = isGerente ? 'Gerente Principal' : (isAdmin ? 'Administrativo' : 'Perfil Colaborador');
+        const roleLabel = isGerente ? 'Gerente / Director' : (isAdmin ? 'Administrativo (Finanzas)' : 'Colaborador (Operaciones)');
         const avatarLetter = isGerente ? 'G' : (isAdmin ? 'A' : 'C');
         const avatarColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
 
@@ -545,8 +561,17 @@ window.switchTab = function(tabName) {
         tabName = 'tasks';
     }
 
-    // If not gerente, block access to administracion and users tabs
-    if ((tabName === 'administracion' || tabName === 'users') && appState.currentRole !== 'gerente') {
+    const r = (appState.currentRole || '').toLowerCase();
+    const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
+    const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
+
+    // Usuarios solo accesible por Gerente
+    if (tabName === 'users' && !isGerente) {
+        tabName = 'tasks';
+    }
+
+    // Administración accesible por Gerente y Administrativo/Administrador
+    if (tabName === 'administracion' && !isGerente && !isAdmin) {
         tabName = 'tasks';
     }
 
@@ -625,7 +650,10 @@ window.switchAdminFicha = function(fichaName) {
 };
 
 function renderAdministracion() {
-    if (appState.currentRole !== 'gerente') return;
+    const r = (appState.currentRole || '').toLowerCase();
+    const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
+    const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
+    if (!isGerente && !isAdmin) return;
     
     if (appState.currentAdminFicha === 'visualizacion') {
         renderVisualizacion();
