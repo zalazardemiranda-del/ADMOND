@@ -49,14 +49,27 @@ window.isLocalhostEnvironment = function() {
         return Boolean(
             host === 'localhost' ||
             host === '127.0.0.1' ||
+            host === '0.0.0.0' ||
             host === '[::1]' ||
             host.endsWith('.localhost') ||
+            host.startsWith('192.168.') ||
+            host.startsWith('10.') ||
+            host.startsWith('172.') ||
             proto === 'file:'
         );
     } catch (e) {
         return false;
     }
 };
+
+if (window.isLocalhostEnvironment()) {
+    if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.classList.add('is-localhost');
+    }
+    if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.add('is-localhost');
+    }
+}
 
 // App Global State
 let appState = {
@@ -103,6 +116,11 @@ let pieChartInstance = null;
 
 // Initialize Application
 document.addEventListener("DOMContentLoaded", async () => {
+    if (window.isLocalhostEnvironment()) {
+        if (document.documentElement) document.documentElement.classList.add('is-localhost');
+        if (document.body) document.body.classList.add('is-localhost');
+    }
+
     // Lista de tareas base creadas por el usuario para recuperación automática
     const defaultUserTasks = [
         {

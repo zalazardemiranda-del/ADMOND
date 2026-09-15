@@ -17,9 +17,11 @@
         (function() {
             var host = window.location.hostname;
             var proto = window.location.protocol;
-            var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host.endsWith('.localhost') || proto === 'file:';
+            var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '[::1]' || host.endsWith('.localhost') || host.startsWith('192.168.') || host.startsWith('10.') || host.startsWith('172.') || proto === 'file:';
             if (!isLocal) {
                 document.documentElement.classList.add('hide-emails-feature');
+            } else {
+                document.documentElement.classList.add('is-localhost');
             }
         })();
     </script>

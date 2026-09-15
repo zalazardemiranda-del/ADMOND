@@ -4912,12 +4912,16 @@ select.custom-excel-select option {
 }
 
 body.is-localhost .localhost-only-feature.admin-ficha-card,
-html.is-localhost .localhost-only-feature.admin-ficha-card {
+html.is-localhost .localhost-only-feature.admin-ficha-card,
+.is-localhost .localhost-only-feature.admin-ficha-card,
+.localhost-only-feature.admin-ficha-card.is-localhost {
     display: flex !important;
 }
 
 body.is-localhost .localhost-only-feature.admin-subpane.active,
-html.is-localhost .localhost-only-feature.admin-subpane.active {
+html.is-localhost .localhost-only-feature.admin-subpane.active,
+.is-localhost .localhost-only-feature.admin-subpane.active,
+.localhost-only-feature.admin-subpane.active.is-localhost {
     display: block !important;
 }
 
