@@ -1369,7 +1369,14 @@ window.handleCreateTask = function(event) {
 window.toggleTaskComplete = function(taskId) {
     const taskIndex = appState.tasks.findIndex(t => t.id === taskId);
     if (taskIndex !== -1) {
-        const currentStatus = (appState.tasks[taskIndex].status || '').toLowerCase();
+        const task = appState.tasks[taskIndex];
+        const activeUser = typeof getCurrentUserActive === 'function' ? getCurrentUserActive() : appState.currentUser;
+        if (!isTaskAssignedToUser(task, activeUser)) {
+            alert(`Solo el usuario asignado (${task.assignee || 'Sin asignar'}) puede marcar esta tarea como completada.`);
+            return;
+        }
+
+        const currentStatus = (task.status || '').toLowerCase();
         const isCurrentlyCompleted = currentStatus === 'completed' || currentStatus === 'completada';
         const newStatus = isCurrentlyCompleted ? 'pending' : 'completed';
         appState.tasks[taskIndex].status = newStatus;
@@ -1398,6 +1405,11 @@ window.toggleTaskComplete = function(taskId) {
 };
 
 window.deleteTask = function(taskId) {
+    if (typeof isManagerUser === 'function' && !isManagerUser()) {
+        alert("Solo los usuarios con rol de Manager tienen permiso para eliminar tareas.");
+        return;
+    }
+
     if (!appState.deletedTaskIds) appState.deletedTaskIds = JSON.parse(localStorage.getItem('rp_deleted_task_ids')) || [];
     
     const targetTask = appState.tasks.find(t => t.id === taskId);
@@ -1434,6 +1446,11 @@ window.deleteTask = function(taskId) {
 };
 
 window.openEditTaskModal = function(taskId) {
+    if (typeof isManagerUser === 'function' && !isManagerUser()) {
+        alert("Solo los usuarios con rol de Manager tienen permiso para editar tareas.");
+        return;
+    }
+
     const task = appState.tasks.find(t => t.id === taskId);
     if (!task) return;
 
@@ -1460,6 +1477,10 @@ window.closeEditTaskModal = function() {
 
 window.handleSaveTaskEdit = function(event) {
     event.preventDefault();
+    if (typeof isManagerUser === 'function' && !isManagerUser()) {
+        alert("Solo los usuarios con rol de Manager tienen permiso para editar tareas.");
+        return;
+    }
     const taskId = document.getElementById("edit-task-id").value;
     const title = document.getElementById("edit-task-title").value.trim();
     const desc = document.getElementById("edit-task-desc").value.trim();
@@ -1542,14 +1563,36 @@ window.updateTasksScrollNavState = function() {
 // ---------------------------------------------------------------------------------
 // PRIVACIDAD Y FILTRADO DE TAREAS POR COLABORADOR
 // ---------------------------------------------------------------------------------
+function getCurrentUserActive() {
+    if (appState.currentUser) return appState.currentUser;
+    const storedUser = localStorage.getItem("rp_logged_user");
+    if (storedUser) {
+        try {
+            const parsed = JSON.parse(storedUser);
+            if (parsed) return parsed;
+        } catch (e) {}
+    }
+    return {
+        nombre: typeof getUserCorporateName === 'function' ? getUserCorporateName() : (appState.currentRole === 'gerente' ? 'Gerente Principal' : 'Colaborador'),
+        email: typeof getUserCorporateEmail === 'function' ? getUserCorporateEmail() : (appState.currentRole === 'gerente' ? 'gerencia@rodipack.online' : 'operaciones@rodipack.online'),
+        rol: appState.currentRole
+    };
+}
+
+function isManagerUser() {
+    const role = ((appState.currentUser && appState.currentUser.rol) || appState.currentRole || '').toLowerCase().trim();
+    return role === 'gerente' || role === 'manager' || role === 'director' || appState.currentRole === 'gerente';
+}
+
 function isTaskAssignedToUser(task, user) {
     if (!task) return false;
     const taskAssignee = (task.assignee || '').trim().toLowerCase();
     if (!taskAssignee || taskAssignee === 'sin asignar') return false;
 
     if (!user) {
-        return false;
+        user = getCurrentUserActive();
     }
+    if (!user) return false;
 
     const userName = (user.nombre || '').trim().toLowerCase();
     const userEmail = (user.email || '').trim().toLowerCase();
@@ -1682,11 +1725,12 @@ function renderTasks() {
     
     // 1. Filtrar por permisos de rol y por colaborador seleccionado
     let scopedTasks = appState.tasks || [];
-    const isGerente = appState.currentRole === 'gerente';
+    const isGerente = isManagerUser();
+    const activeUser = getCurrentUserActive();
 
     if (!isGerente) {
         // Colaboradores regulares: PRIVACIDAD ESTRICTA - Solo ver sus propias tareas asignadas
-        scopedTasks = scopedTasks.filter(t => isTaskAssignedToUser(t, appState.currentUser));
+        scopedTasks = scopedTasks.filter(t => isTaskAssignedToUser(t, activeUser));
     } else {
         // Gerentes: Pueden ver todo o filtrar por el colaborador elegido
         if (appState.currentTaskUserFilter && appState.currentTaskUserFilter !== 'all') {
@@ -1765,6 +1809,8 @@ function renderTasks() {
         const isCompleted = task.status === 'completed';
         const assigneeName = task.assignee || 'Sin asignar';
         const initials = assigneeName.split(" ").filter(Boolean).map(n => n[0]).join("").substring(0, 2).toUpperCase() || 'T';
+
+        // 1. Edición y Eliminación: Exclusivos para rol de Gerente/Manager
         const deleteButton = isGerente 
             ? `<button class="btn-delete-task" onclick="deleteTask('${task.id}')" title="Eliminar tarea">
                  <span class="material-symbols-outlined">delete</span>
@@ -1777,10 +1823,17 @@ function renderTasks() {
                </button>`
             : '';
 
-        const actionButton = `<button class="btn-complete-task" onclick="toggleTaskComplete('${task.id}')">
-            <span class="material-symbols-outlined">${isCompleted ? 'check_circle' : 'circle'}</span>
-            ${isCompleted ? 'Completada' : 'Marcar Completada'}
-        </button>`;
+        // 2. Marcar como Completada: Exclusivo para el usuario al que le corresponde la tarea
+        const canToggleComplete = isTaskAssignedToUser(task, activeUser);
+        const actionButton = canToggleComplete
+            ? `<button class="btn-complete-task" onclick="toggleTaskComplete('${task.id}')">
+                <span class="material-symbols-outlined">${isCompleted ? 'check_circle' : 'circle'}</span>
+                ${isCompleted ? 'Completada' : 'Marcar Completada'}
+               </button>`
+            : `<button class="btn-complete-task disabled" disabled title="Solo el usuario asignado (${assigneeName}) puede marcar esta tarea como completada">
+                <span class="material-symbols-outlined">${isCompleted ? 'check_circle' : 'circle'}</span>
+                ${isCompleted ? 'Completada' : 'Pendiente'}
+               </button>`;
 
         const taskCard = document.createElement("div");
         taskCard.className = `task-card priority-${task.priority} status-${task.status}`;

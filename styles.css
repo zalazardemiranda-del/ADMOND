@@ -1219,10 +1219,20 @@ select option {
     transition: var(--transition-smooth);
 }
 
-.btn-complete-task:hover {
+.btn-complete-task:hover:not(:disabled) {
     border-color: #10B981;
     color: #10B981;
     background: rgba(16, 185, 129, 0.05);
+}
+
+.btn-complete-task:disabled,
+.btn-complete-task.disabled {
+    opacity: 0.55;
+    cursor: not-allowed !important;
+    background-color: #F8FAFC !important;
+    border-color: #E2E8F0 !important;
+    color: #94A3B8 !important;
+    pointer-events: none;
 }
 
 .btn-delete-task {
