@@ -464,8 +464,22 @@
                                     <div class="user-filter-info">
                                         <span class="user-filter-label" id="user-filter-heading">Filtrar por Colaborador:</span>
                                         <div class="user-filter-select-wrap">
-                                            <select id="task-user-filter-select" onchange="handleTaskUserFilterChange(this.value)" class="task-user-filter-dropdown" title="Selecciona un colaborador para ver sus tareas asignadas">
-                                                <option value="all">👥 Todos los colaboradores</option>
+                                            <div class="custom-user-filter-dropdown" id="custom-user-filter-trigger" onclick="toggleTaskUserFilterMenu(event)" title="Selecciona un colaborador para ver sus tareas asignadas">
+                                                <div class="filter-selected-user" id="filter-selected-user-display">
+                                                    <div class="trigger-avatar icon-all">
+                                                        <span class="material-symbols-outlined">groups</span>
+                                                    </div>
+                                                    <div class="trigger-text-wrap">
+                                                        <span class="selected-name">Todos los colaboradores</span>
+                                                    </div>
+                                                </div>
+                                                <span class="material-symbols-outlined filter-dropdown-arrow">expand_more</span>
+                                            </div>
+                                            <ul class="custom-user-filter-menu" id="custom-user-filter-menu">
+                                                <!-- Cargado dinámicamente con JS -->
+                                            </ul>
+                                            <select id="task-user-filter-select" onchange="handleTaskUserFilterChange(this.value)" style="display: none;">
+                                                <option value="all">Todos los colaboradores</option>
                                             </select>
                                         </div>
                                     </div>
