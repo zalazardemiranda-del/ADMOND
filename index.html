@@ -49,8 +49,8 @@
     <div class="app-container">
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
-            <div class="sidebar-brand">
-                <img src="Logo interno.png" alt="Logo Interno" class="brand-logo-img" style="width: 44px; height: 44px; object-fit: contain;">
+            <div class="sidebar-brand" title="Rodipack Gestión Central">
+                <img src="Logo interno.png" alt="Logo Interno" class="brand-logo-img" style="width: 38px; height: 38px; object-fit: contain;">
                 <div class="brand-text">
                     <h2>rodipack</h2>
                     <span>gestión</span>
@@ -61,41 +61,41 @@
             <nav class="sidebar-nav">
                 <ul>
                     <li id="sidebar-item-emails">
-                        <a href="#" class="nav-item" id="nav-emails" onclick="switchTab('emails')">
+                        <a href="#" class="nav-item" id="nav-emails" onclick="switchTab('emails')" title="Centro de Correos">
                             <span class="material-symbols-outlined">mark_email_unread</span>
-                            <span>Centro de Correos</span>
+                            <span class="nav-text-label">Centro de Correos</span>
                             <span class="chat-badge email-badge" id="unread-email-count" style="display: none; background: #EF4444;">0</span>
                         </a>
                     </li>
                     <li>
-                        <a href="#" class="nav-item active" id="nav-tasks" onclick="switchTab('tasks')">
+                        <a href="#" class="nav-item active" id="nav-tasks" onclick="switchTab('tasks')" title="Tablero de Tareas">
                             <span class="material-symbols-outlined">assignment</span>
-                            <span>Tablero de Tareas</span>
+                            <span class="nav-text-label">Tablero de Tareas</span>
                         </a>
                     </li>
                     <li>
-                        <a href="#" class="nav-item" id="nav-chat" onclick="switchTab('chat')">
+                        <a href="#" class="nav-item" id="nav-chat" onclick="switchTab('chat')" title="Chat Interno">
                             <span class="material-symbols-outlined">chat_bubble</span>
-                            <span>Chat Interno</span>
+                            <span class="nav-text-label">Chat Interno</span>
                             <span class="chat-badge" id="unread-chat-count" style="display: none;">0</span>
                         </a>
                     </li>
                     <li id="sidebar-item-administracion">
-                        <a href="#" class="nav-item" id="nav-administracion" onclick="switchTab('administracion')">
+                        <a href="#" class="nav-item" id="nav-administracion" onclick="switchTab('administracion')" title="Administración">
                             <span class="material-symbols-outlined">analytics</span>
-                            <span>Administración</span>
+                            <span class="nav-text-label">Administración</span>
                         </a>
                     </li>
                     <li>
-                        <a href="#" class="nav-item" id="nav-meetings" onclick="switchTab('meetings')">
+                        <a href="#" class="nav-item" id="nav-meetings" onclick="switchTab('meetings')" title="Reuniones">
                             <span class="material-symbols-outlined">calendar_today</span>
-                            <span>Reuniones</span>
+                            <span class="nav-text-label">Reuniones</span>
                         </a>
                     </li>
                     <li id="sidebar-item-users">
-                        <a href="#" class="nav-item" id="nav-users" onclick="switchTab('users')">
+                        <a href="#" class="nav-item" id="nav-users" onclick="switchTab('users')" title="Usuarios">
                             <span class="material-symbols-outlined">group</span>
-                            <span>Usuarios</span>
+                            <span class="nav-text-label">Usuarios</span>
                         </a>
                     </li>
                 </ul>
@@ -105,7 +105,7 @@
             <div class="rodipack-family">
                 <span class="family-label">APLICACIONES RODIPACK</span>
                 <div class="family-links">
-                    <a href="https://roditrack.online/" target="_blank" rel="noopener noreferrer" class="family-link-card" title="Abrir Roditrack (roditrack.online)">
+                    <a href="https://roditrack.online/" target="_blank" rel="noopener noreferrer" class="family-link-card" title="Roditrack (Rastreo de envíos)">
                         <div class="link-icon tracking-icon" style="background: #FFFFFF; border-radius: 8px; border: 1px solid #CBD5E1; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; overflow: hidden; padding: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.04);">
                             <img src="logo sin fondo.png" alt="Roditrack Logo" style="width: 28px; height: 28px; object-fit: contain;">
                         </div>
@@ -115,7 +115,7 @@
                         </div>
                         <span class="material-symbols-outlined arrow-icon">north_east</span>
                     </a>
-                    <a href="https://www.rodiload.com/app/index.html" target="_blank" rel="noopener noreferrer" class="family-link-card" title="Abrir Rodiload (rodiload.com)">
+                    <a href="https://www.rodiload.com/app/index.html" target="_blank" rel="noopener noreferrer" class="family-link-card" title="Rodiload (Optimización volumétrica)">
                         <div class="link-icon cubicacion-icon" style="background: #FFFFFF; border-radius: 8px; border: 1px solid #CBD5E1; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; overflow: hidden; padding: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.04);">
                             <img src="https://www.google.com/s2/favicons?domain=rodiload.com&sz=128" alt="Rodiload Logo" style="width: 26px; height: 26px; object-fit: contain;" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">
                             <span class="material-symbols-outlined" style="display: none; font-size: 20px; color: #2563EB;">inventory_2</span>
@@ -136,7 +136,7 @@
                     <h4 id="user-display-name">Gerente Principal</h4>
                     <span id="user-display-role">Administrador del Sistema</span>
                 </div>
-                <span class="material-symbols-outlined" style="margin-left: auto; font-size: 18px; color: var(--text-secondary);">chevron_right</span>
+                <span class="material-symbols-outlined nav-chevron" style="margin-left: auto; font-size: 18px; color: var(--text-secondary);">chevron_right</span>
             </div>
         </aside>
 
