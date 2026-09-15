@@ -13,6 +13,16 @@
     <!-- Chart.js for interactive Pie Chart -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="styles.css">
+    <script>
+        (function() {
+            var host = window.location.hostname;
+            var proto = window.location.protocol;
+            var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host.endsWith('.localhost') || proto === 'file:';
+            if (!isLocal) {
+                document.documentElement.classList.add('hide-emails-feature');
+            }
+        })();
+    </script>
 </head>
 <body>
     <!-- ========================================== -->
@@ -50,7 +60,7 @@
             <!-- Main App Nav -->
             <nav class="sidebar-nav">
                 <ul>
-                    <li>
+                    <li id="sidebar-item-emails">
                         <a href="#" class="nav-item" id="nav-emails" onclick="switchTab('emails')">
                             <span class="material-symbols-outlined">mark_email_unread</span>
                             <span>Centro de Correos</span>
@@ -445,6 +455,52 @@
 
                         <!-- Right pane: Tasks Grid -->
                         <div class="tasks-list-container">
+                            <!-- Sección de Filtrado y Supervisión de Tareas por Colaborador -->
+                            <div class="tasks-user-filter-section" id="tasks-user-filter-section">
+                                <div class="user-filter-main">
+                                    <div class="user-filter-badge-icon">
+                                        <span class="material-symbols-outlined">person_search</span>
+                                    </div>
+                                    <div class="user-filter-info">
+                                        <span class="user-filter-label" id="user-filter-heading">Filtrar por Colaborador:</span>
+                                        <div class="user-filter-select-wrap">
+                                            <select id="task-user-filter-select" onchange="handleTaskUserFilterChange(this.value)" class="task-user-filter-dropdown" title="Selecciona un colaborador para ver sus tareas asignadas">
+                                                <option value="all">👥 Todos los colaboradores</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="user-filter-metrics" id="user-filter-metrics">
+                                    <div class="filter-metric-item metric-total" title="Total de tareas del colaborador">
+                                        <span class="metric-num" id="user-stat-total">0</span>
+                                        <span class="metric-label">TOTAL</span>
+                                    </div>
+                                    <button type="button" class="filter-metric-item metric-pending" id="user-metric-btn-pending" onclick="filterTasksFromUserSection('pending')" title="Ver tareas pendientes (cuáles NO completó)">
+                                        <div class="metric-head">
+                                            <span class="material-symbols-outlined metric-icon">pending</span>
+                                            <span class="metric-num" id="user-stat-pending">0</span>
+                                        </div>
+                                        <span class="metric-label">PENDIENTES</span>
+                                    </button>
+                                    <button type="button" class="filter-metric-item metric-completed" id="user-metric-btn-completed" onclick="filterTasksFromUserSection('completed')" title="Ver tareas que YA completó">
+                                        <div class="metric-head">
+                                            <span class="material-symbols-outlined metric-icon">check_circle</span>
+                                            <span class="metric-num" id="user-stat-completed">0</span>
+                                        </div>
+                                        <span class="metric-label">COMPLETADAS</span>
+                                    </button>
+                                    <div class="filter-metric-progress" title="Porcentaje de avance del colaborador">
+                                        <div class="metric-progress-header">
+                                            <span class="metric-progress-title">Cumplimiento</span>
+                                            <span class="metric-progress-pct" id="user-stat-progress-pct">0%</span>
+                                        </div>
+                                        <div class="metric-progress-track">
+                                            <div class="metric-progress-bar" id="user-stat-progress-bar" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="tasks-header-actions">
                                 <div class="tasks-filter-bar">
                                     <span class="filter-bar-title">

@@ -778,6 +778,225 @@ select option {
     box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
 }
 
+/* ==============================================================================
+   FEATURE VISIBILITY: EMAIL CENTER (SOLO LOCALHOST)
+   ============================================================================== */
+.hide-emails-feature #sidebar-item-emails,
+.hide-emails-feature #tab-emails,
+.hide-emails-feature #modal-compose-email {
+    display: none !important;
+}
+
+/* ==============================================================================
+   SUPERVISIÓN DE TAREAS POR COLABORADOR (GERENCIA & PRIVACIDAD)
+   ============================================================================== */
+.tasks-user-filter-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #FFFFFF;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 10px 16px;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+    gap: 16px;
+    flex-wrap: wrap;
+    transition: all 0.2s ease;
+}
+
+.tasks-user-filter-section:hover {
+    border-color: #CBD5E1;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.user-filter-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 260px;
+}
+
+.user-filter-badge-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(37, 99, 235, 0.08);
+    color: #2563EB;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.user-filter-badge-icon .material-symbols-outlined {
+    font-size: 20px;
+}
+
+.user-filter-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+}
+
+.user-filter-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748B;
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+.user-filter-select-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+}
+
+.task-user-filter-dropdown {
+    width: 100%;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0F172A;
+    background: #F8FAFC;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    outline: none;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.task-user-filter-dropdown:focus {
+    border-color: #2563EB;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.user-filter-metrics {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.filter-metric-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 14px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    background: #F8FAFC;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    font-family: inherit;
+}
+
+.filter-metric-item.metric-total {
+    cursor: default;
+    background: #F1F5F9;
+    border-color: #E2E8F0;
+}
+
+.filter-metric-item.metric-pending {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.25);
+    color: #B45309;
+}
+
+.filter-metric-item.metric-pending:hover {
+    background: rgba(245, 158, 11, 0.16);
+    border-color: #F59E0B;
+    transform: translateY(-1px);
+}
+
+.filter-metric-item.metric-completed {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.25);
+    color: #047857;
+}
+
+.filter-metric-item.metric-completed:hover {
+    background: rgba(16, 185, 129, 0.16);
+    border-color: #10B981;
+    transform: translateY(-1px);
+}
+
+.metric-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.metric-icon {
+    font-size: 16px;
+}
+
+.metric-num {
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1;
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+.metric-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+
+.filter-metric-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 110px;
+    padding: 6px 12px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+}
+
+.metric-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.metric-progress-pct {
+    font-size: 11px;
+    font-weight: 800;
+    color: #2563EB;
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+.metric-progress-track {
+    width: 100%;
+    height: 6px;
+    background: #E2E8F0;
+    border-radius: 99px;
+    overflow: hidden;
+}
+
+.metric-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #2563EB, #10B981);
+    border-radius: 99px;
+    transition: width 0.3s ease;
+}
+
 .tasks-list-container {
     display: flex;
     flex-direction: column;

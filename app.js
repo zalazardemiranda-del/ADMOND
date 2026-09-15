@@ -41,6 +41,23 @@ const defaultConcepts = {
 
 const defaultProveedorNames = ["Jennifer", "Rama", "Transportes Express"];
 
+// Environment helper: detección de Localhost vs Producción
+window.isLocalhostEnvironment = function() {
+    try {
+        const host = window.location.hostname;
+        const proto = window.location.protocol;
+        return Boolean(
+            host === 'localhost' ||
+            host === '127.0.0.1' ||
+            host === '[::1]' ||
+            host.endsWith('.localhost') ||
+            proto === 'file:'
+        );
+    } catch (e) {
+        return false;
+    }
+};
+
 // App Global State
 let appState = {
     currentRole: 'gerente', // 'gerente' or 'colaborador'
@@ -49,6 +66,7 @@ let appState = {
     selectedProveedorFilter: 'all', // 'all' or specific name
     currentChannel: 'general',
     currentFilter: 'all',
+    currentTaskUserFilter: 'all', // 'all' or collaborator name
     
     tasks: [],
     chats: {},
@@ -281,12 +299,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Restaurar pestaña activa persistida o desde hash de URL
+    const isLocalhost = window.isLocalhostEnvironment();
     const hashTab = window.location.hash ? window.location.hash.replace('#', '').trim() : '';
     const storedTab = localStorage.getItem("rp_current_tab");
     if (hashTab && ['emails', 'tasks', 'chat', 'administracion', 'meetings', 'users', 'profile'].includes(hashTab)) {
-        appState.currentTab = hashTab;
+        appState.currentTab = (hashTab === 'emails' && !isLocalhost) ? 'tasks' : hashTab;
     } else if (storedTab) {
-        appState.currentTab = storedTab;
+        appState.currentTab = (storedTab === 'emails' && !isLocalhost) ? 'tasks' : storedTab;
     } else {
         appState.currentTab = 'tasks';
     }
@@ -297,12 +316,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         appState.currentAdminFicha = storedAdminFicha;
     }
 
-    // Inicializar Centro de Correos Electrónicos
-    if (typeof loadEmailsData === 'function') {
-        await loadEmailsData();
-    }
-    if (typeof setupSupabaseEmailsRealtime === 'function') {
-        setupSupabaseEmailsRealtime();
+    // Inicializar Centro de Correos Electrónicos ÚNICAMENTE en localhost
+    if (isLocalhost) {
+        if (typeof loadEmailsData === 'function') {
+            await loadEmailsData();
+        }
+        if (typeof setupSupabaseEmailsRealtime === 'function') {
+            setupSupabaseEmailsRealtime();
+        }
     }
 
     setRole(appState.currentRole);
@@ -438,6 +459,22 @@ window.setRole = function(role) {
         }
     }
     
+    // Ajustar encabezado y selector de colaborador según el rol
+    const userFilterHeading = document.getElementById("user-filter-heading");
+    const userFilterWrap = document.querySelector(".user-filter-select-wrap");
+    if (appState.currentRole === 'gerente') {
+        if (userFilterHeading) userFilterHeading.innerText = "Filtrar por Colaborador:";
+        if (userFilterWrap) userFilterWrap.style.display = "block";
+        if (typeof window.populateTaskUserFilterOptions === 'function') {
+            window.populateTaskUserFilterOptions();
+        }
+    } else {
+        const userName = appState.currentUser ? (appState.currentUser.nombre || appState.currentUser.email) : 'Mis Tareas';
+        if (userFilterHeading) userFilterHeading.innerText = `Mis Tareas Asignadas (${userName}):`;
+        if (userFilterWrap) userFilterWrap.style.display = "none";
+        appState.currentTaskUserFilter = 'all';
+    }
+
     updateUserSessionUI();
     renderTasks();
     renderAdministracion();
@@ -503,6 +540,11 @@ window.handleAuthNavItemClick = function(e) {
 
 // 2. Tab Switcher
 window.switchTab = function(tabName) {
+    // Si no está en localhost, bloquear Centro de Correos y redirigir a tareas
+    if (tabName === 'emails' && typeof window.isLocalhostEnvironment === 'function' && !window.isLocalhostEnvironment()) {
+        tabName = 'tasks';
+    }
+
     // If not gerente, block access to administracion and users tabs
     if ((tabName === 'administracion' || tabName === 'users') && appState.currentRole !== 'gerente') {
         tabName = 'tasks';
@@ -1269,6 +1311,7 @@ window.handleCreateTask = function(event) {
         renderTasks();
     }
     updateGlobalStats();
+    if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
     
     // Cloud Sync
     if (window.isSupabaseActive()) {
@@ -1305,6 +1348,7 @@ window.toggleTaskComplete = function(taskId) {
         saveToStorage();
         renderTasks();
         updateGlobalStats();
+        if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
         
         // Cloud Sync
         if (window.isSupabaseActive()) {
@@ -1342,6 +1386,7 @@ window.deleteTask = function(taskId) {
     saveToStorage();
     renderTasks();
     updateGlobalStats();
+    if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
     
     // Cloud Sync
     if (window.isSupabaseActive()) {
@@ -1406,6 +1451,7 @@ window.handleSaveTaskEdit = function(event) {
         closeEditTaskModal();
         renderTasks();
         updateGlobalStats();
+        if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
 
         if (window.isSupabaseActive()) {
             const client = window.SUPABASE_CONFIG.client;
@@ -1465,13 +1511,187 @@ window.updateTasksScrollNavState = function() {
     }
 };
 
+// ---------------------------------------------------------------------------------
+// PRIVACIDAD Y FILTRADO DE TAREAS POR COLABORADOR
+// ---------------------------------------------------------------------------------
+function isTaskAssignedToUser(task, user) {
+    if (!task) return false;
+    const taskAssignee = (task.assignee || '').trim().toLowerCase();
+    if (!taskAssignee || taskAssignee === 'sin asignar') return false;
+
+    if (!user) {
+        return false;
+    }
+
+    const userName = (user.nombre || '').trim().toLowerCase();
+    const userEmail = (user.email || '').trim().toLowerCase();
+    const emailPrefix = userEmail ? userEmail.split('@')[0].toLowerCase() : '';
+
+    if (userName && taskAssignee === userName) return true;
+    if (userEmail && taskAssignee === userEmail) return true;
+    if (emailPrefix && taskAssignee === emailPrefix) return true;
+
+    // Comparación flexible de nombres (ej: "Roberto Miranda" vs "Roberto Miranda Perez")
+    if (userName) {
+        if (userName.includes(taskAssignee) || taskAssignee.includes(userName)) return true;
+
+        const uTokens = userName.split(/\s+/).filter(t => t.length > 2);
+        const aTokens = taskAssignee.split(/\s+/).filter(t => t.length > 2);
+        if (uTokens.length > 0 && aTokens.length > 0) {
+            const matches = uTokens.filter(t => aTokens.includes(t));
+            if (matches.length >= 2 || (uTokens.length === 1 && matches.length === 1)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function taskMatchesFilterUser(task, filterUser) {
+    if (!task) return false;
+    if (!filterUser || filterUser === 'all') return true;
+    const taskAssignee = (task.assignee || '').trim().toLowerCase();
+    const f = filterUser.trim().toLowerCase();
+    if (taskAssignee === f) return true;
+    return isTaskAssignedToUser(task, { nombre: filterUser });
+}
+
+window.populateTaskUserFilterOptions = function() {
+    const select = document.getElementById("task-user-filter-select");
+    if (!select) return;
+
+    const assignees = typeof getAvailableAssignees === 'function' ? getAvailableAssignees() : [];
+    const usersMap = new Map();
+
+    // 1. Agregar colaboradores conocidos del sistema
+    assignees.forEach(u => {
+        if (u && u.nombre && !usersMap.has(u.nombre)) {
+            usersMap.set(u.nombre, {
+                displayName: u.nombre,
+                userObj: u,
+                pending: 0,
+                completed: 0,
+                total: 0
+            });
+        }
+    });
+
+    // 2. Agregar asignados de tareas existentes si no estaban registrados
+    (appState.tasks || []).forEach(t => {
+        const a = (t.assignee || '').trim();
+        if (a && a !== 'Sin asignar') {
+            let matchedKey = null;
+            for (const [key, val] of usersMap.entries()) {
+                if (key.toLowerCase() === a.toLowerCase() || 
+                    (val.userObj && isTaskAssignedToUser(t, val.userObj))) {
+                    matchedKey = key;
+                    break;
+                }
+            }
+            if (!matchedKey) {
+                usersMap.set(a, {
+                    displayName: a,
+                    userObj: { nombre: a },
+                    pending: 0,
+                    completed: 0,
+                    total: 0
+                });
+            }
+        }
+    });
+
+    // 3. Contar tareas por usuario (pendientes y completadas)
+    (appState.tasks || []).forEach(t => {
+        const st = (t.status || '').toLowerCase();
+        const isComp = st === 'completed' || st === 'completada';
+        for (const [key, val] of usersMap.entries()) {
+            if (key.toLowerCase() === (t.assignee || '').trim().toLowerCase() ||
+                (val.userObj && isTaskAssignedToUser(t, val.userObj))) {
+                val.total++;
+                if (isComp) val.completed++;
+                else val.pending++;
+                break;
+            }
+        }
+    });
+
+    // 4. Poblar las opciones del selector
+    const currentVal = appState.currentTaskUserFilter || 'all';
+    const totalAllTasks = (appState.tasks || []).length;
+    let html = `<option value="all" ${currentVal === 'all' ? 'selected' : ''}>👥 Todos los colaboradores (${totalAllTasks} tareas)</option>`;
+
+    usersMap.forEach((u, key) => {
+        const isSelected = currentVal === key ? 'selected' : '';
+        html += `<option value="${key}" ${isSelected}>👤 ${u.displayName} (${u.pending} pend., ${u.completed} comp.)</option>`;
+    });
+
+    select.innerHTML = html;
+};
+
+window.handleTaskUserFilterChange = function(selectedUser) {
+    appState.currentTaskUserFilter = selectedUser;
+    renderTasks();
+    updateGlobalStats();
+};
+
+window.filterTasksFromUserSection = function(type) {
+    if (type === 'pending') {
+        const btn = document.querySelector(`.filter-btn[data-filter='all']`);
+        if (btn) filterTasks('all', btn);
+        else renderTasks();
+    } else if (type === 'completed') {
+        const btn = document.querySelector(`.filter-btn[data-filter='completed']`);
+        if (btn) filterTasks('completed', btn);
+        else renderTasks();
+    }
+};
+
 function renderTasks() {
     const gridList = document.getElementById("tasks-grid-list");
     if (!gridList) return;
     gridList.innerHTML = "";
     
-    // Filtrar tareas según el filtro activo y asegurar que las completadas SOLO se muestren en "completed"
-    let filteredTasks = (appState.tasks || []).filter(t => {
+    // 1. Filtrar por permisos de rol y por colaborador seleccionado
+    let scopedTasks = appState.tasks || [];
+    const isGerente = appState.currentRole === 'gerente';
+
+    if (!isGerente) {
+        // Colaboradores regulares: PRIVACIDAD ESTRICTA - Solo ver sus propias tareas asignadas
+        scopedTasks = scopedTasks.filter(t => isTaskAssignedToUser(t, appState.currentUser));
+    } else {
+        // Gerentes: Pueden ver todo o filtrar por el colaborador elegido
+        if (appState.currentTaskUserFilter && appState.currentTaskUserFilter !== 'all') {
+            scopedTasks = scopedTasks.filter(t => taskMatchesFilterUser(t, appState.currentTaskUserFilter));
+        }
+    }
+
+    // 2. Calcular y actualizar las métricas de la barra de supervisión del usuario
+    const totalUserTasks = scopedTasks.length;
+    const pendingUserTasks = scopedTasks.filter(t => {
+        const st = (t.status || '').toLowerCase();
+        return st !== 'completed' && st !== 'completada';
+    }).length;
+    const completedUserTasks = scopedTasks.filter(t => {
+        const st = (t.status || '').toLowerCase();
+        return st === 'completed' || st === 'completada';
+    }).length;
+    const progressUserPct = totalUserTasks > 0 ? Math.round((completedUserTasks / totalUserTasks) * 100) : 0;
+
+    const statTotalEl = document.getElementById("user-stat-total");
+    const statPendingEl = document.getElementById("user-stat-pending");
+    const statCompletedEl = document.getElementById("user-stat-completed");
+    const statProgressPctEl = document.getElementById("user-stat-progress-pct");
+    const statProgressBarEl = document.getElementById("user-stat-progress-bar");
+
+    if (statTotalEl) statTotalEl.innerText = totalUserTasks;
+    if (statPendingEl) statPendingEl.innerText = pendingUserTasks;
+    if (statCompletedEl) statCompletedEl.innerText = completedUserTasks;
+    if (statProgressPctEl) statProgressPctEl.innerText = `${progressUserPct}%`;
+    if (statProgressBarEl) statProgressBarEl.style.width = `${progressUserPct}%`;
+
+    // 3. Filtrar según la pestaña activa (Todas, Alta, Media, Baja, Completadas)
+    let filteredTasks = scopedTasks.filter(t => {
         if (!t || !t.title) return false;
         const st = (t.status || '').toLowerCase();
         const isCompleted = st === 'completed' || st === 'completada';
@@ -1491,10 +1711,9 @@ function renderTasks() {
     });
     
     if (filteredTasks.length === 0) {
-        const isColaborador = appState.currentRole !== 'gerente';
-        const emptyHelpText = isColaborador 
-            ? "No hay tareas asignadas que coincidan con el filtro seleccionado." 
-            : "Asigna una nueva tarea al equipo desde el formulario de la izquierda.";
+        const emptyHelpText = !isGerente 
+            ? "No tienes tareas asignadas en esta vista o filtro." 
+            : "No hay tareas registradas que coincidan con el colaborador y filtro seleccionados.";
 
         gridList.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 48px 20px; color: var(--text-secondary); background: #FFFFFF; border-radius: 12px; border: 1px dashed #CBD5E1;">
             <span class="material-symbols-outlined" style="font-size: 38px; color: #94A3B8; margin-bottom: 8px;">task</span>
@@ -1502,6 +1721,8 @@ function renderTasks() {
             <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-secondary);">${emptyHelpText}</p>
         </div>`;
         updateTasksScrollNavState();
+        const countPill = document.getElementById("visible-tasks-count");
+        if (countPill) countPill.innerText = `0 tarea(s) filtrada(s)`;
         return;
     }
     
@@ -1516,13 +1737,13 @@ function renderTasks() {
         const isCompleted = task.status === 'completed';
         const assigneeName = task.assignee || 'Sin asignar';
         const initials = assigneeName.split(" ").filter(Boolean).map(n => n[0]).join("").substring(0, 2).toUpperCase() || 'T';
-        const deleteButton = appState.currentRole === 'gerente' 
+        const deleteButton = isGerente 
             ? `<button class="btn-delete-task" onclick="deleteTask('${task.id}')" title="Eliminar tarea">
                  <span class="material-symbols-outlined">delete</span>
                </button>` 
             : '';
             
-        const editButton = (appState.currentRole === 'gerente' || appState.currentRole === 'administrador')
+        const editButton = isGerente
             ? `<button class="btn-edit-task" onclick="openEditTaskModal('${task.id}')" title="Editar tarea">
                  <span class="material-symbols-outlined">edit</span>
                </button>`
@@ -2072,12 +2293,21 @@ function renderMeetings() {
 // 10. GLOBAL STATS UPDATER
 // ---------------------------------------------------------------------------------
 function updateGlobalStats() {
-    const pending = (appState.tasks || []).filter(t => {
+    let tasksPool = appState.tasks || [];
+    
+    // Si el rol no es gerente, las estadísticas de la barra superior solo consideran sus propias tareas asignadas
+    if (appState.currentRole !== 'gerente') {
+        tasksPool = tasksPool.filter(t => isTaskAssignedToUser(t, appState.currentUser));
+    } else if (appState.currentTaskUserFilter && appState.currentTaskUserFilter !== 'all') {
+        tasksPool = tasksPool.filter(t => taskMatchesFilterUser(t, appState.currentTaskUserFilter));
+    }
+
+    const pending = tasksPool.filter(t => {
         const st = (t.status || '').toLowerCase();
         return st === 'pending' || st === 'pendiente';
     }).length;
 
-    const completed = (appState.tasks || []).filter(t => {
+    const completed = tasksPool.filter(t => {
         const st = (t.status || '').toLowerCase();
         return st === 'completed' || st === 'completada';
     }).length;
@@ -4680,10 +4910,11 @@ function updateEmailStatsAndBadges() {
     const notifCount = list.filter(e => e.carpeta === 'notifications' && !e.leido).length;
     const trashCount = list.filter(e => e.carpeta === 'trash').length;
 
-    // Badge lateral del Centro de Correos
+    // Badge lateral del Centro de Correos (SOLO en localhost)
+    const isLocal = typeof window.isLocalhostEnvironment === 'function' ? window.isLocalhostEnvironment() : true;
     const navBadge = document.getElementById("unread-email-count");
     if (navBadge) {
-        if (unreadInbox > 0) {
+        if (isLocal && unreadInbox > 0) {
             navBadge.innerText = unreadInbox;
             navBadge.style.display = "inline-flex";
         } else {
