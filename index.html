@@ -1248,28 +1248,30 @@
                                         <span class="step-title">Facturación</span>
                                     </div>
                                 </div>
-
-                                    <!-- Seccion Datos Principales: Número de Factura y Orden de Compra -->
-                                    <div class="op-header-inputs-bar">
-                                        <div class="op-header-field">
-                                            <label for="op-step1-factura-num">
-                                                <span class="material-symbols-outlined icon-sm">receipt</span> Número de factura:
-                                            </label>
-                                            <input type="text" id="op-step1-factura-num" class="op-input-header" placeholder="Ej. F20059" oninput="updateProjectHeaderField('numFactura', this.value)">
-                                        </div>
-                                        
-                                        <div class="op-header-field">
-                                            <label for="op-step1-oc-num">
-                                                <span class="material-symbols-outlined icon-sm">assignment</span> Orden de compra (OC):
-                                            </label>
-                                            <input type="text" id="op-step1-oc-num" class="op-input-header" placeholder="Ej. 12556" oninput="updateProjectHeaderField('numOC', this.value)">
+                                <!-- STEP 1: DATOS DE PROYECTO (Imagen 3) -->
+                                <div class="op-step-pane active" id="op-step-pane-1">
+                                    
+                                    <!-- 2 Banners: Factura y Orden de Compra + Botón Agregar Contenedor -->
+                                    <div class="op-step1-banners-grid">
+                                        <div class="card op-badge-card">
+                                            <div class="badge-icon"><span class="material-symbols-outlined">receipt</span></div>
+                                            <div class="badge-text" style="flex: 1;">
+                                                <span class="badge-label">Número de factura:</span>
+                                                <input type="text" id="op-step1-factura-num" class="input-badge-val" value="F92493" placeholder="Ingresa factura..." oninput="updateProjectHeaderField('numFactura', this.value)">
+                                            </div>
                                         </div>
 
-                                        <div class="op-header-actions">
-                                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="addContenedorToActiveProject()">
-                                                <span class="material-symbols-outlined">add</span> Agregar contenedor
-                                            </button>
+                                        <div class="card op-badge-card">
+                                            <div class="badge-icon"><span class="material-symbols-outlined">assignment</span></div>
+                                            <div class="badge-text" style="flex: 1;">
+                                                <span class="badge-label">Número de OC:</span>
+                                                <input type="text" id="op-step1-oc-num" class="input-badge-val" value="65560" placeholder="Ingresa OC..." oninput="updateProjectHeaderField('numOC', this.value)">
+                                            </div>
                                         </div>
+
+                                        <button type="button" class="btn btn-outline-primary btn-add-contenedor-top" onclick="addContenedorToActiveProject()">
+                                            <span class="material-symbols-outlined">add</span> Agregar contenedor
+                                        </button>
                                     </div>
 
                                     <!-- Contenedores Grid con Navegación Lateral por Páginas de 4 Fichas -->
