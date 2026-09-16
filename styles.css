@@ -5510,6 +5510,29 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     color: #0F172A;
 }
 
+.btn-delete-contenedor {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: #94A3B8;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-delete-contenedor:hover {
+    color: #EF4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.btn-delete-contenedor .material-symbols-outlined {
+    font-size: 18px;
+}
+
 .contenedor-fields-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -5736,13 +5759,32 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     color: #15803D;
 }
 
+/* Prefactura Slider Wrapper */
+.prefactura-slider-wrapper {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 8px;
+    width: 100%;
+}
+
+.prefactura-tables-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.prefactura-page-indicator {
+    font-size: 12px;
+    color: #475569;
+}
+
 /* Wizard Footer */
 .op-wizard-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-top: 10px;
-    padding-top: 10px;
+    padding-top: 8px;
     border-top: 1px solid #E2E8F0;
 }
 
@@ -5750,14 +5792,19 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     background: #091E42;
     color: #FFFFFF;
     font-weight: 700;
-    font-size: 12px;
-    padding: 8px 18px;
+    font-size: 11px;
+    padding: 6px 14px;
+    height: 32px;
     border-radius: 8px;
     border: none;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+}
+
+.btn-next-step .material-symbols-outlined {
+    font-size: 16px;
 }
 
 .btn-next-step:hover {

@@ -6403,6 +6403,7 @@ window.openOperacionesDetail = function(projectId) {
 
     appState.activeOperacionesProjectId = p.id;
     appState.contenedoresPage = 0;
+    appState.prefacturaPage = 0;
 
     const listPane = document.getElementById("operaciones-view-list");
     const detailPane = document.getElementById("operaciones-view-detail");
@@ -6428,6 +6429,7 @@ window.openOperacionesDetail = function(projectId) {
 
     renderPartidasTable(p);
     renderProveedorClavesTable(p);
+    renderPrefacturaSlider();
 
     // Populate Step 3 (Documentos)
     renderDocumentosStatus(p);
@@ -6535,6 +6537,9 @@ function renderContenedoresCards(p) {
             <div class="contenedor-card-header">
                 <div class="contenedor-num-badge">${c.id}</div>
                 <span class="contenedor-card-title">${c.label || ('Contenedor ' + c.id)}</span>
+                <button type="button" class="btn-delete-contenedor" onclick="deleteContenedor(${c.id})" title="Eliminar contenedor">
+                    <span class="material-symbols-outlined">delete</span>
+                </button>
             </div>
             <div class="contenedor-fields-grid">
                 <div>
@@ -6577,6 +6582,72 @@ function renderContenedoresCards(p) {
         indicator.innerHTML = `<strong>Página ${appState.contenedoresPage + 1} de ${totalPages}</strong> (${list.length} contenedores registrados)`;
     }
 }
+
+window.deleteContenedor = function(cId) {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p || !p.contenedores) return;
+
+    p.contenedores = p.contenedores.filter(c => c.id !== cId);
+
+    // Re-index remaining contenedores sequentially
+    p.contenedores.forEach((c, idx) => {
+        c.id = idx + 1;
+        c.label = `Contenedor ${c.id}`;
+    });
+
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    renderContenedoresCards(p);
+};
+
+/* Prefactura Lateral Slider (Step 2 - Imagen 2 y 3) */
+window.changePrefacturaPage = function(delta) {
+    if (appState.prefacturaPage === undefined) appState.prefacturaPage = 0;
+    appState.prefacturaPage += delta;
+    if (appState.prefacturaPage < 0) appState.prefacturaPage = 0;
+    if (appState.prefacturaPage > 1) appState.prefacturaPage = 1;
+    renderPrefacturaSlider();
+};
+
+window.renderPrefacturaSlider = function() {
+    if (appState.prefacturaPage === undefined) appState.prefacturaPage = 0;
+    const page1 = document.getElementById("prefactura-page-1");
+    const page2 = document.getElementById("prefactura-page-2");
+    const prevBtn = document.getElementById("op-prefactura-prev-btn");
+    const nextBtn = document.getElementById("op-prefactura-next-btn");
+    const indicator = document.getElementById("op-prefactura-page-indicator");
+
+    if (appState.prefacturaPage === 0) {
+        if (page1) page1.style.display = "block";
+        if (page2) page2.style.display = "none";
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = false;
+        if (indicator) indicator.innerHTML = `<strong>Página 1 de 2</strong> (Partidas y conceptos)`;
+    } else {
+        if (page1) page1.style.display = "none";
+        if (page2) page2.style.display = "block";
+        if (prevBtn) prevBtn.disabled = false;
+        if (nextBtn) nextBtn.disabled = true;
+        if (indicator) indicator.innerHTML = `<strong>Página 2 de 2</strong> (Proveedor y claves de compra)`;
+    }
+};
+
+window.handlePrefacturaFooterNext = function() {
+    if (appState.prefacturaPage === undefined) appState.prefacturaPage = 0;
+    if (appState.prefacturaPage === 0) {
+        changePrefacturaPage(1);
+    } else {
+        goToOperacionesStep(3);
+    }
+};
+
+window.handlePrefacturaFooterPrev = function() {
+    if (appState.prefacturaPage === undefined) appState.prefacturaPage = 0;
+    if (appState.prefacturaPage === 1) {
+        changePrefacturaPage(-1);
+    } else {
+        goToOperacionesStep(1);
+    }
+};
 
 window.updateContenedorField = function(cId, key, val) {
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
