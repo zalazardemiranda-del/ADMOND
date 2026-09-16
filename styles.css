@@ -5811,4 +5811,244 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     background: #172B4D;
 }
 
+/* Compact Step 2 Prefactura & Table Sizing for 5 rows fit without vertical scroll */
+#op-step-pane-2 .op-summary-badges-grid {
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+#op-step-pane-2 .op-badge-card {
+    padding: 8px 12px;
+    gap: 10px;
+    border-radius: 8px;
+}
+
+#op-step-pane-2 .op-badge-card .badge-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+}
+
+#op-step-pane-2 .op-badge-card .badge-icon .material-symbols-outlined {
+    font-size: 16px;
+}
+
+#op-step-pane-2 .op-badge-card .badge-label {
+    font-size: 10px;
+}
+
+#op-step-pane-2 .op-badge-card .badge-val {
+    font-size: 12px;
+}
+
+#op-step-pane-2 .op-section-card {
+    padding: 10px 14px;
+    margin-bottom: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+}
+
+#op-step-pane-2 .card-header-flex {
+    margin-bottom: 8px;
+}
+
+#op-step-pane-2 .flex-title h3 {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#op-step-pane-2 .table-responsive {
+    max-height: 245px;
+    overflow-y: auto;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+}
+
+#table-partidas-conceptos,
+#table-proveedor-claves {
+    font-size: 11px;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+#table-partidas-conceptos th,
+#table-proveedor-claves th {
+    padding: 5px 8px;
+    font-size: 11px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background-color: #2563EB;
+}
+
+#table-partidas-conceptos td,
+#table-proveedor-claves td {
+    padding: 3px 6px;
+    font-size: 11px;
+    height: 26px;
+    vertical-align: middle;
+}
+
+#table-partidas-conceptos input,
+#table-proveedor-claves input {
+    font-size: 11px;
+    padding: 2px 4px;
+    height: 22px;
+}
+
+#table-partidas-conceptos tfoot td,
+#table-proveedor-claves tfoot td {
+    padding: 5px 8px;
+    font-size: 11px;
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    background-color: #F1F5F9;
+    border-top: 2px solid #CBD5E1;
+}
+
+.op-wizard-footer {
+    margin-top: 8px;
+    padding-top: 6px;
+}
+
+/* Minimalist Step 3 (Subir Documentos) */
+#op-step-pane-3 .op-step-heading {
+    display: none;
+}
+
+#op-step-pane-3 .op-summary-badges-grid {
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+#op-step-pane-3 .op-badge-card {
+    padding: 8px 12px;
+    gap: 10px;
+    border-radius: 8px;
+}
+
+#op-step-pane-3 .op-badge-card .badge-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+}
+
+#op-step-pane-3 .op-badge-card .badge-icon .material-symbols-outlined {
+    font-size: 16px;
+}
+
+#op-step-pane-3 .op-badge-card .badge-label {
+    font-size: 10px;
+}
+
+#op-step-pane-3 .op-badge-card .badge-val {
+    font-size: 12px;
+}
+
+#op-step-pane-3 .op-doc-banner {
+    padding: 8px 14px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+}
+
+#op-step-pane-3 .op-doc-banner .banner-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+}
+
+#op-step-pane-3 .op-doc-banner .banner-icon .material-symbols-outlined {
+    font-size: 18px;
+}
+
+#op-step-pane-3 .op-doc-banner h3 {
+    font-size: 13px;
+    margin: 0;
+}
+
+#op-step-pane-3 .op-doc-banner p {
+    font-size: 10px;
+    color: #64748B;
+}
+
+#op-step-pane-3 .progress-info span {
+    font-size: 10px;
+    margin-bottom: 3px;
+}
+
+#op-step-pane-3 .progress-bar-wrap {
+    width: 140px;
+    height: 6px;
+}
+
+#op-step-pane-3 .op-docs-columns-grid {
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+#op-step-pane-3 .doc-column-card {
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+}
+
+#op-step-pane-3 .doc-column-card .column-header {
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+#op-step-pane-3 .doc-column-card .column-header h3 {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#op-step-pane-3 .doc-column-card .column-header .material-symbols-outlined {
+    font-size: 18px;
+}
+
+#op-step-pane-3 .doc-item-card {
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+    border: 1px solid #E2E8F0;
+    box-shadow: none;
+}
+
+#op-step-pane-3 .doc-item-info .doc-title {
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#op-step-pane-3 .doc-item-info .doc-sub {
+    display: none;
+}
+
+#op-step-pane-3 .doc-item-actions {
+    gap: 8px;
+}
+
+#op-step-pane-3 .doc-item-actions .btn {
+    font-size: 10px;
+    padding: 2px 8px;
+    height: 24px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+#op-step-pane-3 .doc-item-actions .btn .material-symbols-outlined {
+    font-size: 14px;
+}
+
+#op-step-pane-3 .doc-status-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+    border-radius: 4px;
+}
+
+
+
 
