@@ -448,8 +448,8 @@ window.setRole = function(role) {
         if (newTaskCard) newTaskCard.style.display = "block";
         if (tasksControlPanel) tasksControlPanel.style.display = "flex";
         if (tasksLayout) tasksLayout.classList.remove("full-width-tasks");
-        if (sidebarAdminItem) sidebarAdminItem.style.display = "list-item";
-        if (sidebarUsersItem) sidebarUsersItem.style.display = "list-item";
+        if (sidebarAdminItem) sidebarAdminItem.style.display = "flex";
+        if (sidebarUsersItem) sidebarUsersItem.style.display = "flex";
         if (adminWorkspace) adminWorkspace.style.display = "block";
         if (adminLockScreen) adminLockScreen.style.display = "none";
         if (btnCreateGroup) btnCreateGroup.style.display = "inline-flex";
@@ -458,7 +458,7 @@ window.setRole = function(role) {
         if (newTaskCard) newTaskCard.style.display = "none";
         if (tasksControlPanel) tasksControlPanel.style.display = "none";
         if (tasksLayout) tasksLayout.classList.add("full-width-tasks");
-        if (sidebarAdminItem) sidebarAdminItem.style.display = "list-item";
+        if (sidebarAdminItem) sidebarAdminItem.style.display = "flex";
         if (sidebarUsersItem) sidebarUsersItem.style.display = "none";
         if (adminWorkspace) adminWorkspace.style.display = "block";
         if (adminLockScreen) adminLockScreen.style.display = "none";
@@ -663,7 +663,10 @@ window.switchAdminFicha = function(fichaName) {
     document.querySelectorAll(".admin-subpane").forEach(pane => pane.classList.remove("active"));
     const subpane = document.getElementById(`admin-subpane-${fichaName}`);
     if (subpane) subpane.classList.add("active");
-    
+
+    const topbarBack = document.getElementById("op-detail-topbar");
+    if (topbarBack && fichaName !== 'operaciones') topbarBack.style.display = "none";
+
     renderAdministracion();
 };
 
@@ -6399,30 +6402,22 @@ window.openOperacionesDetail = function(projectId) {
     if (!p) return;
 
     appState.activeOperacionesProjectId = p.id;
+    appState.contenedoresPage = 0;
 
     const listPane = document.getElementById("operaciones-view-list");
     const detailPane = document.getElementById("operaciones-view-detail");
+    const topbarBack = document.getElementById("op-detail-topbar");
 
     if (listPane) listPane.style.display = "none";
     if (detailPane) detailPane.style.display = "block";
+    if (topbarBack) topbarBack.style.display = "block";
 
-    // Populate Step 1 (Datos de proyecto)
-    const servicioEl = document.getElementById("op-step1-servicio-name");
+    // Populate Step 1 (Datos de proyecto - Factura y Orden de Compra)
     const facturaNumEl = document.getElementById("op-step1-factura-num");
-    const termEl = document.getElementById("op-viaje-terminal");
-    const mblEl = document.getElementById("op-viaje-mbl");
-    const destEl = document.getElementById("op-viaje-destino");
-    const obsEl = document.getElementById("op-viaje-observaciones");
+    const ocNumEl = document.getElementById("op-step1-oc-num");
 
-    if (servicioEl) servicioEl.innerText = p.servicioName || "Servicio foráneo de contenedores";
     if (facturaNumEl) facturaNumEl.value = p.numFactura || "F20059";
-
-    if (p.infoViaje) {
-        if (termEl) termEl.value = p.infoViaje.terminal || "";
-        if (mblEl) mblEl.value = p.infoViaje.mblMawb || "";
-        if (destEl) destEl.value = p.infoViaje.destino || "";
-        if (obsEl) obsEl.value = p.infoViaje.observaciones || "";
-    }
+    if (ocNumEl) ocNumEl.value = p.numOC || "12556";
 
     renderContenedoresCards(p);
 
@@ -6443,9 +6438,11 @@ window.openOperacionesDetail = function(projectId) {
 window.closeOperacionesDetail = function() {
     const listPane = document.getElementById("operaciones-view-list");
     const detailPane = document.getElementById("operaciones-view-detail");
+    const topbarBack = document.getElementById("op-detail-topbar");
 
     if (listPane) listPane.style.display = "block";
     if (detailPane) detailPane.style.display = "none";
+    if (topbarBack) topbarBack.style.display = "none";
 
     renderOperaciones();
 };
@@ -6480,9 +6477,37 @@ window.goToOperacionesStep = function(stepNum) {
     if (p) p.currentStep = stepNum;
 };
 
+window.changeContenedoresPage = function(delta) {
+    if (appState.contenedoresPage === undefined) appState.contenedoresPage = 0;
+    appState.contenedoresPage += delta;
+    if (appState.contenedoresPage < 0) appState.contenedoresPage = 0;
+    
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (p) {
+        renderContenedoresCards(p);
+    }
+};
+
+window.updateProjectHeaderField = function(key, val) {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) return;
+    p[key] = val;
+
+    if (key === 'numFactura') {
+        document.querySelectorAll("#op-step2-num-factura, #op-step3-num-factura").forEach(el => el.innerText = val || "F20059");
+    }
+    if (key === 'numOC') {
+        document.querySelectorAll("#op-step2-num-oc, #op-step3-num-oc").forEach(el => el.innerText = val || "12556");
+    }
+
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+};
+
 function renderContenedoresCards(p) {
     const container = document.getElementById("op-contenedores-container");
     if (!container) return;
+
+    if (appState.contenedoresPage === undefined) appState.contenedoresPage = 0;
 
     let list = p.contenedores;
     if (!list || list.length === 0) {
@@ -6498,7 +6523,14 @@ function renderContenedoresCards(p) {
         p.contenedores = list;
     }
 
-    container.innerHTML = list.map(c => `
+    const itemsPerPage = 4;
+    const totalPages = Math.max(1, Math.ceil(list.length / itemsPerPage));
+    if (appState.contenedoresPage >= totalPages) appState.contenedoresPage = totalPages - 1;
+
+    const startIdx = appState.contenedoresPage * itemsPerPage;
+    const pageItems = list.slice(startIdx, startIdx + itemsPerPage);
+
+    container.innerHTML = pageItems.map(c => `
         <div class="contenedor-card">
             <div class="contenedor-card-header">
                 <div class="contenedor-num-badge">${c.id}</div>
@@ -6519,19 +6551,31 @@ function renderContenedoresCards(p) {
                 </div>
                 <div>
                     <label>EIR impreso</label>
-                    <input type="text" value="${c.eirImpreso || ''}" placeholder="Escribe número..." oninput="updateContenedorField(${c.id}, 'eirImpreso', this.value)" />
+                    <input type="text" value="${c.eirImpreso || ''}" placeholder="Escribe número o referencia..." oninput="updateContenedorField(${c.id}, 'eirImpreso', this.value)" />
                 </div>
-                <div>
+                <div class="field-wide">
                     <label>Pod sellado</label>
                     <input type="text" value="${c.podSellado || ''}" placeholder="Selecciona o escribe..." oninput="updateContenedorField(${c.id}, 'podSellado', this.value)" />
                 </div>
-                <div>
+                <div class="field-wide">
                     <label>Entrega de vacío</label>
                     <input type="text" value="${c.entregaVacio || ''}" placeholder="Selecciona o escribe..." oninput="updateContenedorField(${c.id}, 'entregaVacio', this.value)" />
                 </div>
             </div>
         </div>
     `).join('');
+
+    // Update nav buttons and indicator
+    const prevBtn = document.getElementById("op-contenedores-prev-btn");
+    const nextBtn = document.getElementById("op-contenedores-next-btn");
+    const indicator = document.getElementById("op-contenedores-page-indicator");
+
+    if (prevBtn) prevBtn.disabled = appState.contenedoresPage === 0;
+    if (nextBtn) nextBtn.disabled = appState.contenedoresPage >= totalPages - 1;
+
+    if (indicator) {
+        indicator.innerHTML = `<strong>Página ${appState.contenedoresPage + 1} de ${totalPages}</strong> (${list.length} contenedores registrados)`;
+    }
 }
 
 window.updateContenedorField = function(cId, key, val) {

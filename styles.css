@@ -166,8 +166,10 @@ body::before {
 
 .sidebar-nav li {
     width: 100%;
-    display: flex;
-    justify-content: center;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    margin: 0 auto !important;
 }
 
 .nav-item {
@@ -5197,9 +5199,9 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     justify-content: space-between;
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
-    border-radius: 16px;
-    padding: 14px 32px;
-    margin-bottom: 24px;
+    border-radius: 12px;
+    padding: 8px 24px;
+    margin-bottom: 10px;
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
 }
 
@@ -5212,12 +5214,12 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 }
 
 .stepper-step .step-number {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     background: #F1F5F9;
     color: #64748B;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     display: flex;
     align-items: center;
@@ -5225,7 +5227,7 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 }
 
 .stepper-step .step-title {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     color: #64748B;
 }
@@ -5257,10 +5259,68 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 }
 
 .op-step-heading {
-    font-size: 22px;
+    font-size: 15px;
     font-weight: 800;
     color: #0F172A;
-    margin: 0 0 20px 0;
+    margin: 0 0 8px 0;
+}
+
+/* Header Inputs Bar (Número de Factura y Orden de Compra) */
+.op-header-inputs-bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 8px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.op-header-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.op-header-field label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #2563EB;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.op-header-field label .icon-sm {
+    font-size: 16px;
+    color: #2563EB;
+}
+
+.op-input-header {
+    background: #F8FAFC;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 4px 8px;
+    height: 28px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #0F172A;
+    outline: none;
+    width: 140px;
+    box-sizing: border-box;
+}
+
+.op-input-header:focus {
+    border-color: #2563EB;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.op-header-actions {
+    margin-left: auto;
 }
 
 /* Service Banner (Imagen 3) */
@@ -5369,31 +5429,83 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     box-sizing: border-box;
 }
 
+/* Contenedores Slider Wrapper y Botones Rectangulares Laterales */
+.contenedores-slider-wrapper {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 8px;
+    width: 100%;
+}
+
+.contenedor-nav-rect {
+    width: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #FFFFFF;
+    border: 1.5px solid #CBD5E1;
+    border-radius: 10px;
+    cursor: pointer;
+    color: #2563EB;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.contenedor-nav-rect:hover:not(:disabled) {
+    background: #2563EB;
+    color: #FFFFFF;
+    border-color: #2563EB;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.28);
+}
+
+.contenedor-nav-rect:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    background: #F8FAFC;
+    color: #94A3B8;
+    border-color: #E2E8F0;
+    box-shadow: none;
+}
+
+.contenedor-nav-rect .material-symbols-outlined {
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.contenedores-page-indicator {
+    font-size: 12px;
+    color: #475569;
+}
+
 /* Contenedores Grid (Imagen 3) */
 .contenedores-grid-container {
+    flex: 1;
+    min-width: 0;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
 }
 
 .contenedor-card {
-    background: #EAF4FF;
-    border: 1px solid #C4E1FD;
-    border-radius: 14px;
-    padding: 16px;
+    background: #EBF5FF;
+    border: 1px solid #D0E4FF;
+    border-radius: 10px;
+    padding: 8px 12px 10px 12px;
+    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.04);
 }
 
 .contenedor-card-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
 }
 
 .contenedor-num-badge {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: #0084FF;
     color: #FFFFFF;
@@ -5412,21 +5524,27 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 
 .contenedor-fields-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px 8px;
+}
+
+.contenedor-fields-grid .field-wide {
+    grid-column: span 2;
 }
 
 .contenedor-fields-grid label {
     font-size: 10px;
     font-weight: 700;
-    color: #475569;
+    color: #2563EB;
     display: block;
     margin-bottom: 2px;
+    white-space: nowrap;
 }
 
 .contenedor-fields-grid input {
     width: 100%;
-    padding: 6px 8px;
+    padding: 4px 8px;
+    height: 28px;
     background: #FFFFFF;
     border: 1px solid #CBD5E1;
     border-radius: 6px;
@@ -5434,6 +5552,11 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     color: #0F172A;
     outline: none;
     box-sizing: border-box;
+}
+
+.contenedor-fields-grid input:focus {
+    border-color: #2563EB;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
 /* Summary Badges Grid (Imagenes 4 y 5) */
@@ -5630,8 +5753,8 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 28px;
-    padding-top: 20px;
+    margin-top: 10px;
+    padding-top: 10px;
     border-top: 1px solid #E2E8F0;
 }
 
@@ -5639,14 +5762,14 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     background: #091E42;
     color: #FFFFFF;
     font-weight: 700;
-    font-size: 13px;
-    padding: 12px 24px;
-    border-radius: 10px;
+    font-size: 12px;
+    padding: 8px 18px;
+    border-radius: 8px;
     border: none;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 .btn-next-step:hover {

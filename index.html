@@ -664,6 +664,13 @@
                     <!-- Manager Workspace -->
                     <div id="administracion-manager-workspace" style="display: block;">
                         
+                        <!-- Back Navigation Header (Shown when viewing project detail in Operaciones) -->
+                        <div class="operaciones-detail-topbar" id="op-detail-topbar" style="display: none; margin-bottom: 16px;">
+                            <button class="btn-back-operaciones" onclick="closeOperacionesDetail()">
+                                <span class="material-symbols-outlined">arrow_back</span> Volver a Operaciones
+                            </button>
+                        </div>
+
                         <!-- 3 Main Interactive Fichas Selection Header -->
                         <div class="admin-fichas-nav">
                             <button class="admin-ficha-card active" id="ficha-btn-visualizacion" onclick="switchAdminFicha('visualizacion')">
@@ -1139,12 +1146,6 @@
                             
                             <!-- SUB-VISTA A: LISTA DE OPERACIONES / PROYECTOS (Imagen 2) -->
                             <div id="operaciones-view-list" class="operaciones-subview active">
-                                <div class="operaciones-header-flex">
-                                    <div>
-                                        <h1 class="operaciones-title">Operaciones</h1>
-                                        <p class="operaciones-subtitle">Selecciona un proyecto para continuar</p>
-                                    </div>
-                                </div>
 
                                 <!-- 3 KPIs Cards Header -->
                                 <div class="operaciones-kpis-grid">
@@ -1224,13 +1225,6 @@
 
                             <!-- SUB-VISTA B: DETALLE DE PROYECTO - MULTI-STEP WIZARD (Imagenes 3, 4, 5) -->
                             <div id="operaciones-view-detail" class="operaciones-subview" style="display: none;">
-                                
-                                <!-- Back Navigation Header -->
-                                <div class="operaciones-detail-topbar">
-                                    <button class="btn-back-operaciones" onclick="closeOperacionesDetail()">
-                                        <span class="material-symbols-outlined">arrow_back</span> Volver a Operaciones
-                                    </button>
-                                </div>
 
                                 <!-- Stepper Wizard Header (4 Steps) -->
                                 <div class="operaciones-stepper-container">
@@ -1255,57 +1249,48 @@
                                     </div>
                                 </div>
 
-                                <!-- STEP 1: DATOS DE PROYECTO (Imagen 3) -->
-                                <div class="op-step-pane active" id="op-step-pane-1">
-                                    <h2 class="op-step-heading">Documentos operativos</h2>
-                                    
-                                    <!-- Service Banner Card -->
-                                    <div class="card op-service-banner">
-                                        <div class="banner-left">
-                                            <div class="banner-icon"><span class="material-symbols-outlined">description</span></div>
-                                            <span class="banner-service-name" id="op-step1-servicio-name">Servicio foráneo de contenedores</span>
+                                    <!-- Seccion Datos Principales: Número de Factura y Orden de Compra -->
+                                    <div class="op-header-inputs-bar">
+                                        <div class="op-header-field">
+                                            <label for="op-step1-factura-num">
+                                                <span class="material-symbols-outlined icon-sm">receipt</span> Número de factura:
+                                            </label>
+                                            <input type="text" id="op-step1-factura-num" class="op-input-header" placeholder="Ej. F20059" oninput="updateProjectHeaderField('numFactura', this.value)">
                                         </div>
-                                        <div class="banner-center">
-                                            <label>Factura #</label>
-                                            <input type="text" id="op-step1-factura-num" value="F20059" class="input-factura-header" />
+                                        
+                                        <div class="op-header-field">
+                                            <label for="op-step1-oc-num">
+                                                <span class="material-symbols-outlined icon-sm">assignment</span> Orden de compra (OC):
+                                            </label>
+                                            <input type="text" id="op-step1-oc-num" class="op-input-header" placeholder="Ej. 12556" oninput="updateProjectHeaderField('numOC', this.value)">
                                         </div>
-                                        <div class="banner-right">
-                                            <button class="btn btn-outline-primary" onclick="addContenedorToActiveProject()">
+
+                                        <div class="op-header-actions">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="addContenedorToActiveProject()">
                                                 <span class="material-symbols-outlined">add</span> Agregar contenedor
                                             </button>
                                         </div>
                                     </div>
 
-                                    <!-- Información General del Viaje -->
-                                    <div class="card op-info-viaje-card">
-                                        <h3 class="section-subheading">Información general del viaje</h3>
-                                        <div class="info-viaje-grid">
-                                            <div class="form-group">
-                                                <label>Terminal</label>
-                                                <input type="text" id="op-viaje-terminal" placeholder="Selecciona o escribe..." />
-                                            </div>
-                                            <div class="form-group">
-                                                <label>MBL / MAWB</label>
-                                                <input type="text" id="op-viaje-mbl" placeholder="Ingresa MBL / MAWB" />
-                                            </div>
-                                            <div class="form-group">
-                                                <label>Destino</label>
-                                                <input type="text" id="op-viaje-destino" placeholder="Selecciona o escribe..." />
-                                            </div>
-                                            <div class="form-group full-width">
-                                                <label>Observaciones</label>
-                                                <textarea id="op-viaje-observaciones" rows="2" placeholder="Escribe observaciones..."></textarea>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <!-- Contenedores Grid con Navegación Lateral por Páginas de 4 Fichas -->
+                                    <div class="contenedores-slider-wrapper">
+                                        <button class="contenedor-nav-rect prev-rect" id="op-contenedores-prev-btn" onclick="changeContenedoresPage(-1)" title="Página anterior">
+                                            <span class="material-symbols-outlined">chevron_left</span>
+                                        </button>
 
-                                    <!-- Contenedores Grid -->
-                                    <div class="contenedores-grid-container" id="op-contenedores-container">
-                                        <!-- Rendered dynamically by JS -->
+                                        <div class="contenedores-grid-container" id="op-contenedores-container">
+                                            <!-- Rendered dynamically by JS (4 cards max) -->
+                                        </div>
+
+                                        <button class="contenedor-nav-rect next-rect" id="op-contenedores-next-btn" onclick="changeContenedoresPage(1)" title="Página siguiente">
+                                            <span class="material-symbols-outlined">chevron_right</span>
+                                        </button>
                                     </div>
 
                                     <div class="op-wizard-footer">
-                                        <div></div>
+                                        <div class="contenedores-page-indicator" id="op-contenedores-page-indicator">
+                                            <!-- Page indicator rendered dynamically by JS -->
+                                        </div>
                                         <button class="btn btn-primary btn-next-step" onclick="goToOperacionesStep(2)">
                                             Guardar y continuar <span class="material-symbols-outlined">arrow_forward</span>
                                         </button>
