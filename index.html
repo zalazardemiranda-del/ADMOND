@@ -1201,6 +1201,9 @@
                                     </button>
                                 </div>
 
+                                <!-- Container for Month-End Warning Banner (Días 20 a 30/31) -->
+                                <div id="op-month-end-banner-wrap" style="display: none;"></div>
+
                                 <!-- Table: Proyectos registrados -->
                                 <div class="card operaciones-table-card">
                                     <h3 class="operaciones-table-title">Proyectos registrados</h3>
@@ -1243,7 +1246,7 @@
                                         <span class="step-title">Documentos</span>
                                     </div>
                                     <div class="stepper-line"></div>
-                                    <div class="stepper-step disabled" id="op-step-indicator-4">
+                                    <div class="stepper-step" id="op-step-indicator-4" onclick="goToOperacionesStep(4)">
                                         <div class="step-number">4</div>
                                         <span class="step-title">Facturación</span>
                                     </div>
@@ -1387,6 +1390,9 @@
                                                             <span class="material-symbols-outlined title-icon">store</span>
                                                             <h3>Proveedor y claves de compra</h3>
                                                         </div>
+                                                        <button class="btn btn-outline-primary btn-sm" onclick="addProveedorClavesRow()">
+                                                            <span class="material-symbols-outlined">add</span> Agregar proveedor
+                                                        </button>
                                                     </div>
 
                                                     <div class="table-responsive">
@@ -1578,9 +1584,58 @@
                                         <button class="btn btn-secondary" onclick="goToOperacionesStep(2)">
                                             <span class="material-symbols-outlined">arrow_back</span> Anterior
                                         </button>
-                                        <button class="btn btn-primary btn-next-step" onclick="finishOperacionesWizard()">
-                                            Guardar y continuar <span class="material-symbols-outlined">arrow_forward</span>
+                                        <button class="btn btn-primary btn-next-step" onclick="goToOperacionesStep(4)">
+                                            Pasar a Facturación <span class="material-symbols-outlined">arrow_forward</span>
                                         </button>
+                                    </div>
+                                </div>
+
+                                <!-- STEP 4: FACTURACIÓN -->
+                                <div class="op-step-pane" id="op-step-pane-4" style="display: none;">
+                                    <h2 class="op-step-heading">Facturación y Cierre de Expediente</h2>
+
+                                    <!-- 3 Top Summary Badges -->
+                                    <div class="op-summary-badges-grid">
+                                        <div class="card op-badge-card">
+                                            <div class="badge-icon"><span class="material-symbols-outlined">folder</span></div>
+                                            <div class="badge-text">
+                                                <span class="badge-label">Número de proyecto:</span>
+                                                <strong class="badge-val" id="op-step4-num-proyecto">RDP-2608XXXX</strong>
+                                            </div>
+                                        </div>
+                                        <div class="card op-badge-card">
+                                            <div class="badge-icon"><span class="material-symbols-outlined">receipt</span></div>
+                                            <div class="badge-text">
+                                                <span class="badge-label">Número de factura:</span>
+                                                <strong class="badge-val" id="op-step4-num-factura">F20059</strong>
+                                            </div>
+                                        </div>
+                                        <div class="card op-badge-card">
+                                            <div class="badge-icon"><span class="material-symbols-outlined">assignment</span></div>
+                                            <div class="badge-text">
+                                                <span class="badge-label">Número de OC:</span>
+                                                <strong class="badge-val" id="op-step4-num-oc">12556</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="card op-section-card" style="padding: 32px 24px; text-align: center;">
+                                        <div style="width: 64px; height: 64px; background: #DCFCE7; color: #166534; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto; box-shadow: 0 4px 12px rgba(22, 101, 52, 0.15);">
+                                            <span class="material-symbols-outlined" style="font-size: 36px;">verified</span>
+                                        </div>
+                                        <h3 style="font-size: 20px; font-weight: 800; color: #0F172A; margin: 0 0 8px 0;">Expediente Validado para Facturación</h3>
+                                        <p style="font-size: 14px; color: #64748B; max-width: 540px; margin: 0 auto 24px auto; line-height: 1.5;">
+                                            Se han verificado correctamente los requisitos obligatorios: Número de Factura, Orden de Compra (OC) y datos de Proveedor / Claves de compra.
+                                        </p>
+
+                                        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                                            <button class="btn btn-secondary" onclick="goToOperacionesStep(3)">
+                                                <span class="material-symbols-outlined">arrow_back</span> Regresar a Documentos
+                                            </button>
+                                            <button class="btn btn-primary" style="background: #10B981; border-color: #10B981; padding: 10px 24px; font-weight: 700;" onclick="finishOperacionesWizard()">
+                                                <span class="material-symbols-outlined">check_circle</span> Cerrar y Finalizar Expediente
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 

@@ -5142,6 +5142,20 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     color: #854D0E;
 }
 
+.op-status-badge.PRIORIDAD,
+.op-status-badge.PENDIENTE_PRIORIDAD {
+    background: #FEE2E2;
+    color: #DC2626;
+    border: 1px solid #FCA5A5;
+    animation: pulsePriority 2s infinite;
+}
+
+@keyframes pulsePriority {
+    0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
 .op-status-badge.ABIERTO {
     background: #E0F2FE;
     color: #0284C7;
@@ -5150,6 +5164,29 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 .op-status-badge.CERRADO {
     background: #DCFCE7;
     color: #166534;
+}
+
+/* Banner de Advertencia de Cierre de Mes (10 días antes del 30/31) */
+.month-end-warning-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #FFFBEB;
+    border: 1.5px solid #F59E0B;
+    border-radius: 12px;
+    padding: 14px 20px;
+    margin-bottom: 20px;
+    color: #92400E;
+    font-size: 13px;
+    line-height: 1.4;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.12);
+}
+
+.month-end-warning-banner.critical {
+    background: #FEF2F2;
+    border-color: #EF4444;
+    color: #991B1B;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.15);
 }
 
 .btn-op-abrir {

@@ -6211,14 +6211,33 @@ window.sendQuickReply = async function() {
 // ---------------------------------------------------------------------------------
 const defaultOperacionesProyectos = [
     {
+        id: 'RDP-1130XXXX',
+        numProyecto: 'RDP-1130XXXX',
+        fechaInicio: '2026-09-16',
+        fechaInicioDisplay: '16/09/2026',
+        factura: 'FAC4997',
+        numFactura: '',
+        numOC: '',
+        estatus: 'PENDIENTE',
+        currentStep: 1,
+        servicioName: 'Servicio foráneo de contenedores',
+        infoViaje: { terminal: 'Manzanillo Terminal 1', mblMawb: 'MBL-99283411', destino: 'Querétaro Hub', observaciones: 'Carga prioritaria' },
+        contenedores: [],
+        partidasConceptos: [],
+        proveedoresClaves: [
+            { proveedor: 'EN ESTA SECCION SE AÑADE EL PROVEEDOR POR RAZON SOCIAL', facturaNum: 'UN EXPEDIENTE NO PUEDE CERRAR EL MES SIN QUE LAS SECCIONES EN AMARILLO QUEDEN COMPLETAS', num: 1, concepto: 'SECCION PARA SELECCIONAR claves de compra', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 }
+        ],
+        documentos: {}
+    },
+    {
         id: 'RDP-2608XXXX',
         numProyecto: 'RDP-2608XXXX',
-        fechaInicio: '2027-03-20',
-        fechaInicioDisplay: '20/03/2027',
+        fechaInicio: '2026-09-12',
+        fechaInicioDisplay: '12/09/2026',
         factura: 'FODP1258',
         numFactura: 'F20059',
         numOC: '12556',
-        estatus: 'PENDIENTE',
+        estatus: 'ABIERTO',
         currentStep: 1,
         servicioName: 'Servicio foráneo de contenedores',
         infoViaje: {
@@ -6244,25 +6263,21 @@ const defaultOperacionesProyectos = [
             { servicio: '', num: 5, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 }
         ],
         proveedoresClaves: [
-            { proveedor: 'EN ESTA SECCION SE AÑADE EL PROVEEDOR POR RAZON SOCIAL', facturaNum: 'UN EXPEDIENTE NO PUEDE CERRAR EL MES SIN QUE LAS SECCIONES EN AMARILLO QUEDEN COMPLETAS', num: 1, concepto: 'SECCION PARA SELECCIONAR claves de compra', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 }
+            { proveedor: 'Transportes Express S.A.', facturaNum: 'FAC-9921', num: 1, concepto: 'Flete terrestre Manzanillo-QRO', cantidad: 1, unitario: 25000, subtotal: 25000, iva: 4000, retencion: 0, total: 29000 }
         ],
         documentos: {
-            factura1: { uploaded: false, fileName: '' },
+            factura1: { uploaded: true, fileName: 'Factura-FAC9921.pdf' },
             factura2: { uploaded: false, fileName: '' },
             factura3: { uploaded: false, fileName: '' },
-            pod1: { uploaded: false, fileName: '' },
+            pod1: { uploaded: true, fileName: 'POD-Contenedor1.pdf' },
             pod2: { uploaded: false, fileName: '' }
         }
     },
     {
         id: 'RDP-1407XXXX',
         numProyecto: 'RDP-1407XXXX',
-        fechaInicio: '2027-02-15',
-        fechaInicioDisplay: '15/02/2027',
+        fechaInicio: '2026-09-14',
+        fechaInicioDisplay: '14/09/2026',
         factura: 'FACP3091',
         numFactura: 'F20060',
         numOC: '12557',
@@ -6272,19 +6287,19 @@ const defaultOperacionesProyectos = [
     {
         id: 'RDP-3301XXXX',
         numProyecto: 'RDP-3301XXXX',
-        fechaInicio: '2027-01-08',
-        fechaInicioDisplay: '08/01/2027',
+        fechaInicio: '2026-08-01',
+        fechaInicioDisplay: '01/08/2026',
         factura: 'FACX7710',
         numFactura: 'F20061',
         numOC: '12558',
         estatus: 'CERRADO',
-        currentStep: 1
+        currentStep: 4
     },
     {
         id: 'RDP-0911XXXX',
         numProyecto: 'RDP-0911XXXX',
-        fechaInicio: '2026-11-12',
-        fechaInicioDisplay: '12/11/2026',
+        fechaInicio: '2026-09-10',
+        fechaInicioDisplay: '10/09/2026',
         factura: 'FODP6622',
         numFactura: 'F20062',
         numOC: '12559',
@@ -6300,20 +6315,123 @@ const defaultOperacionesProyectos = [
         numFactura: 'F20063',
         numOC: '12560',
         estatus: 'CERRADO',
-        currentStep: 1
-    },
-    {
-        id: 'RDP-2104XXXX',
-        numProyecto: 'RDP-2104XXXX',
-        fechaInicio: '2026-04-21',
-        fechaInicioDisplay: '21/04/2026',
-        factura: 'FODP9903',
-        numFactura: 'F20064',
-        numOC: '12561',
-        estatus: 'ABIERTO',
-        currentStep: 1
+        currentStep: 4
     }
 ];
+
+// Helper: Validar requisitos para avanzar a Facturación (Paso 4)
+window.validateProjectForFacturacion = function(p) {
+    const errors = [];
+    if (!p) return { valid: false, errors: ["No hay expediente activo seleccionado."] };
+
+    const numFactura = (p.numFactura || '').trim();
+    const numOC = (p.numOC || '').trim();
+
+    if (!numFactura) {
+        errors.push("El campo 'Número de factura' (Paso 1) debe estar lleno.");
+    }
+    if (!numOC) {
+        errors.push("El campo 'Número de OC' (Paso 1) debe estar lleno.");
+    }
+
+    // Validar tabla de proveedores y claves de compra (Paso 2, Página 2)
+    const provList = p.proveedoresClaves || [];
+    let hasCompleteProvRow = false;
+
+    provList.forEach((row) => {
+        const prov = (row.proveedor || '').trim();
+        const fac = (row.facturaNum || '').trim();
+        const con = (row.concepto || '').trim();
+
+        const isProvValid = prov && !prov.includes("EN ESTA SECCION SE AÑADE");
+        const isFacValid = fac && !fac.includes("UN EXPEDIENTE NO PUEDE CERRAR");
+        const isConValid = con && !con.includes("SECCION PARA SELECCIONAR");
+
+        if (isProvValid && isFacValid && isConValid) {
+            hasCompleteProvRow = true;
+        }
+    });
+
+    if (!hasCompleteProvRow) {
+        errors.push("La tabla 'Proveedor y claves de compra' (Paso 2, Pág. 2) requiere al menos 1 proveedor con Razón Social, Factura # y Concepto completos.");
+    }
+
+    return {
+        valid: errors.length === 0,
+        errors: errors
+    };
+};
+
+// Helper: Calcular estatus del expediente (CERRADO, ABIERTO, PENDIENTE o PRIORIDAD [Rojo])
+window.computeProjectStatus = function(p) {
+    if (p.estatus === 'CERRADO') {
+        return 'CERRADO';
+    }
+
+    const valResult = validateProjectForFacturacion(p);
+    if (valResult.valid) {
+        return p.estatus === 'ABIERTO' || p.estatus === 'CERRADO' ? p.estatus : 'ABIERTO';
+    }
+
+    // Incompleto -> Verificar antigüedad desde la fecha de apertura
+    let startDate = null;
+    if (p.fechaInicio) {
+        startDate = new Date(p.fechaInicio);
+    } else if (p.fechaInicioDisplay) {
+        const parts = p.fechaInicioDisplay.split('/');
+        if (parts.length === 3) {
+            startDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+        }
+    }
+
+    if (startDate && !isNaN(startDate.getTime())) {
+        const today = new Date();
+        const d1 = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+        const d2 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const diffDays = Math.floor((d2 - d1) / (1000 * 60 * 60 * 24));
+
+        // Regla: Si transcurren 3 o más días sin cerrar, el estatus pasa a PRIORIDAD (Rojo)
+        if (diffDays >= 3) {
+            return 'PRIORIDAD';
+        }
+    }
+
+    return 'PENDIENTE';
+};
+
+// Helper: Banner de Advertencia de Cierre de Mes (Días 20 al 30/31 del mes)
+window.renderMonthEndWarning = function(proyectos) {
+    const bannerWrap = document.getElementById("op-month-end-banner-wrap");
+    if (!bannerWrap) return;
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const day = today.getDate();
+
+    const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysRemaining = totalDaysInMonth - day;
+
+    // Detectar 10 días antes del fin de mes (a partir del día 20 o 21)
+    if (daysRemaining <= 10 && daysRemaining >= 0) {
+        const pendingCount = (proyectos || []).filter(p => p.estatus === 'PENDIENTE' || p.estatus === 'PRIORIDAD' || p.estatus === 'ABIERTO').length;
+        if (pendingCount > 0) {
+            bannerWrap.innerHTML = `
+                <div class="month-end-warning-banner ${daysRemaining <= 5 ? 'critical' : ''}">
+                    <span class="material-symbols-outlined" style="font-size: 28px;">warning_amber</span>
+                    <div>
+                        <strong style="font-size: 14px;">⚠️ ADVERTENCIA DE CIERRE DE MES (Fecha: ${day}/${month + 1}/${year}):</strong><br>
+                        Faltan <strong>${daysRemaining} días</strong> para el día ${totalDaysInMonth} del mes.
+                        Tienes <strong>${pendingCount} expediente(s) pendientes o abiertos</strong> que el sistema requiere cerrar antes de fin de mes.
+                    </div>
+                </div>
+            `;
+            bannerWrap.style.display = "block";
+            return;
+        }
+    }
+    bannerWrap.style.display = "none";
+};
 
 window.renderOperaciones = function() {
     const listPane = document.getElementById("operaciones-view-list");
@@ -6331,9 +6449,17 @@ window.renderOperaciones = function() {
 
     const proyectos = appState.operacionesProyectos;
 
+    // Actualizar estatus dinámicamente según validación de Facturación y antigüedad de días
+    proyectos.forEach(p => {
+        p.estatus = computeProjectStatus(p);
+    });
+
+    // Renderizar Banner de Advertencia de Cierre de Mes (si faltan 10 días o menos para el 30/31)
+    renderMonthEndWarning(proyectos);
+
     // 1. Métricas KPIs
     const closedCount = proyectos.filter(p => p.estatus === 'CERRADO').length;
-    const openCount = proyectos.filter(p => p.estatus === 'ABIERTO' || p.estatus === 'PENDIENTE').length;
+    const openCount = proyectos.filter(p => p.estatus === 'ABIERTO' || p.estatus === 'PENDIENTE' || p.estatus === 'PRIORIDAD').length;
     const totalCount = proyectos.length;
 
     const closedEl = document.getElementById("op-kpi-closed");
@@ -6372,7 +6498,7 @@ window.renderOperaciones = function() {
         <tr>
             <td><strong>${p.numProyecto}</strong></td>
             <td>${p.fechaInicioDisplay || p.fechaInicio}</td>
-            <td>${p.factura || '-'}</td>
+            <td>${p.factura || p.numFactura || '-'}</td>
             <td><span class="op-status-badge ${p.estatus}">${p.estatus}</span></td>
             <td style="text-align: right;">
                 <button class="btn-op-abrir" onclick="openOperacionesDetail('${p.id}')">
@@ -6417,15 +6543,15 @@ window.openOperacionesDetail = function(projectId) {
     const facturaNumEl = document.getElementById("op-step1-factura-num");
     const ocNumEl = document.getElementById("op-step1-oc-num");
 
-    if (facturaNumEl) facturaNumEl.value = p.numFactura || "F20059";
-    if (ocNumEl) ocNumEl.value = p.numOC || "12556";
+    if (facturaNumEl) facturaNumEl.value = p.numFactura || "";
+    if (ocNumEl) ocNumEl.value = p.numOC || "";
 
     renderContenedoresCards(p);
 
-    // Populate Step 2 (Prefactura)
-    document.querySelectorAll("#op-step2-num-proyecto, #op-step3-num-proyecto").forEach(el => el.innerText = p.numProyecto);
-    document.querySelectorAll("#op-step2-num-factura, #op-step3-num-factura").forEach(el => el.innerText = p.numFactura || p.factura);
-    document.querySelectorAll("#op-step2-num-oc, #op-step3-num-oc").forEach(el => el.innerText = p.numOC || "12556");
+    // Populate Steps 2, 3, 4 Badges
+    document.querySelectorAll("#op-step2-num-proyecto, #op-step3-num-proyecto, #op-step4-num-proyecto").forEach(el => el.innerText = p.numProyecto);
+    document.querySelectorAll("#op-step2-num-factura, #op-step3-num-factura, #op-step4-num-factura").forEach(el => el.innerText = p.numFactura || "(Sin Factura)");
+    document.querySelectorAll("#op-step2-num-oc, #op-step3-num-oc, #op-step4-num-oc").forEach(el => el.innerText = p.numOC || "(Sin OC)");
 
     renderPartidasTable(p);
     renderProveedorClavesTable(p);
@@ -6450,7 +6576,18 @@ window.closeOperacionesDetail = function() {
 };
 
 window.goToOperacionesStep = function(stepNum) {
-    if (stepNum > 3) return; // Restringido solo hasta la sección 3 (Documentos)
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+
+    // Regla 1: Validar requisitos al intentar pasar a Facturación (Paso 4)
+    if (stepNum === 4) {
+        const valResult = validateProjectForFacturacion(p);
+        if (!valResult.valid) {
+            alert("⚠️ No se puede avanzar a Facturación (Paso 4):\n\n" + valResult.errors.map(e => "• " + e).join("\n") + "\n\nEl expediente se mantendrá como PENDIENTE hasta ingresar estos datos.");
+            return;
+        }
+    }
+
+    if (stepNum > 4) return;
 
     document.querySelectorAll(".stepper-step").forEach((el, idx) => {
         const sNum = idx + 1;
@@ -6475,8 +6612,10 @@ window.goToOperacionesStep = function(stepNum) {
         }
     });
 
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
-    if (p) p.currentStep = stepNum;
+    if (p) {
+        p.currentStep = stepNum;
+        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    }
 };
 
 window.changeContenedoresPage = function(delta) {
@@ -6764,21 +6903,76 @@ function renderProveedorClavesTable(p) {
         p.proveedoresClaves = items;
     }
 
-    tbody.innerHTML = items.map((item, idx) => `
-        <tr>
-            <td style="font-size: 11px; font-weight: 700; color: #475569;">${item.proveedor || '<input type="text" placeholder="Proveedor..." style="width:100%; border:none; background:transparent;" />'}</td>
-            <td style="font-size: 11px; color: #64748B;">${item.facturaNum || '<input type="text" placeholder="Factura..." style="width:100%; border:none; background:transparent;" />'}</td>
-            <td style="text-align:center;">${idx + 1}</td>
-            <td style="font-size: 11px; color: #475569;">${item.concepto || '<input type="text" placeholder="Concepto de compra..." style="width:100%; border:none; background:transparent;" />'}</td>
-            <td style="text-align:right;">${item.cantidad || 0}</td>
-            <td style="text-align:right;">$0.00</td>
-            <td style="text-align:right;">$0.00</td>
-            <td style="text-align:right;">$0.00</td>
-            <td style="text-align:right;">$0.00</td>
-            <td style="text-align:right; font-weight:700;">$0.00</td>
-        </tr>
-    `).join('');
+    let totSub = 0, totIva = 0, totRet = 0, totFinal = 0;
+
+    tbody.innerHTML = items.map((item, idx) => {
+        const sub = (item.cantidad || 0) * (item.unitario || 0);
+        const iva = item.iva || (sub * 0.16);
+        const ret = item.retencion || 0;
+        const tot = sub + iva - ret;
+
+        if (item.proveedor || item.facturaNum || item.concepto || item.unitario > 0) {
+            totSub += sub;
+            totIva += iva;
+            totRet += ret;
+            totFinal += tot;
+        }
+
+        const isProvWarn = !item.proveedor || item.proveedor.includes("EN ESTA SECCION");
+        const isFacWarn = !item.facturaNum || item.facturaNum.includes("UN EXPEDIENTE");
+        const isConWarn = !item.concepto || item.concepto.includes("SECCION PARA SELECCIONAR");
+
+        return `
+            <tr>
+                <td style="font-size: 11px; font-weight: 700;">
+                    <input type="text" value="${item.proveedor || ''}" placeholder="Razón social del proveedor..." oninput="updateProveedorClavesField(${idx}, 'proveedor', this.value)" style="width:100%; border:none; background:${isProvWarn ? '#FEF9C3' : 'transparent'}; font-weight: 700; color:#0F172A;" />
+                </td>
+                <td style="font-size: 11px;">
+                    <input type="text" value="${item.facturaNum || ''}" placeholder="Factura #..." oninput="updateProveedorClavesField(${idx}, 'facturaNum', this.value)" style="width:100%; border:none; background:${isFacWarn ? '#FEF9C3' : 'transparent'}; color:#475569;" />
+                </td>
+                <td style="text-align:center;">${idx + 1}</td>
+                <td style="font-size: 11px;">
+                    <input type="text" value="${item.concepto || ''}" placeholder="Concepto / claves de compra..." oninput="updateProveedorClavesField(${idx}, 'concepto', this.value)" style="width:100%; border:none; background:${isConWarn ? '#FEF9C3' : 'transparent'}; color:#475569;" />
+                </td>
+                <td style="text-align:right;"><input type="number" value="${item.cantidad || ''}" oninput="updateProveedorClavesField(${idx}, 'cantidad', this.value)" style="width:50px; text-align:right; border:none; background:transparent;" /></td>
+                <td style="text-align:right;"><input type="number" value="${item.unitario || ''}" oninput="updateProveedorClavesField(${idx}, 'unitario', this.value)" style="width:70px; text-align:right; border:none; background:transparent;" /></td>
+                <td style="text-align:right;">$${sub.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+                <td style="text-align:right;">$${iva.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+                <td style="text-align:right;">$${ret.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+                <td style="text-align:right; font-weight:700;">$${tot.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+            </tr>
+        `;
+    }).join('');
+
+    const subEl = document.getElementById("op-prov-tot-sub");
+    const ivaEl = document.getElementById("op-prov-tot-iva");
+    const retEl = document.getElementById("op-prov-tot-ret");
+    const finEl = document.getElementById("op-prov-tot-final");
+
+    if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2})}`;
+    if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2})}`;
+    if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2})}`;
+    if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2})}`;
 }
+
+window.updateProveedorClavesField = function(idx, key, val) {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p || !p.proveedoresClaves) return;
+    if (p.proveedoresClaves[idx]) {
+        p.proveedoresClaves[idx][key] = (key === 'cantidad' || key === 'unitario') ? parseFloat(val) || 0 : val;
+        renderProveedorClavesTable(p);
+        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    }
+};
+
+window.addProveedorClavesRow = function() {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) return;
+    if (!p.proveedoresClaves) p.proveedoresClaves = [];
+    p.proveedoresClaves.push({ proveedor: '', facturaNum: '', num: p.proveedoresClaves.length + 1, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 });
+    renderProveedorClavesTable(p);
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+};
 
 function renderDocumentosStatus(p) {
     if (!p.documentos) {
@@ -6834,10 +7028,15 @@ window.uploadDocItem = function(docKey) {
 window.finishOperacionesWizard = function() {
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (p) {
-        p.estatus = 'ABIERTO';
+        const valResult = validateProjectForFacturacion(p);
+        if (!valResult.valid) {
+            alert("⚠️ No se puede cerrar el expediente sin los datos completos:\n\n" + valResult.errors.map(e => "• " + e).join("\n"));
+            return;
+        }
+        p.estatus = 'CERRADO';
         localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
     }
-    alert("¡Expediente operativo guardado con éxito!");
+    alert("¡Expediente operativo completado y CERRADO con éxito!");
     closeOperacionesDetail();
 };
 
