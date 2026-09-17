@@ -6225,7 +6225,7 @@ const defaultOperacionesProyectos = [
         contenedores: [],
         partidasConceptos: [],
         proveedoresClaves: [
-            { proveedor: 'EN ESTA SECCION SE AÑADE EL PROVEEDOR POR RAZON SOCIAL', facturaNum: 'UN EXPEDIENTE NO PUEDE CERRAR EL MES SIN QUE LAS SECCIONES EN AMARILLO QUEDEN COMPLETAS', num: 1, concepto: 'SECCION PARA SELECCIONAR claves de compra', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 }
+            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 }
         ],
         documentos: {}
     },
@@ -6894,7 +6894,7 @@ function renderProveedorClavesTable(p) {
     let items = p.proveedoresClaves;
     if (!items || items.length === 0) {
         items = [
-            { proveedor: 'EN ESTA SECCION SE AÑADE EL PROVEEDOR POR RAZON SOCIAL', facturaNum: 'UN EXPEDIENTE NO PUEDE CERRAR EL MES SIN QUE LAS SECCIONES EN AMARILLO QUEDEN COMPLETAS', num: 1, concepto: 'SECCION PARA SELECCIONAR claves de compra', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
             { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
             { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
             { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
@@ -6902,6 +6902,13 @@ function renderProveedorClavesTable(p) {
         ];
         p.proveedoresClaves = items;
     }
+
+    // Limpiar textos por defecto heredados de localStorage o datos semilla
+    items.forEach(item => {
+        if (item.proveedor && item.proveedor.includes("EN ESTA SECCION")) item.proveedor = '';
+        if (item.facturaNum && item.facturaNum.includes("UN EXPEDIENTE")) item.facturaNum = '';
+        if (item.concepto && item.concepto.includes("SECCION PARA SELECCIONAR")) item.concepto = '';
+    });
 
     let totSub = 0, totIva = 0, totRet = 0, totFinal = 0;
 
