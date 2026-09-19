@@ -6256,14 +6256,18 @@ const defaultOperacionesProyectos = [
             { id: 7, label: 'Contenedor 7', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
         ],
         partidasConceptos: [
-            { servicio: 'Coordinación logística claves de venta', num: 1, concepto: 'Coordinación logística claves de venta', cantidad: 1, unitario: 50000, subtotal: 50000, iva: 8000, retencion: 0, total: 58000 },
-            { servicio: '', num: 2, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 3, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 4, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 5, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 }
+            { servicio: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
         ],
         proveedoresClaves: [
-            { proveedor: 'Transportes Express S.A.', facturaNum: 'FAC-9921', num: 1, concepto: 'Flete terrestre Manzanillo-QRO', cantidad: 1, unitario: 25000, subtotal: 25000, iva: 4000, retencion: 0, total: 29000 }
+            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
         ],
         documentos: {
             factura1: { uploaded: true, fileName: 'Factura-FAC9921.pdf' },
@@ -6433,6 +6437,41 @@ window.renderMonthEndWarning = function(proyectos) {
     bannerWrap.style.display = "none";
 };
 
+function cleanOperacionesLegacyData(proyectos) {
+    if (!Array.isArray(proyectos)) return;
+    proyectos.forEach(p => {
+        if (p.partidasConceptos && Array.isArray(p.partidasConceptos)) {
+            p.partidasConceptos.forEach(item => {
+                if (item.servicio && item.servicio.includes("claves de venta") && (item.unitario === 50000 || item.total === 58000)) {
+                    item.servicio = '';
+                    item.concepto = '';
+                    item.cantidad = '';
+                    item.unitario = '';
+                    item.subtotal = 0;
+                    item.iva = 0;
+                    item.retencion = 0;
+                    item.total = 0;
+                }
+            });
+        }
+        if (p.proveedoresClaves && Array.isArray(p.proveedoresClaves)) {
+            p.proveedoresClaves.forEach(item => {
+                if (item.proveedor && (item.proveedor.includes("EN ESTA SECCION") || item.proveedor.includes("Transportes Express"))) item.proveedor = '';
+                if (item.facturaNum && (item.facturaNum.includes("UN EXPEDIENTE") || item.facturaNum.includes("FAC-9921"))) item.facturaNum = '';
+                if (item.concepto && (item.concepto.includes("SECCION PARA SELECCIONAR") || item.concepto.includes("Flete terrestre"))) item.concepto = '';
+                if (item.unitario === 25000) {
+                    item.cantidad = '';
+                    item.unitario = '';
+                    item.subtotal = 0;
+                    item.iva = 0;
+                    item.retencion = 0;
+                    item.total = 0;
+                }
+            });
+        }
+    });
+}
+
 window.renderOperaciones = function() {
     const listPane = document.getElementById("operaciones-view-list");
     if (!listPane) return;
@@ -6445,6 +6484,9 @@ window.renderOperaciones = function() {
         if (!appState.operacionesProyectos || appState.operacionesProyectos.length === 0) {
             appState.operacionesProyectos = defaultOperacionesProyectos;
         }
+        cleanOperacionesLegacyData(appState.operacionesProyectos);
+    } else {
+        cleanOperacionesLegacyData(appState.operacionesProyectos);
     }
 
     const proyectos = appState.operacionesProyectos;
@@ -6811,18 +6853,142 @@ window.addContenedorToActiveProject = function() {
     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
 };
 
+const CODIGOS_SERVICIOS_OPERACIONES = {
+    'F': 'Coordinacion Logistica',
+    'M': 'Maniobras',
+    'D': 'Demoras',
+    'L': 'Lavado',
+    'E': 'Estadias'
+};
+
+window.handlePartidaServicioInput = function(idx, inputEl) {
+    const raw = (inputEl.value || '').trim();
+    const codeKey = raw.toUpperCase();
+
+    if (CODIGOS_SERVICIOS_OPERACIONES[codeKey]) {
+        const fullText = CODIGOS_SERVICIOS_OPERACIONES[codeKey];
+        inputEl.value = fullText;
+        updatePartidaFieldFast(idx, 'servicio', fullText);
+
+        const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+        if (p && p.partidasConceptos && p.partidasConceptos[idx]) {
+            const currentConcepto = (p.partidasConceptos[idx].concepto || '').trim();
+            const allCodeValues = Object.values(CODIGOS_SERVICIOS_OPERACIONES);
+            if (!currentConcepto || allCodeValues.includes(currentConcepto)) {
+                p.partidasConceptos[idx].concepto = fullText;
+                const tr = inputEl.closest('tr');
+                if (tr) {
+                    const conceptoInput = tr.querySelector('input.partida-concepto-input');
+                    if (conceptoInput) conceptoInput.value = fullText;
+                }
+            }
+        }
+    } else {
+        updatePartidaFieldFast(idx, 'servicio', inputEl.value);
+    }
+};
+
+window.handlePartidaConceptoInput = function(idx, inputEl) {
+    const raw = (inputEl.value || '').trim();
+    const codeKey = raw.toUpperCase();
+
+    if (CODIGOS_SERVICIOS_OPERACIONES[codeKey]) {
+        const fullText = CODIGOS_SERVICIOS_OPERACIONES[codeKey];
+        inputEl.value = fullText;
+        updatePartidaFieldFast(idx, 'concepto', fullText);
+    } else {
+        updatePartidaFieldFast(idx, 'concepto', inputEl.value);
+    }
+};
+
+window.updatePartidaFieldFast = function(idx, key, val) {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p || !p.partidasConceptos || !p.partidasConceptos[idx]) return;
+
+    if (key === 'cantidad' || key === 'unitario') {
+        p.partidasConceptos[idx][key] = val === '' ? '' : (parseFloat(val) || 0);
+        recalcPartidasTotals(p);
+    } else {
+        p.partidasConceptos[idx][key] = val;
+    }
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+};
+window.updatePartidaField = window.updatePartidaFieldFast;
+
+function recalcPartidasTotals(p) {
+    const items = p.partidasConceptos || [];
+    let totSub = 0, totIva = 0, totRet = 0, totFinal = 0;
+
+    items.forEach((item, idx) => {
+        const cant = parseFloat(item.cantidad) || 0;
+        const unit = parseFloat(item.unitario) || 0;
+        const sub = cant * unit;
+        const iva = item.iva || (sub * 0.16);
+        const ret = item.retencion || 0;
+        const tot = sub + iva - ret;
+
+        item.subtotal = sub;
+        item.iva = iva;
+        item.retencion = ret;
+        item.total = tot;
+
+        if (item.servicio || item.concepto || unit > 0 || cant > 0) {
+            totSub += sub;
+            totIva += iva;
+            totRet += ret;
+            totFinal += tot;
+        }
+
+        const subCell = document.getElementById(`partida-sub-${idx}`);
+        const ivaCell = document.getElementById(`partida-iva-${idx}`);
+        const retCell = document.getElementById(`partida-ret-${idx}`);
+        const totCell = document.getElementById(`partida-tot-${idx}`);
+
+        if (subCell) subCell.innerText = `$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        if (ivaCell) ivaCell.innerText = `$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        if (retCell) retCell.innerText = `$${ret.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        if (totCell) totCell.innerText = `$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    });
+
+    const subEl = document.getElementById("op-partidas-tot-sub");
+    const ivaEl = document.getElementById("op-partidas-tot-iva");
+    const retEl = document.getElementById("op-partidas-tot-ret");
+    const finEl = document.getElementById("op-partidas-tot-final");
+
+    if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+}
+
 function renderPartidasTable(p) {
     const tbody = document.getElementById("tbody-partidas-conceptos");
     if (!tbody) return;
 
+    // Limpiar textos por defecto antiguos si existieran
+    if (p.partidasConceptos && p.partidasConceptos.length > 0) {
+        p.partidasConceptos.forEach(item => {
+            if (item.servicio && item.servicio.includes("claves de venta") && (item.unitario === 50000 || item.total === 58000)) {
+                item.servicio = '';
+                item.concepto = '';
+                item.cantidad = '';
+                item.unitario = '';
+                item.subtotal = 0;
+                item.iva = 0;
+                item.retencion = 0;
+                item.total = 0;
+            }
+        });
+    }
+
     let items = p.partidasConceptos;
     if (!items || items.length === 0) {
         items = [
-            { servicio: 'Coordinación logística claves de venta', num: 1, concepto: 'Coordinación logística claves de venta', cantidad: 1, unitario: 50000, subtotal: 50000, iva: 8000, retencion: 0, total: 58000 },
-            { servicio: '', num: 2, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 3, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 4, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 5, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 }
+            { servicio: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
         ];
         p.partidasConceptos = items;
     }
@@ -6830,12 +6996,14 @@ function renderPartidasTable(p) {
     let totSub = 0, totIva = 0, totRet = 0, totFinal = 0;
 
     tbody.innerHTML = items.map((item, idx) => {
-        const sub = (item.cantidad || 0) * (item.unitario || 0);
+        const cant = parseFloat(item.cantidad) || 0;
+        const unit = parseFloat(item.unitario) || 0;
+        const sub = cant * unit;
         const iva = item.iva || (sub * 0.16);
         const ret = item.retencion || 0;
         const tot = sub + iva - ret;
 
-        if (item.servicio || item.concepto || item.unitario > 0) {
+        if (item.servicio || item.concepto || unit > 0 || cant > 0) {
             totSub += sub;
             totIva += iva;
             totRet += ret;
@@ -6844,15 +7012,44 @@ function renderPartidasTable(p) {
 
         return `
             <tr>
-                <td><input type="text" value="${item.servicio || ''}" placeholder="Servicio..." oninput="updatePartidaField(${idx}, 'servicio', this.value)" style="width:100%; border:none; background:transparent;" /></td>
+                <td>
+                    <input type="text" 
+                           class="partida-servicio-input"
+                           value="${item.servicio || ''}" 
+                           placeholder="Servicio..." 
+                           title="Códigos: F = Coordinacion Logistica, M = Maniobras, D = Demoras, L = Lavado, E = Estadias" 
+                           oninput="handlePartidaServicioInput(${idx}, this)" 
+                           onchange="handlePartidaServicioInput(${idx}, this)" 
+                           style="width:100%; border:none; background:transparent;" />
+                </td>
                 <td style="text-align:center;">${idx + 1}</td>
-                <td><input type="text" value="${item.concepto || ''}" placeholder="Concepto..." oninput="updatePartidaField(${idx}, 'concepto', this.value)" style="width:100%; border:none; background:transparent;" /></td>
-                <td style="text-align:right;"><input type="number" value="${item.cantidad || ''}" oninput="updatePartidaField(${idx}, 'cantidad', this.value)" style="width:50px; text-align:right; border:none; background:transparent;" /></td>
-                <td style="text-align:right;">$${(item.unitario || 0).toLocaleString('en-US', {minimumFractionDigits:2})}</td>
-                <td style="text-align:right;">$${sub.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
-                <td style="text-align:right;">$${iva.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
-                <td style="text-align:right;">$${ret.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
-                <td style="text-align:right; font-weight:700;">$${tot.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+                <td>
+                    <input type="text" 
+                           class="partida-concepto-input"
+                           value="${item.concepto || ''}" 
+                           placeholder="Concepto..." 
+                           oninput="handlePartidaConceptoInput(${idx}, this)" 
+                           onchange="handlePartidaConceptoInput(${idx}, this)" 
+                           style="width:100%; border:none; background:transparent;" />
+                </td>
+                <td style="text-align:right;">
+                    <input type="number" 
+                           value="${item.cantidad !== undefined && item.cantidad !== '' ? item.cantidad : ''}" 
+                           placeholder="" 
+                           oninput="updatePartidaFieldFast(${idx}, 'cantidad', this.value)" 
+                           style="width:50px; text-align:right; border:none; background:transparent;" />
+                </td>
+                <td style="text-align:right;">
+                    <input type="number" 
+                           value="${item.unitario !== undefined && item.unitario !== '' && item.unitario !== 0 ? item.unitario : ''}" 
+                           placeholder="$0.00" 
+                           oninput="updatePartidaFieldFast(${idx}, 'unitario', this.value)" 
+                           style="width:85px; text-align:right; border:none; background:transparent;" />
+                </td>
+                <td style="text-align:right;" id="partida-sub-${idx}">$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                <td style="text-align:right;" id="partida-iva-${idx}">$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                <td style="text-align:right;" id="partida-ret-${idx}">$${ret.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                <td style="text-align:right; font-weight:700;" id="partida-tot-${idx}">$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
             </tr>
         `;
     }).join('');
@@ -6862,91 +7059,167 @@ function renderPartidasTable(p) {
     const retEl = document.getElementById("op-partidas-tot-ret");
     const finEl = document.getElementById("op-partidas-tot-final");
 
-    if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2})}`;
-    if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2})}`;
-    if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2})}`;
-    if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2})}`;
+    if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 }
-
-window.updatePartidaField = function(idx, key, val) {
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
-    if (!p || !p.partidasConceptos) return;
-    if (p.partidasConceptos[idx]) {
-        p.partidasConceptos[idx][key] = (key === 'cantidad' || key === 'unitario') ? parseFloat(val) || 0 : val;
-        renderPartidasTable(p);
-        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
-    }
-};
 
 window.addPartidaConceptoRow = function() {
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.partidasConceptos) p.partidasConceptos = [];
-    p.partidasConceptos.push({ servicio: '', num: p.partidasConceptos.length + 1, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 });
+    p.partidasConceptos.push({ servicio: '', num: p.partidasConceptos.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 });
     renderPartidasTable(p);
     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
 };
 
-function renderProveedorClavesTable(p) {
-    const tbody = document.getElementById("tbody-proveedor-claves");
-    if (!tbody) return;
+window.updateProveedorClavesFieldFast = function(idx, key, val) {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p || !p.proveedoresClaves || !p.proveedoresClaves[idx]) return;
 
-    let items = p.proveedoresClaves;
-    if (!items || items.length === 0) {
-        items = [
-            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 }
-        ];
-        p.proveedoresClaves = items;
+    if (key === 'cantidad' || key === 'unitario') {
+        p.proveedoresClaves[idx][key] = val === '' ? '' : (parseFloat(val) || 0);
+        recalcProveedorClavesTotals(p);
+    } else {
+        p.proveedoresClaves[idx][key] = val;
     }
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+};
+window.updateProveedorClavesField = window.updateProveedorClavesFieldFast;
 
-    // Limpiar textos por defecto heredados de localStorage o datos semilla
-    items.forEach(item => {
-        if (item.proveedor && item.proveedor.includes("EN ESTA SECCION")) item.proveedor = '';
-        if (item.facturaNum && item.facturaNum.includes("UN EXPEDIENTE")) item.facturaNum = '';
-        if (item.concepto && item.concepto.includes("SECCION PARA SELECCIONAR")) item.concepto = '';
-    });
-
+function recalcProveedorClavesTotals(p) {
+    const items = p.proveedoresClaves || [];
     let totSub = 0, totIva = 0, totRet = 0, totFinal = 0;
 
-    tbody.innerHTML = items.map((item, idx) => {
-        const sub = (item.cantidad || 0) * (item.unitario || 0);
+    items.forEach((item, idx) => {
+        const cant = parseFloat(item.cantidad) || 0;
+        const unit = parseFloat(item.unitario) || 0;
+        const sub = cant * unit;
         const iva = item.iva || (sub * 0.16);
         const ret = item.retencion || 0;
         const tot = sub + iva - ret;
 
-        if (item.proveedor || item.facturaNum || item.concepto || item.unitario > 0) {
+        item.subtotal = sub;
+        item.iva = iva;
+        item.retencion = ret;
+        item.total = tot;
+
+        if (item.proveedor || item.facturaNum || item.concepto || unit > 0 || cant > 0) {
             totSub += sub;
             totIva += iva;
             totRet += ret;
             totFinal += tot;
         }
 
-        const isProvWarn = !item.proveedor || item.proveedor.includes("EN ESTA SECCION");
-        const isFacWarn = !item.facturaNum || item.facturaNum.includes("UN EXPEDIENTE");
-        const isConWarn = !item.concepto || item.concepto.includes("SECCION PARA SELECCIONAR");
+        const subCell = document.getElementById(`prov-sub-${idx}`);
+        const ivaCell = document.getElementById(`prov-iva-${idx}`);
+        const retCell = document.getElementById(`prov-ret-${idx}`);
+        const totCell = document.getElementById(`prov-tot-${idx}`);
 
+        if (subCell) subCell.innerText = `$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        if (ivaCell) ivaCell.innerText = `$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        if (retCell) retCell.innerText = `$${ret.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        if (totCell) totCell.innerText = `$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    });
+
+    const subEl = document.getElementById("op-prov-tot-sub");
+    const ivaEl = document.getElementById("op-prov-tot-iva");
+    const retEl = document.getElementById("op-prov-tot-ret");
+    const finEl = document.getElementById("op-prov-tot-final");
+
+    if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+}
+
+function renderProveedorClavesTable(p) {
+    const tbody = document.getElementById("tbody-proveedor-claves");
+    if (!tbody) return;
+
+    // Limpiar textos por defecto heredados de localStorage o datos semilla
+    if (p.proveedoresClaves && p.proveedoresClaves.length > 0) {
+        p.proveedoresClaves.forEach(item => {
+            if (item.proveedor && (item.proveedor.includes("EN ESTA SECCION") || item.proveedor.includes("Transportes Express"))) item.proveedor = '';
+            if (item.facturaNum && (item.facturaNum.includes("UN EXPEDIENTE") || item.facturaNum.includes("FAC-9921"))) item.facturaNum = '';
+            if (item.concepto && (item.concepto.includes("SECCION PARA SELECCIONAR") || item.concepto.includes("Flete terrestre"))) item.concepto = '';
+            if (item.unitario === 25000) { item.cantidad = ''; item.unitario = ''; item.subtotal = 0; item.iva = 0; item.retencion = 0; item.total = 0; }
+        });
+    }
+
+    let items = p.proveedoresClaves;
+    if (!items || items.length === 0) {
+        items = [
+            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
+        ];
+        p.proveedoresClaves = items;
+    }
+
+    let totSub = 0, totIva = 0, totRet = 0, totFinal = 0;
+
+    tbody.innerHTML = items.map((item, idx) => {
+        const cant = parseFloat(item.cantidad) || 0;
+        const unit = parseFloat(item.unitario) || 0;
+        const sub = cant * unit;
+        const iva = item.iva || (sub * 0.16);
+        const ret = item.retencion || 0;
+        const tot = sub + iva - ret;
+
+        if (item.proveedor || item.facturaNum || item.concepto || unit > 0 || cant > 0) {
+            totSub += sub;
+            totIva += iva;
+            totRet += ret;
+            totFinal += tot;
+        }
+
+        // Celdas amarillas: Proveedor, Factura #, Concepto sin texto escrito (placeholder vacío), dejando solo el color amarillo
         return `
             <tr>
-                <td style="font-size: 11px; font-weight: 700;">
-                    <input type="text" value="${item.proveedor || ''}" placeholder="Razón social del proveedor..." oninput="updateProveedorClavesField(${idx}, 'proveedor', this.value)" style="width:100%; border:none; background:${isProvWarn ? '#FEF9C3' : 'transparent'}; font-weight: 700; color:#0F172A;" />
+                <td style="font-size: 11px; font-weight: 700; background-color: #FEF9C3;">
+                    <input type="text" 
+                           value="${item.proveedor || ''}" 
+                           placeholder="" 
+                           oninput="updateProveedorClavesFieldFast(${idx}, 'proveedor', this.value)" 
+                           style="width:100%; border:none; background-color: #FEF9C3; font-weight: 700; color:#0F172A; outline:none;" />
                 </td>
-                <td style="font-size: 11px;">
-                    <input type="text" value="${item.facturaNum || ''}" placeholder="Factura #..." oninput="updateProveedorClavesField(${idx}, 'facturaNum', this.value)" style="width:100%; border:none; background:${isFacWarn ? '#FEF9C3' : 'transparent'}; color:#475569;" />
+                <td style="font-size: 11px; background-color: #FEF9C3;">
+                    <input type="text" 
+                           value="${item.facturaNum || ''}" 
+                           placeholder="" 
+                           oninput="updateProveedorClavesFieldFast(${idx}, 'facturaNum', this.value)" 
+                           style="width:100%; border:none; background-color: #FEF9C3; color:#475569; outline:none;" />
                 </td>
                 <td style="text-align:center;">${idx + 1}</td>
-                <td style="font-size: 11px;">
-                    <input type="text" value="${item.concepto || ''}" placeholder="Concepto / claves de compra..." oninput="updateProveedorClavesField(${idx}, 'concepto', this.value)" style="width:100%; border:none; background:${isConWarn ? '#FEF9C3' : 'transparent'}; color:#475569;" />
+                <td style="font-size: 11px; background-color: #FEF9C3;">
+                    <input type="text" 
+                           value="${item.concepto || ''}" 
+                           placeholder="" 
+                           oninput="updateProveedorClavesFieldFast(${idx}, 'concepto', this.value)" 
+                           style="width:100%; border:none; background-color: #FEF9C3; color:#475569; outline:none;" />
                 </td>
-                <td style="text-align:right;"><input type="number" value="${item.cantidad || ''}" oninput="updateProveedorClavesField(${idx}, 'cantidad', this.value)" style="width:50px; text-align:right; border:none; background:transparent;" /></td>
-                <td style="text-align:right;"><input type="number" value="${item.unitario || ''}" oninput="updateProveedorClavesField(${idx}, 'unitario', this.value)" style="width:70px; text-align:right; border:none; background:transparent;" /></td>
-                <td style="text-align:right;">$${sub.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
-                <td style="text-align:right;">$${iva.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
-                <td style="text-align:right;">$${ret.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
-                <td style="text-align:right; font-weight:700;">$${tot.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+                <td style="text-align:right;">
+                    <input type="number" 
+                           value="${item.cantidad !== undefined && item.cantidad !== '' ? item.cantidad : ''}" 
+                           placeholder="" 
+                           oninput="updateProveedorClavesFieldFast(${idx}, 'cantidad', this.value)" 
+                           style="width:50px; text-align:right; border:none; background:transparent;" />
+                </td>
+                <td style="text-align:right;">
+                    <input type="number" 
+                           value="${item.unitario !== undefined && item.unitario !== '' && item.unitario !== 0 ? item.unitario : ''}" 
+                           placeholder="$0.00" 
+                           oninput="updateProveedorClavesFieldFast(${idx}, 'unitario', this.value)" 
+                           style="width:70px; text-align:right; border:none; background:transparent;" />
+                </td>
+                <td style="text-align:right;" id="prov-sub-${idx}">$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                <td style="text-align:right;" id="prov-iva-${idx}">$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                <td style="text-align:right;" id="prov-ret-${idx}">$${ret.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                <td style="text-align:right; font-weight:700;" id="prov-tot-${idx}">$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
             </tr>
         `;
     }).join('');
@@ -6956,27 +7229,17 @@ function renderProveedorClavesTable(p) {
     const retEl = document.getElementById("op-prov-tot-ret");
     const finEl = document.getElementById("op-prov-tot-final");
 
-    if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2})}`;
-    if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2})}`;
-    if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2})}`;
-    if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2})}`;
+    if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 }
-
-window.updateProveedorClavesField = function(idx, key, val) {
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
-    if (!p || !p.proveedoresClaves) return;
-    if (p.proveedoresClaves[idx]) {
-        p.proveedoresClaves[idx][key] = (key === 'cantidad' || key === 'unitario') ? parseFloat(val) || 0 : val;
-        renderProveedorClavesTable(p);
-        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
-    }
-};
 
 window.addProveedorClavesRow = function() {
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.proveedoresClaves) p.proveedoresClaves = [];
-    p.proveedoresClaves.push({ proveedor: '', facturaNum: '', num: p.proveedoresClaves.length + 1, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 });
+    p.proveedoresClaves.push({ proveedor: '', facturaNum: '', num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 });
     renderProveedorClavesTable(p);
     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
 };
@@ -7003,11 +7266,13 @@ function renderDocumentosStatus(p) {
             if (badgeEl) {
                 badgeEl.className = 'doc-status-badge uploaded';
                 badgeEl.innerText = `🟢 ${docObj.fileName || 'Cargado'}`;
+                badgeEl.title = `Archivo: ${docObj.fileName || 'Cargado'}`;
             }
         } else {
             if (badgeEl) {
                 badgeEl.className = 'doc-status-badge pending';
                 badgeEl.innerText = '🕒 Pendiente';
+                badgeEl.title = '';
             }
         }
     });
@@ -7024,12 +7289,32 @@ window.uploadDocItem = function(docKey) {
     if (!p) return;
     if (!p.documentos) p.documentos = {};
 
-    const fileName = prompt("Ingresa el Folio e-Document VUCEM o Nombre del Archivo PDF:", "Folio-VUCEM-" + Math.floor(100000 + Math.random() * 900000));
-    if (fileName && fileName.trim()) {
-        p.documentos[docKey] = { uploaded: true, fileName: fileName.trim() };
-        renderDocumentosStatus(p);
-        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
-    }
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.pdf,.doc,.docx,.xls,.xlsx,.xml,.png,.jpg,.jpeg,application/pdf,image/*';
+    fileInput.style.display = 'none';
+
+    fileInput.onchange = function(e) {
+        const file = e.target.files && e.target.files[0];
+        if (file) {
+            p.documentos[docKey] = {
+                uploaded: true,
+                fileName: file.name,
+                fileSize: file.size,
+                lastModified: file.lastModified
+            };
+            renderDocumentosStatus(p);
+            localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+        }
+    };
+
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    setTimeout(() => {
+        if (document.body.contains(fileInput)) {
+            document.body.removeChild(fileInput);
+        }
+    }, 1000);
 };
 
 window.finishOperacionesWizard = function() {
@@ -7068,9 +7353,19 @@ window.openNuevoProyectoModal = function() {
             { id: 1, label: 'Contenedor 1', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
         ],
         partidasConceptos: [
-            { servicio: 'Coordinación logística claves de venta', num: 1, concepto: 'Coordinación logística claves de venta', cantidad: 1, unitario: 50000, subtotal: 50000, iva: 8000, retencion: 0, total: 58000 }
+            { servicio: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
         ],
-        proveedoresClaves: [],
+        proveedoresClaves: [
+            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
+        ],
         documentos: {}
     };
 
