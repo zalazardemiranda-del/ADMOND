@@ -6452,6 +6452,8 @@ function cleanOperacionesLegacyData(proyectos) {
                     item.retencion = 0;
                     item.total = 0;
                 }
+                if (item.cantidad === 0) item.cantidad = '';
+                if (item.unitario === 0) item.unitario = '';
             });
         }
         if (p.proveedoresClaves && Array.isArray(p.proveedoresClaves)) {
@@ -6467,6 +6469,8 @@ function cleanOperacionesLegacyData(proyectos) {
                     item.retencion = 0;
                     item.total = 0;
                 }
+                if (item.cantidad === 0) item.cantidad = '';
+                if (item.unitario === 0) item.unitario = '';
             });
         }
     });
@@ -6861,13 +6865,47 @@ const CODIGOS_SERVICIOS_OPERACIONES = {
     'E': 'Estadias'
 };
 
-window.handlePartidaServicioInput = function(idx, inputEl) {
-    const raw = (inputEl.value || '').trim();
+window.handlePartidaServicioInput = function(idx, inputEl, event) {
+    if (!inputEl) return;
+    const prevLen = inputEl._prevLen !== undefined ? inputEl._prevLen : (inputEl.value.length + 1);
+    const currLen = inputEl.value.length;
+    const isDeleting = (currLen < prevLen) || (event && event.inputType && (event.inputType.startsWith('delete') || event.inputType.startsWith('history')));
+    inputEl._prevLen = currLen;
+
+    const val = inputEl.value;
+    const raw = val.trim();
     const codeKey = raw.toUpperCase();
 
+    // Si el usuario está borrando o el campo está vacío, NUNCA autocompletar
+    if (isDeleting || !raw) {
+        updatePartidaFieldFast(idx, 'servicio', val);
+        if (!raw) {
+            // Si el servicio se borró por completo, limpiar concepto si coincidía con un código automático
+            const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+            if (p && p.partidasConceptos && p.partidasConceptos[idx]) {
+                const currentConcepto = (p.partidasConceptos[idx].concepto || '').trim();
+                const allCodeValues = Object.values(CODIGOS_SERVICIOS_OPERACIONES);
+                if (allCodeValues.includes(currentConcepto)) {
+                    p.partidasConceptos[idx].concepto = '';
+                    const tr = inputEl.closest('tr');
+                    if (tr) {
+                        const conceptoInput = tr.querySelector('input.partida-concepto-input');
+                        if (conceptoInput) {
+                            conceptoInput.value = '';
+                            conceptoInput._prevLen = 0;
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // Solo expandir si el valor coincide EXACTAMENTE con uno de los códigos: F, M, D, L, E
     if (CODIGOS_SERVICIOS_OPERACIONES[codeKey]) {
         const fullText = CODIGOS_SERVICIOS_OPERACIONES[codeKey];
         inputEl.value = fullText;
+        inputEl._prevLen = fullText.length;
         updatePartidaFieldFast(idx, 'servicio', fullText);
 
         const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -6879,25 +6917,41 @@ window.handlePartidaServicioInput = function(idx, inputEl) {
                 const tr = inputEl.closest('tr');
                 if (tr) {
                     const conceptoInput = tr.querySelector('input.partida-concepto-input');
-                    if (conceptoInput) conceptoInput.value = fullText;
+                    if (conceptoInput) {
+                        conceptoInput.value = fullText;
+                        conceptoInput._prevLen = fullText.length;
+                    }
                 }
             }
         }
     } else {
-        updatePartidaFieldFast(idx, 'servicio', inputEl.value);
+        updatePartidaFieldFast(idx, 'servicio', val);
     }
 };
 
-window.handlePartidaConceptoInput = function(idx, inputEl) {
-    const raw = (inputEl.value || '').trim();
+window.handlePartidaConceptoInput = function(idx, inputEl, event) {
+    if (!inputEl) return;
+    const prevLen = inputEl._prevLen !== undefined ? inputEl._prevLen : (inputEl.value.length + 1);
+    const currLen = inputEl.value.length;
+    const isDeleting = (currLen < prevLen) || (event && event.inputType && (event.inputType.startsWith('delete') || event.inputType.startsWith('history')));
+    inputEl._prevLen = currLen;
+
+    const val = inputEl.value;
+    const raw = val.trim();
     const codeKey = raw.toUpperCase();
+
+    if (isDeleting || !raw) {
+        updatePartidaFieldFast(idx, 'concepto', val);
+        return;
+    }
 
     if (CODIGOS_SERVICIOS_OPERACIONES[codeKey]) {
         const fullText = CODIGOS_SERVICIOS_OPERACIONES[codeKey];
         inputEl.value = fullText;
+        inputEl._prevLen = fullText.length;
         updatePartidaFieldFast(idx, 'concepto', fullText);
     } else {
-        updatePartidaFieldFast(idx, 'concepto', inputEl.value);
+        updatePartidaFieldFast(idx, 'concepto', val);
     }
 };
 
@@ -7018,8 +7072,8 @@ function renderPartidasTable(p) {
                            value="${item.servicio || ''}" 
                            placeholder="Servicio..." 
                            title="Códigos: F = Coordinacion Logistica, M = Maniobras, D = Demoras, L = Lavado, E = Estadias" 
-                           oninput="handlePartidaServicioInput(${idx}, this)" 
-                           onchange="handlePartidaServicioInput(${idx}, this)" 
+                           onfocus="this._prevLen = this.value.length"
+                           oninput="handlePartidaServicioInput(${idx}, this, event)" 
                            style="width:100%; border:none; background:transparent;" />
                 </td>
                 <td style="text-align:center;">${idx + 1}</td>
@@ -7028,13 +7082,13 @@ function renderPartidasTable(p) {
                            class="partida-concepto-input"
                            value="${item.concepto || ''}" 
                            placeholder="Concepto..." 
-                           oninput="handlePartidaConceptoInput(${idx}, this)" 
-                           onchange="handlePartidaConceptoInput(${idx}, this)" 
+                           onfocus="this._prevLen = this.value.length"
+                           oninput="handlePartidaConceptoInput(${idx}, this, event)" 
                            style="width:100%; border:none; background:transparent;" />
                 </td>
                 <td style="text-align:right;">
                     <input type="number" 
-                           value="${item.cantidad !== undefined && item.cantidad !== '' ? item.cantidad : ''}" 
+                           value="${item.cantidad !== undefined && item.cantidad !== '' && item.cantidad !== 0 ? item.cantidad : ''}" 
                            placeholder="" 
                            oninput="updatePartidaFieldFast(${idx}, 'cantidad', this.value)" 
                            style="width:50px; text-align:right; border:none; background:transparent;" />
@@ -7204,7 +7258,7 @@ function renderProveedorClavesTable(p) {
                 </td>
                 <td style="text-align:right;">
                     <input type="number" 
-                           value="${item.cantidad !== undefined && item.cantidad !== '' ? item.cantidad : ''}" 
+                           value="${item.cantidad !== undefined && item.cantidad !== '' && item.cantidad !== 0 ? item.cantidad : ''}" 
                            placeholder="" 
                            oninput="updateProveedorClavesFieldFast(${idx}, 'cantidad', this.value)" 
                            style="width:50px; text-align:right; border:none; background:transparent;" />
