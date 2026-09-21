@@ -6628,6 +6628,10 @@ window.renderOperaciones = function() {
         filtered = filtered.filter(p => p.estatus === appState.operacionesStatusFilter);
     }
 
+    if (appState.operacionesTipoFilter && appState.operacionesTipoFilter !== 'all') {
+        filtered = filtered.filter(p => (p.tipoProyecto || 'servicio_local') === appState.operacionesTipoFilter);
+    }
+
     // 3. Renderizar Tabla
     const tbody = document.getElementById("tbody-operaciones-proyectos");
     if (!tbody) return;
@@ -6659,6 +6663,11 @@ window.handleOperacionesSearch = function(query) {
 
 window.handleOperacionesStatusFilter = function(status) {
     appState.operacionesStatusFilter = status;
+    renderOperaciones();
+};
+
+window.handleOperacionesTipoFilter = function(tipo) {
+    appState.operacionesTipoFilter = tipo;
     renderOperaciones();
 };
 
@@ -6902,8 +6911,10 @@ window.goToOperacionesStep = function(stepNum) {
     document.querySelectorAll(".op-step-pane").forEach((pane, idx) => {
         const sNum = idx + 1;
         if (sNum === stepNum) {
+            pane.classList.add("active");
             pane.style.display = "flex";
         } else {
+            pane.classList.remove("active");
             pane.style.display = "none";
         }
     });

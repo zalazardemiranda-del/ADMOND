@@ -5024,20 +5024,30 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 .operaciones-controls-bar {
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-bottom: 24px;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
 }
 
 .operaciones-search-box {
     flex: 1;
+    min-width: 260px;
     display: flex;
     align-items: center;
     background: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 12px;
-    padding: 10px 16px;
+    border: 1.5px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 0 14px;
+    height: 40px;
     gap: 10px;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.operaciones-search-box:focus-within {
+    border-color: #2563EB;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .operaciones-search-box .material-symbols-outlined {
@@ -5050,42 +5060,86 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     outline: none;
     width: 100%;
     font-size: 13px;
+    font-weight: 500;
     color: #0F172A;
     background: transparent;
 }
 
-.operaciones-filter-dropdown-wrap select {
-    padding: 10px 16px;
-    border: 1px solid #E2E8F0;
-    border-radius: 12px;
-    background: #FFFFFF;
+.operaciones-filter-dropdown-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.operaciones-filter-dropdown-wrap select,
+.op-status-select {
+    height: 40px;
+    padding: 0 36px 0 14px;
+    border: 1.5px solid #E2E8F0;
+    border-radius: 10px;
+    background-color: #FFFFFF;
     font-size: 13px;
     font-weight: 600;
     color: #334155;
     outline: none;
     cursor: pointer;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+    transition: all 0.2s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 14px 14px;
+    box-sizing: border-box;
+}
+
+.operaciones-filter-dropdown-wrap select:hover,
+.op-status-select:hover {
+    border-color: #CBD5E1;
+    background-color: #F8FAFC;
+}
+
+.operaciones-filter-dropdown-wrap select:focus,
+.op-status-select:focus {
+    border-color: #2563EB;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    background-color: #FFFFFF;
+}
+
+.operaciones-filter-dropdown-wrap select option,
+.op-status-select option {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 12px;
 }
 
 .btn-nuevo-proyecto {
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     background: #0084FF;
     color: #FFFFFF;
     font-weight: 700;
     font-size: 13px;
-    padding: 10px 20px;
+    height: 40px;
+    padding: 0 20px;
     border-radius: 10px;
     border: none;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 132, 255, 0.25);
+    box-shadow: 0 2px 8px rgba(0, 132, 255, 0.25);
     transition: all 0.2s ease;
     white-space: nowrap;
+    box-sizing: border-box;
 }
 
 .btn-nuevo-proyecto:hover {
     background: #0073E6;
-    box-shadow: 0 6px 16px rgba(0, 132, 255, 0.35);
+    box-shadow: 0 4px 14px rgba(0, 132, 255, 0.35);
 }
 
 /* Table Card: Proyectos Registrados */
@@ -6146,15 +6200,13 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 
 /* Unified Step Panes (Pasos 1 al 4) - Altura Unificada y Botones Nivelados al Mismo Nivel */
 .op-step-pane {
-    display: none;
+    display: none !important;
     flex-direction: column;
     min-height: 310px;
     box-sizing: border-box;
 }
 
-.op-step-pane.active,
-.op-step-pane[style*="display: block"],
-.op-step-pane[style*="display: flex"] {
+.op-step-pane.active {
     display: flex !important;
     flex-direction: column !important;
     min-height: 310px !important;

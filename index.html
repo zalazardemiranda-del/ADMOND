@@ -1188,6 +1188,15 @@
                                     </div>
                                     
                                     <div class="operaciones-filter-dropdown-wrap">
+                                        <select id="op-tipo-filter" onchange="handleOperacionesTipoFilter(this.value)" class="op-status-select">
+                                            <option value="all">Filtrar por proyecto (Todos)</option>
+                                            <option value="servicio_local">Servicio Local</option>
+                                            <option value="movimientos_foraneos">Movimientos Foráneos</option>
+                                            <option value="lavado_contenedores">Lavado de Contenedores</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="operaciones-filter-dropdown-wrap">
                                         <select id="op-status-filter" onchange="handleOperacionesStatusFilter(this.value)" class="op-status-select">
                                             <option value="all">Filtrar por estatus (Todos)</option>
                                             <option value="ABIERTO">Abierto</option>
