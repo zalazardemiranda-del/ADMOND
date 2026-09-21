@@ -7627,6 +7627,522 @@ window.convertirCaratulaPDF = function() {
     }, 400);
 };
 
+window.convertirPrefacturaPDF = function() {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) {
+        alert("No se encontró ningún proyecto activo para exportar.");
+        return;
+    }
+
+    // Obtener valores actuales de encabezado / banners
+    const numProyecto = (document.getElementById("op-step3-num-proyecto")?.innerText || p.numProyecto || "RDP-5626XXXX").trim();
+    const numFactura = (document.getElementById("op-step3-num-factura")?.innerText || p.numFactura || "F77695").trim();
+    const numOC = (document.getElementById("op-step3-num-oc")?.innerText || p.numOC || "75614").trim();
+    const consecutivo = (document.getElementById("op-step3-num-consecutivo")?.innerText || p.numConsecutivo || p.consecutivo || "RDP2609130F").trim();
+
+    const isLavado = p.tipoProyecto === 'lavado_contenedores';
+    const isForaneo = p.tipoProyecto === 'movimientos_foraneos';
+    const projectTypeName = isLavado ? 'Lavado de Contenedores' : (isForaneo ? 'Movimientos Foráneos' : 'Servicio Local');
+
+    const nowStr = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    // 1. Partidas y conceptos (Página 1 - Imagen 2)
+    let partidas = p.partidasConceptos;
+    if (!partidas || partidas.length === 0) {
+        partidas = [
+            { servicio: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { servicio: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
+        ];
+    }
+
+    let totSub1 = 0, totIva1 = 0, totRet1 = 0, totFinal1 = 0;
+    const partidasRowsHTML = partidas.map((item, idx) => {
+        const cant = parseFloat(item.cantidad) || 0;
+        const unit = parseFloat(item.unitario) || 0;
+        const sub = cant * unit;
+        const iva = item.iva || (sub * 0.16);
+        const ret = item.retencion || 0;
+        const tot = sub + iva - ret;
+
+        if (item.servicio || item.concepto || unit > 0 || cant > 0) {
+            totSub1 += sub;
+            totIva1 += iva;
+            totRet1 += ret;
+            totFinal1 += tot;
+        }
+
+        const cantDisplay = item.cantidad !== undefined && item.cantidad !== '' && item.cantidad !== 0 ? item.cantidad : '';
+        const unitDisplay = unit > 0 ? `$${unit.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : '$0.00';
+        const subDisplay = `$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const ivaDisplay = `$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const retDisplay = `$${ret.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const totDisplay = `$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+        return `
+            <tr>
+                <td>${item.servicio || ''}</td>
+                <td class="text-center">${idx + 1}</td>
+                <td>${item.concepto || ''}</td>
+                <td class="text-right">${cantDisplay}</td>
+                <td class="text-right">${unitDisplay}</td>
+                <td class="text-right">${subDisplay}</td>
+                <td class="text-right">${ivaDisplay}</td>
+                <td class="text-right">${retDisplay}</td>
+                <td class="text-right font-bold">${totDisplay}</td>
+            </tr>
+        `;
+    }).join('');
+
+    // 2. Proveedor y claves de compra (Página 2 - Imagen 3)
+    let proveedores = p.proveedoresClaves;
+    if (!proveedores || proveedores.length === 0) {
+        proveedores = [
+            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
+        ];
+    }
+
+    let totSub2 = 0, totIva2 = 0, totRet2 = 0, totFinal2 = 0;
+    const proveedoresRowsHTML = proveedores.map((item, idx) => {
+        const cant = parseFloat(item.cantidad) || 0;
+        const unit = parseFloat(item.unitario) || 0;
+        const sub = cant * unit;
+        const iva = item.iva || (sub * 0.16);
+        const ret = item.retencion || 0;
+        const tot = sub + iva - ret;
+
+        if (item.proveedor || item.facturaNum || item.concepto || unit > 0 || cant > 0) {
+            totSub2 += sub;
+            totIva2 += iva;
+            totRet2 += ret;
+            totFinal2 += tot;
+        }
+
+        const cantDisplay = item.cantidad !== undefined && item.cantidad !== '' && item.cantidad !== 0 ? item.cantidad : '';
+        const unitDisplay = unit > 0 ? `$${unit.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : '$0.00';
+        const subDisplay = `$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const ivaDisplay = `$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const retDisplay = `$${ret.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const totDisplay = `$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+        return `
+            <tr>
+                <td class="yellow-cell">${item.proveedor || ''}</td>
+                <td class="yellow-cell">${item.facturaNum || ''}</td>
+                <td class="text-center">${idx + 1}</td>
+                <td class="yellow-cell">${item.concepto || ''}</td>
+                <td class="text-right">${cantDisplay}</td>
+                <td class="text-right">${unitDisplay}</td>
+                <td class="text-right">${subDisplay}</td>
+                <td class="text-right">${ivaDisplay}</td>
+                <td class="text-right">${retDisplay}</td>
+                <td class="text-right font-bold">${totDisplay}</td>
+            </tr>
+        `;
+    }).join('');
+
+    const printHTML = `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Prefactura_${consecutivo || 'Proyecto'}</title>
+    <style>
+        @page {
+            size: letter landscape;
+            margin: 8mm 10mm;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #1E293B;
+            background: #FFFFFF;
+            font-size: 11px;
+            line-height: 1.35;
+        }
+        .pdf-page {
+            page-break-after: always;
+            padding: 10px 14px;
+            max-width: 1040px;
+            margin: 0 auto;
+        }
+        .pdf-page:last-child {
+            page-break-after: avoid;
+        }
+
+        /* Header */
+        .pdf-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2563EB;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+        }
+        .pdf-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .pdf-logo-box {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
+            color: #FFFFFF;
+            font-weight: 800;
+            font-size: 18px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pdf-brand-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: #0F172A;
+            letter-spacing: 0.5px;
+        }
+        .pdf-brand-sub {
+            font-size: 9px;
+            color: #64748B;
+        }
+        .pdf-doc-info {
+            text-align: right;
+        }
+        .pdf-doc-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: #1E3A8A;
+            letter-spacing: 0.5px;
+        }
+        .pdf-doc-type {
+            font-size: 10px;
+            color: #334155;
+            margin-top: 1px;
+        }
+        .pdf-doc-date {
+            font-size: 8.5px;
+            color: #94A3B8;
+        }
+
+        /* 4 Banners Superiores */
+        .pdf-banners-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .pdf-banner-card {
+            background: #EAF4FF;
+            border: 1px solid #BCE0FD;
+            border-radius: 6px;
+            padding: 6px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .pdf-banner-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 5px;
+            background: #0084FF;
+            color: #FFFFFF;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+        }
+        .pdf-banner-label {
+            font-size: 8.5px;
+            color: #64748B;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .pdf-banner-val {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #0F172A;
+        }
+        .blue-text {
+            color: #2563EB;
+        }
+
+        /* Card Tabla */
+        .pdf-table-card {
+            background: #FFFFFF;
+            border: 1px solid #CBD5E1;
+            border-radius: 8px;
+            padding: 10px 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        }
+        .pdf-table-title {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #1E3A8A;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .pdf-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+        }
+        .pdf-table th {
+            background: #2563EB;
+            color: #FFFFFF;
+            font-weight: 700;
+            padding: 6px 8px;
+            text-align: left;
+            border: 1px solid #1D4ED8;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .pdf-table td {
+            padding: 5px 8px;
+            border: 1px solid #E2E8F0;
+            color: #334155;
+            font-size: 10px;
+        }
+        .pdf-table tr:nth-child(even) td {
+            background-color: #F8FAFC;
+        }
+        .pdf-table tr td.yellow-cell {
+            background-color: #FEF9C3 !important;
+        }
+        .pdf-table tr.totals-row td {
+            background-color: #F1F5F9 !important;
+            font-weight: 700;
+            border-top: 2px solid #2563EB;
+            border-bottom: 2px solid #2563EB;
+            padding: 6px 8px;
+        }
+        .pdf-table tr.totals-row td.final-tot {
+            color: #2563EB;
+            font-weight: 800;
+            font-size: 11px;
+        }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .font-bold { font-weight: 700; }
+
+        /* Footer */
+        .pdf-footer {
+            margin-top: 12px;
+            border-top: 1px solid #E2E8F0;
+            padding-top: 5px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 8.5px;
+            color: #94A3B8;
+        }
+    </style>
+</head>
+<body>
+    <!-- PAGINA 1: Partidas y conceptos de la factura (Imagen 2) -->
+    <div class="pdf-page">
+        <div class="pdf-header">
+            <div class="pdf-brand">
+                <div class="pdf-logo-box">R</div>
+                <div>
+                    <div class="pdf-brand-title">RODIPACK · ADMOND</div>
+                    <div class="pdf-brand-sub">Control Operativo · Expediente de Prefactura</div>
+                </div>
+            </div>
+            <div class="pdf-doc-info">
+                <div class="pdf-doc-title">EXPEDIENTE DE PREFACTURA</div>
+                <div class="pdf-doc-type">Proyecto: <strong>${projectTypeName}</strong></div>
+                <div class="pdf-doc-date">${nowStr}</div>
+            </div>
+        </div>
+
+        <div class="pdf-banners-row">
+            <div class="pdf-banner-card">
+                <div class="pdf-banner-icon">📁</div>
+                <div>
+                    <div class="pdf-banner-label">Número de proyecto:</div>
+                    <div class="pdf-banner-val">${numProyecto}</div>
+                </div>
+            </div>
+            <div class="pdf-banner-card">
+                <div class="pdf-banner-icon">📄</div>
+                <div>
+                    <div class="pdf-banner-label">Número de factura:</div>
+                    <div class="pdf-banner-val">${numFactura}</div>
+                </div>
+            </div>
+            <div class="pdf-banner-card">
+                <div class="pdf-banner-icon">📋</div>
+                <div>
+                    <div class="pdf-banner-label">Número de OC:</div>
+                    <div class="pdf-banner-val">${numOC}</div>
+                </div>
+            </div>
+            <div class="pdf-banner-card">
+                <div class="pdf-banner-icon">🏷️</div>
+                <div>
+                    <div class="pdf-banner-label">Consecutivo:</div>
+                    <div class="pdf-banner-val blue-text">${consecutivo}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="pdf-table-card">
+            <div class="pdf-table-title">
+                <span>📋 Partidas y conceptos de la factura</span>
+            </div>
+            <table class="pdf-table">
+                <thead>
+                    <tr>
+                        <th style="width: 14%;">Servicio</th>
+                        <th style="width: 4%;" class="text-center">#</th>
+                        <th style="width: 26%;">Concepto</th>
+                        <th style="width: 8%;" class="text-right">Cantidad</th>
+                        <th style="width: 12%;" class="text-right">Unitario</th>
+                        <th style="width: 12%;" class="text-right">Sub total</th>
+                        <th style="width: 8%;" class="text-right">IVA</th>
+                        <th style="width: 8%;" class="text-right">Retención</th>
+                        <th style="width: 12%;" class="text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${partidasRowsHTML}
+                </tbody>
+                <tfoot>
+                    <tr class="totals-row">
+                        <td colspan="5"><strong>Totales</strong></td>
+                        <td class="text-right font-bold">$${totSub1.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                        <td class="text-right font-bold">$${totIva1.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                        <td class="text-right font-bold">$${totRet1.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                        <td class="text-right final-tot">$${totFinal1.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="pdf-footer">
+            <span>Expediente de Prefactura Consecutivo: <strong>${consecutivo}</strong> | ${projectTypeName}</span>
+            <span>Página 1 de 2 (Partidas y conceptos)</span>
+        </div>
+    </div>
+
+    <!-- PAGINA 2: Proveedor y claves de compra (Imagen 3) -->
+    <div class="pdf-page">
+        <div class="pdf-header">
+            <div class="pdf-brand">
+                <div class="pdf-logo-box">R</div>
+                <div>
+                    <div class="pdf-brand-title">RODIPACK · ADMOND</div>
+                    <div class="pdf-brand-sub">Control Operativo · Expediente de Prefactura</div>
+                </div>
+            </div>
+            <div class="pdf-doc-info">
+                <div class="pdf-doc-title">EXPEDIENTE DE PREFACTURA</div>
+                <div class="pdf-doc-type">Proyecto: <strong>${projectTypeName}</strong></div>
+                <div class="pdf-doc-date">${nowStr}</div>
+            </div>
+        </div>
+
+        <div class="pdf-banners-row">
+            <div class="pdf-banner-card">
+                <div class="pdf-banner-icon">📁</div>
+                <div>
+                    <div class="pdf-banner-label">Número de proyecto:</div>
+                    <div class="pdf-banner-val">${numProyecto}</div>
+                </div>
+            </div>
+            <div class="pdf-banner-card">
+                <div class="pdf-banner-icon">📄</div>
+                <div>
+                    <div class="pdf-banner-label">Número de factura:</div>
+                    <div class="pdf-banner-val">${numFactura}</div>
+                </div>
+            </div>
+            <div class="pdf-banner-card">
+                <div class="pdf-banner-icon">📋</div>
+                <div>
+                    <div class="pdf-banner-label">Número de OC:</div>
+                    <div class="pdf-banner-val">${numOC}</div>
+                </div>
+            </div>
+            <div class="pdf-banner-card">
+                <div class="pdf-banner-icon">🏷️</div>
+                <div>
+                    <div class="pdf-banner-label">Consecutivo:</div>
+                    <div class="pdf-banner-val blue-text">${consecutivo}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="pdf-table-card">
+            <div class="pdf-table-title">
+                <span>🏪 Proveedor y claves de compra</span>
+            </div>
+            <table class="pdf-table">
+                <thead>
+                    <tr>
+                        <th style="width: 18%;">Proveedor</th>
+                        <th style="width: 10%;">Factura #</th>
+                        <th style="width: 4%;" class="text-center">#</th>
+                        <th style="width: 20%;">Concepto</th>
+                        <th style="width: 7%;" class="text-right">Cantidad</th>
+                        <th style="width: 11%;" class="text-right">Unitario</th>
+                        <th style="width: 11%;" class="text-right">Sub total</th>
+                        <th style="width: 7%;" class="text-right">IVA</th>
+                        <th style="width: 7%;" class="text-right">Retención</th>
+                        <th style="width: 11%;" class="text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${proveedoresRowsHTML}
+                </tbody>
+                <tfoot>
+                    <tr class="totals-row">
+                        <td colspan="6"><strong>Totales</strong></td>
+                        <td class="text-right font-bold">$${totSub2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                        <td class="text-right font-bold">$${totIva2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                        <td class="text-right font-bold">$${totRet2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                        <td class="text-right final-tot">$${totFinal2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="pdf-footer">
+            <span>Expediente de Prefactura Consecutivo: <strong>${consecutivo}</strong> | ${projectTypeName}</span>
+            <span>Página 2 de 2 (Proveedor y claves de compra)</span>
+        </div>
+    </div>
+</body>
+</html>`;
+
+    const printWin = window.open('', '_blank', 'width=1050,height=800');
+    if (!printWin) {
+        alert("Por favor permite las ventanas emergentes (popups) en tu navegador para ver y descargar el PDF.");
+        return;
+    }
+    printWin.document.open();
+    printWin.document.write(printHTML);
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => {
+        printWin.print();
+    }, 400);
+};
+
 const CODIGOS_SERVICIOS_OPERACIONES = {
     'F': 'Coordinacion Logistica',
     'M': 'Maniobras',

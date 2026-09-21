@@ -6490,7 +6490,14 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 }
 
 /* Compact Step 3 Prefactura & Table Sizing for 5 rows fit without vertical scroll */
-#op-step-pane-3 .op-summary-badges-grid,
+#op-step-pane-3 .op-summary-badges-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
 #op-step-pane-2 .op-summary-badges-grid {
     gap: 8px;
     margin-bottom: 6px;
