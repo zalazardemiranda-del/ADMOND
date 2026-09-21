@@ -6994,22 +6994,6 @@ window.renderStep1View = function(p) {
         }
     });
 
-    // Resumen descriptivo del tipo de proyecto en Paso 1
-    const summaryText = document.getElementById("op-tipo-summary-text");
-    const summaryIcon = document.getElementById("op-tipo-summary-icon");
-    if (summaryText) {
-        if (p.tipoProyecto === 'servicio_local') {
-            summaryText.innerHTML = 'Configuración seleccionada: <strong>Servicio Local</strong> (FCL Local y entregas de vacío).';
-            if (summaryIcon) summaryIcon.innerText = 'local_shipping';
-        } else if (p.tipoProyecto === 'movimientos_foraneos') {
-            summaryText.innerHTML = 'Configuración seleccionada: <strong>Movimientos Foráneos</strong> (Rutas nacionales y fletes).';
-            if (summaryIcon) summaryIcon.innerText = 'distance';
-        } else if (p.tipoProyecto === 'lavado_contenedores') {
-            summaryText.innerHTML = 'Configuración seleccionada: <strong>Lavado de Contenedores</strong> (Limpieza, inspección y evidencias fotográficas).';
-            if (summaryIcon) summaryIcon.innerText = 'local_car_wash';
-        }
-    }
-
     // 2. Factura, OC y Consecutivo
     if (!p.numConsecutivo || !p.numConsecutivo.startsWith('RDP')) {
         p.numConsecutivo = generateProjectConsecutivo(p.tipoProyecto);
