@@ -2137,6 +2137,57 @@
     </div>
 
     <!-- ========================================== -->
+    <!-- MODAL: EDITAR PERFIL / RANGO DE USUARIO   -->
+    <!-- ========================================== -->
+    <div id="edit-profile-modal" class="custom-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 99999; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px);">
+        <div style="max-width: 480px; width: 90%; background: #FFFFFF; border-radius: 20px; padding: 28px 24px; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2); border: 1px solid #E2E8F0; position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="material-symbols-outlined" style="font-size: 22px; color: #2563EB; background: rgba(37, 99, 235, 0.1); padding: 6px; border-radius: 8px;">badge</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Editar Puesto / Perfil de Usuario</h3>
+                        <span style="font-size: 11px; color: #64748B;">Modifica el rol, departamento o nombre del colaborador</span>
+                    </div>
+                </div>
+                <button type="button" onclick="closeEditProfileModal()" style="background: none; border: none; font-size: 18px; color: #64748B; cursor: pointer; padding: 4px;" title="Cerrar">✕</button>
+            </div>
+
+            <form id="edit-profile-form" onsubmit="handleSaveProfileEdit(event)">
+                <input type="hidden" id="edit-profile-email">
+
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px; display: block;">Correo Electrónico:</label>
+                    <div id="edit-profile-email-display" style="width: 100%; padding: 10px 12px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 13px; color: #64748B; font-weight: 600;"></div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px; display: block;">Nombre Completo:</label>
+                    <input type="text" id="edit-profile-name" required placeholder="Nombre del usuario" style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; color: #0F172A;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px; display: block;">Rol / Rango en el Sistema:</label>
+                    <select id="edit-profile-role" required style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; color: #0F172A; background: #FFFFFF;">
+                        <option value="colaborador">Colaborador (Operaciones, Tareas & Chat)</option>
+                        <option value="administrador">Administrativo (Finanzas & Nómina)</option>
+                        <option value="gerente">Gerente / Director (Acceso Total)</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px; display: block;">Departamento / Puesto:</label>
+                    <input type="text" id="edit-profile-dept" placeholder="Ej: Operaciones, Logística, Finanzas..." style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; color: #0F172A;">
+                </div>
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" onclick="closeEditProfileModal()" class="btn" style="background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" style="padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: #2563EB; color: #FFFFFF; border: none;">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
     <!-- MODAL: RESTABLECIMIENTO E INTERACTIVO     -->
     <!-- ========================================== -->
     <!-- ========================================== -->

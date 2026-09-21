@@ -4073,6 +4073,12 @@ window.loadProfilesList = async function() {
             const roleBg = isGerente ? 'rgba(37, 99, 235, 0.1)' : (isAdmin ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)');
             const roleLabel = isGerente ? 'Manager' : (isAdmin ? 'Administrativo' : 'Colaborador');
 
+            const editBtnHtml = `
+                <button type="button" onclick="openEditProfileModal('${p.email}')" style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #2563EB; border-radius: 8px; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease;" title="Editar Perfil y Rol de ${p.nombre || p.email}">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">edit</span>
+                </button>
+            `;
+
             const deleteBtnHtml = isMainGerente ? '' : `
                 <button type="button" onclick="handleDeleteProfile('${p.email}', '${(p.nombre || '').replace(/'/g, "\\'")}')" style="background: #FEF2F2; border: 1px solid #FCA5A5; color: #EF4444; border-radius: 8px; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; margin-left: 4px;" title="Eliminar Perfil de ${p.nombre || p.email}">
                     <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
@@ -4097,7 +4103,10 @@ window.loadProfilesList = async function() {
                             </span>
                             <div style="font-size: 11px; font-weight: 600; color: #94A3B8;">${p.departamento || 'General'}</div>
                         </div>
-                        ${deleteBtnHtml}
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            ${editBtnHtml}
+                            ${deleteBtnHtml}
+                        </div>
                     </div>
                 </div>
             `;
@@ -4330,6 +4339,99 @@ window.handleDeleteProfile = async function(email, nombre) {
         }
     }
 
+    loadProfilesList();
+};
+
+window.openEditProfileModal = function(email) {
+    if (!email) return;
+    const modal = document.getElementById("edit-profile-modal");
+    if (!modal) return;
+    
+    const list = window.cachedProfilesList || JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
+    const profile = list.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
+    if (!profile) {
+        alert("No se encontró el perfil para editar.");
+        return;
+    }
+    
+    const emailInput = document.getElementById("edit-profile-email");
+    const emailDisplay = document.getElementById("edit-profile-email-display");
+    const nameInput = document.getElementById("edit-profile-name");
+    const roleSelect = document.getElementById("edit-profile-role");
+    const deptInput = document.getElementById("edit-profile-dept");
+    
+    if (emailInput) emailInput.value = profile.email;
+    if (emailDisplay) emailDisplay.innerText = profile.email;
+    if (nameInput) nameInput.value = profile.nombre || "";
+    
+    const r = (profile.rol || '').toLowerCase();
+    let normalizedRole = 'colaborador';
+    if (r === 'gerente' || r === 'manager' || r === 'director') {
+        normalizedRole = 'gerente';
+    } else if (r === 'administrador' || r === 'admin' || r === 'administrativo') {
+        normalizedRole = 'administrador';
+    }
+    if (roleSelect) roleSelect.value = normalizedRole;
+    if (deptInput) deptInput.value = profile.departamento || "";
+    
+    modal.style.display = "flex";
+};
+
+window.closeEditProfileModal = function() {
+    const modal = document.getElementById("edit-profile-modal");
+    if (modal) modal.style.display = "none";
+};
+
+window.handleSaveProfileEdit = async function(event) {
+    event.preventDefault();
+    const emailInput = document.getElementById("edit-profile-email");
+    const nameInput = document.getElementById("edit-profile-name");
+    const roleSelect = document.getElementById("edit-profile-role");
+    const deptInput = document.getElementById("edit-profile-dept");
+    
+    const email = emailInput ? emailInput.value.trim() : "";
+    const nombre = nameInput ? nameInput.value.trim() : "";
+    const rol = roleSelect ? roleSelect.value : "colaborador";
+    const departamento = deptInput ? deptInput.value.trim() : "";
+    
+    if (!email) return;
+    
+    // 1. Guardar en localStorage
+    let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
+    let found = false;
+    localProfiles = localProfiles.map(p => {
+        if (p.email && p.email.toLowerCase() === email.toLowerCase()) {
+            found = true;
+            return { ...p, nombre, rol, departamento };
+        }
+        return p;
+    });
+    if (!found) {
+        localProfiles.push({ nombre, email, rol, departamento });
+    }
+    localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
+    
+    // 2. Actualizar en Supabase si la conexión está activa
+    if (window.isSupabaseActive()) {
+        try {
+            const client = window.SUPABASE_CONFIG.client;
+            await client.from('profiles').update({ nombre, rol, departamento }).eq('email', email);
+        } catch (err) {
+            console.warn("Supabase profile update warning:", err);
+        }
+    }
+    
+    // 3. Actualizar caché en memoria para renderizado inmediato
+    if (window.cachedProfilesList) {
+        window.cachedProfilesList = window.cachedProfilesList.map(p => {
+            if (p.email && p.email.toLowerCase() === email.toLowerCase()) {
+                return { ...p, nombre, rol, departamento };
+            }
+            return p;
+        });
+    }
+    
+    closeEditProfileModal();
     loadProfilesList();
 };
 
