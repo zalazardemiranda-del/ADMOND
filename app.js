@@ -6218,6 +6218,8 @@ const defaultOperacionesProyectos = [
         factura: 'FAC4997',
         numFactura: '',
         numOC: '',
+        numConsecutivo: '',
+        consecutivo: '',
         estatus: 'PENDIENTE',
         currentStep: 1,
         tipoProyecto: 'movimientos_foraneos',
@@ -6239,6 +6241,8 @@ const defaultOperacionesProyectos = [
         factura: 'FODP1258',
         numFactura: 'F20059',
         numOC: '12556',
+        numConsecutivo: '001',
+        consecutivo: '001',
         estatus: 'ABIERTO',
         currentStep: 1,
         tipoProyecto: 'servicio_local',
@@ -6517,6 +6521,9 @@ function cleanOperacionesLegacyData(proyectos) {
         if (!p.infoLavado) {
             p.infoLavado = { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: (p.contenedores || []).length, observaciones: '' };
         }
+        if (p.numConsecutivo === undefined) {
+            p.numConsecutivo = p.consecutivo || '';
+        }
     });
 }
 
@@ -6636,6 +6643,7 @@ window.openOperacionesDetail = function(projectId) {
     document.querySelectorAll("#op-step3-num-proyecto, #op-step4-num-proyecto, #op-step5-num-proyecto").forEach(el => el.innerText = p.numProyecto);
     document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = p.numFactura || "(Sin Factura)");
     document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = p.numOC || "(Sin OC)");
+    document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = p.numConsecutivo || p.consecutivo || "-");
 
     renderPartidasTable(p);
     renderProveedorClavesTable(p);
@@ -6735,11 +6743,13 @@ window.renderStep1View = function(p) {
         }
     }
 
-    // 2. Factura y OC
+    // 2. Factura, OC y Consecutivo
     const facturaNumEl = document.getElementById("op-step1-factura-num");
     const ocNumEl = document.getElementById("op-step1-oc-num");
+    const consecutivoNumEl = document.getElementById("op-step1-consecutivo-num");
     if (facturaNumEl) facturaNumEl.value = p.numFactura || "";
     if (ocNumEl) ocNumEl.value = p.numOC || "";
+    if (consecutivoNumEl) consecutivoNumEl.value = p.numConsecutivo || p.consecutivo || "";
 
     // 3. Tarjetas generales según tipo
     const localForaneoCard = document.getElementById("op-step1-general-info-local-foraneo");
@@ -6871,6 +6881,11 @@ window.updateProjectHeaderField = function(key, val) {
     if (key === 'numOC') {
         document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = val || "12556");
     }
+    if (key === 'numConsecutivo' || key === 'consecutivo') {
+        p.numConsecutivo = val;
+        p.consecutivo = val;
+        document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = val || "-");
+    }
 
     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
 };
@@ -6899,7 +6914,7 @@ function renderContenedoresCards(p) {
         p.contenedores = list;
     }
 
-    const itemsPerPage = 4;
+    const itemsPerPage = 2;
     const totalPages = Math.max(1, Math.ceil(list.length / itemsPerPage));
     if (appState.contenedoresPage >= totalPages) appState.contenedoresPage = totalPages - 1;
 
@@ -7081,8 +7096,8 @@ window.addContenedorToActiveProject = function() {
     } else {
         p.contenedores.push({ id: nextId, label: `Contenedor ${nextId}`, fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' });
     }
-    // Navegar a la página donde quedó el nuevo contenedor
-    const itemsPerPage = 4;
+    // Navegar a la página donde quedó el nuevo contenedor (2 fichas laterales por vista)
+    const itemsPerPage = 2;
     appState.contenedoresPage = Math.floor((p.contenedores.length - 1) / itemsPerPage);
     renderContenedoresCards(p);
     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
@@ -7631,6 +7646,8 @@ window.openNuevoProyectoModal = function() {
         factura: 'FAC' + Math.floor(1000 + Math.random() * 9000),
         numFactura: 'F' + Math.floor(20000 + Math.random() * 90000),
         numOC: String(Math.floor(10000 + Math.random() * 90000)),
+        numConsecutivo: '',
+        consecutivo: '',
         estatus: 'PENDIENTE',
         currentStep: 1,
         tipoProyecto: 'servicio_local',

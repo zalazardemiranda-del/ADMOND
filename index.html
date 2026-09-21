@@ -1317,7 +1317,7 @@
                                 <!-- STEP 2: LLENAR CARÁTULA Y DATOS DE PROYECTO -->
                                 <div class="op-step-pane" id="op-step-pane-2" style="display: none;">
                                     
-                                    <!-- 2 Banners: Factura y Orden de Compra + Botón Agregar Contenedor -->
+                                    <!-- 3 Banners: Factura, Orden de Compra y Consecutivo + Botón Agregar Contenedor -->
                                     <div class="op-step1-banners-grid">
                                         <div class="card op-badge-card">
                                             <div class="badge-icon"><span class="material-symbols-outlined">receipt</span></div>
@@ -1332,6 +1332,14 @@
                                             <div class="badge-text" style="flex: 1;">
                                                 <span class="badge-label">Número de OC:</span>
                                                 <input type="text" id="op-step1-oc-num" class="input-badge-val" value="65560" placeholder="Ingresa OC..." oninput="updateProjectHeaderField('numOC', this.value)">
+                                            </div>
+                                        </div>
+
+                                        <div class="card op-badge-card">
+                                            <div class="badge-icon"><span class="material-symbols-outlined">tag</span></div>
+                                            <div class="badge-text" style="flex: 1;">
+                                                <span class="badge-label">Consecutivo:</span>
+                                                <input type="text" id="op-step1-consecutivo-num" class="input-badge-val" value="" placeholder="Ingresa consecutivo..." oninput="updateProjectHeaderField('numConsecutivo', this.value)">
                                             </div>
                                         </div>
 
@@ -1447,7 +1455,7 @@
                                 <!-- STEP 3: PREFACTURA (Imagen 4) -->
                                 <div class="op-step-pane" id="op-step-pane-3" style="display: none;">
                                     
-                                    <!-- 3 Top Summary Badges -->
+                                    <!-- 4 Top Summary Badges -->
                                     <div class="op-summary-badges-grid">
                                         <div class="card op-badge-card">
                                             <div class="badge-icon"><span class="material-symbols-outlined">folder</span></div>
@@ -1468,6 +1476,13 @@
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de OC:</span>
                                                 <strong class="badge-val" id="op-step3-num-oc">12556</strong>
+                                            </div>
+                                        </div>
+                                        <div class="card op-badge-card">
+                                            <div class="badge-icon"><span class="material-symbols-outlined">tag</span></div>
+                                            <div class="badge-text">
+                                                <span class="badge-label">Consecutivo:</span>
+                                                <strong class="badge-val" id="op-step3-num-consecutivo">-</strong>
                                             </div>
                                         </div>
                                     </div>
@@ -1593,7 +1608,7 @@
                                 <div class="op-step-pane" id="op-step-pane-4" style="display: none;">
                                     <h2 class="op-step-heading">Documentos operativos</h2>
 
-                                    <!-- 3 Top Summary Badges -->
+                                    <!-- 4 Top Summary Badges -->
                                     <div class="op-summary-badges-grid">
                                         <div class="card op-badge-card">
                                             <div class="badge-icon"><span class="material-symbols-outlined">folder</span></div>
@@ -1614,6 +1629,13 @@
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de OC:</span>
                                                 <strong class="badge-val" id="op-step4-num-oc">12556</strong>
+                                            </div>
+                                        </div>
+                                        <div class="card op-badge-card">
+                                            <div class="badge-icon"><span class="material-symbols-outlined">tag</span></div>
+                                            <div class="badge-text">
+                                                <span class="badge-label">Consecutivo:</span>
+                                                <strong class="badge-val" id="op-step4-num-consecutivo">-</strong>
                                             </div>
                                         </div>
                                     </div>
@@ -1736,7 +1758,7 @@
                                 <div class="op-step-pane" id="op-step-pane-5" style="display: none;">
                                     <h2 class="op-step-heading">Facturación y Cierre de Expediente</h2>
 
-                                    <!-- 3 Top Summary Badges -->
+                                    <!-- 4 Top Summary Badges -->
                                     <div class="op-summary-badges-grid">
                                         <div class="card op-badge-card">
                                             <div class="badge-icon"><span class="material-symbols-outlined">folder</span></div>
@@ -1757,6 +1779,13 @@
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de OC:</span>
                                                 <strong class="badge-val" id="op-step5-num-oc">12556</strong>
+                                            </div>
+                                        </div>
+                                        <div class="card op-badge-card">
+                                            <div class="badge-icon"><span class="material-symbols-outlined">tag</span></div>
+                                            <div class="badge-text">
+                                                <span class="badge-label">Consecutivo:</span>
+                                                <strong class="badge-val" id="op-step5-num-consecutivo">-</strong>
                                             </div>
                                         </div>
                                     </div>
