@@ -1229,68 +1229,94 @@
                             <!-- SUB-VISTA B: DETALLE DE PROYECTO - MULTI-STEP WIZARD (Imagenes 3, 4, 5) -->
                             <div id="operaciones-view-detail" class="operaciones-subview" style="display: none;">
 
-                                <!-- Stepper Wizard Header (4 Steps) -->
+                                <!-- Stepper Wizard Header (5 Steps) -->
                                 <div class="operaciones-stepper-container">
                                     <div class="stepper-step active" id="op-step-indicator-1" onclick="goToOperacionesStep(1)">
                                         <div class="step-number">1</div>
-                                        <span class="step-title">Datos de proyecto</span>
+                                        <span class="step-title">Tipo de proyecto</span>
                                     </div>
                                     <div class="stepper-line"></div>
                                     <div class="stepper-step" id="op-step-indicator-2" onclick="goToOperacionesStep(2)">
                                         <div class="step-number">2</div>
-                                        <span class="step-title">Prefactura</span>
+                                        <span class="step-title">Datos de proyecto</span>
                                     </div>
                                     <div class="stepper-line"></div>
                                     <div class="stepper-step" id="op-step-indicator-3" onclick="goToOperacionesStep(3)">
                                         <div class="step-number">3</div>
-                                        <span class="step-title">Documentos</span>
+                                        <span class="step-title">Prefactura</span>
                                     </div>
                                     <div class="stepper-line"></div>
                                     <div class="stepper-step" id="op-step-indicator-4" onclick="goToOperacionesStep(4)">
                                         <div class="step-number">4</div>
+                                        <span class="step-title">Documentos</span>
+                                    </div>
+                                    <div class="stepper-line"></div>
+                                    <div class="stepper-step" id="op-step-indicator-5" onclick="goToOperacionesStep(5)">
+                                        <div class="step-number">5</div>
                                         <span class="step-title">Facturación</span>
                                     </div>
                                 </div>
-                                <!-- STEP 1: DATOS DE PROYECTO (Selector de Tipo de Proyecto y Formularios) -->
+
+                                <!-- STEP 1: EXCLUSIVAMENTE SELECCIÓN DE TIPO DE PROYECTO -->
                                 <div class="op-step-pane active" id="op-step-pane-1">
-                                    
-                                    <!-- Selector de Tipo de Proyecto (Sustituye concepto Carátula) -->
-                                    <div class="op-project-type-section">
-                                        <div class="op-project-type-header">
-                                            <span class="material-symbols-outlined" style="color: #2563EB; font-size: 20px;">category</span>
-                                            <span class="op-project-type-title">Tipo de Proyecto</span>
-                                            <span class="op-project-type-subtitle">Selecciona el tipo de proyecto operativo:</span>
+                                    <div class="op-project-type-section" style="padding: 24px 20px;">
+                                        <div class="op-project-type-header" style="margin-bottom: 16px;">
+                                            <span class="material-symbols-outlined" style="color: #2563EB; font-size: 26px;">category</span>
+                                            <div>
+                                                <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Selecciona el Tipo de Proyecto</h3>
+                                                <p style="margin: 2px 0 0 0; font-size: 13px; color: #64748B;">Elige una de las 3 opciones para configurar la estructura y carátula del proyecto operativo:</p>
+                                            </div>
                                         </div>
-                                        <div class="op-project-type-cards-grid">
-                                            <div class="project-type-card active" id="btn-tipo-servicio_local" onclick="selectProjectTipo('servicio_local')">
-                                                <div class="pt-icon-wrap"><span class="material-symbols-outlined">local_shipping</span></div>
+
+                                        <div class="op-project-type-cards-grid" style="gap: 16px;">
+                                            <div class="project-type-card active" id="btn-tipo-servicio_local" onclick="selectProjectTipo('servicio_local')" style="padding: 16px;">
+                                                <div class="pt-icon-wrap" style="width: 44px; height: 44px;"><span class="material-symbols-outlined" style="font-size: 24px;">local_shipping</span></div>
                                                 <div class="pt-info">
-                                                    <span class="pt-title">Servicio Local</span>
-                                                    <span class="pt-desc">FCL Local y entregas de vacío</span>
+                                                    <span class="pt-title" style="font-size: 14px;">Servicio Local</span>
+                                                    <span class="pt-desc" style="font-size: 12px;">FCL Local y entregas de vacío</span>
                                                 </div>
                                                 <div class="pt-check"><span class="material-symbols-outlined">check_circle</span></div>
                                             </div>
 
-                                            <div class="project-type-card" id="btn-tipo-movimientos_foraneos" onclick="selectProjectTipo('movimientos_foraneos')">
-                                                <div class="pt-icon-wrap"><span class="material-symbols-outlined">distance</span></div>
+                                            <div class="project-type-card" id="btn-tipo-movimientos_foraneos" onclick="selectProjectTipo('movimientos_foraneos')" style="padding: 16px;">
+                                                <div class="pt-icon-wrap" style="width: 44px; height: 44px;"><span class="material-symbols-outlined" style="font-size: 24px;">distance</span></div>
                                                 <div class="pt-info">
-                                                    <span class="pt-title">Movimientos Foráneos</span>
-                                                    <span class="pt-desc">Rutas nacionales y fletes</span>
+                                                    <span class="pt-title" style="font-size: 14px;">Movimientos Foráneos</span>
+                                                    <span class="pt-desc" style="font-size: 12px;">Rutas nacionales y fletes</span>
                                                 </div>
                                                 <div class="pt-check"><span class="material-symbols-outlined">check_circle</span></div>
                                             </div>
 
-                                            <div class="project-type-card" id="btn-tipo-lavado_contenedores" onclick="selectProjectTipo('lavado_contenedores')">
-                                                <div class="pt-icon-wrap"><span class="material-symbols-outlined">local_car_wash</span></div>
+                                            <div class="project-type-card" id="btn-tipo-lavado_contenedores" onclick="selectProjectTipo('lavado_contenedores')" style="padding: 16px;">
+                                                <div class="pt-icon-wrap" style="width: 44px; height: 44px;"><span class="material-symbols-outlined" style="font-size: 24px;">local_car_wash</span></div>
                                                 <div class="pt-info">
-                                                    <span class="pt-title">Lavado de Contenedores</span>
-                                                    <span class="pt-desc">Limpieza, inspección y evidencias</span>
+                                                    <span class="pt-title" style="font-size: 14px;">Lavado de Contenedores</span>
+                                                    <span class="pt-desc" style="font-size: 12px;">Limpieza, inspección y evidencias</span>
                                                 </div>
                                                 <div class="pt-check"><span class="material-symbols-outlined">check_circle</span></div>
                                             </div>
+                                        </div>
+
+                                        <!-- Resumen descriptivo del tipo seleccionado -->
+                                        <div id="op-tipo-proyecto-summary" style="margin-top: 20px; padding: 14px 18px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; display: flex; align-items: center; gap: 12px;">
+                                            <span class="material-symbols-outlined" id="op-tipo-summary-icon" style="color: #2563EB; font-size: 22px;">info</span>
+                                            <span style="font-size: 13px; color: #334155;" id="op-tipo-summary-text">
+                                                Configuración seleccionada: <strong>Servicio Local</strong> (FCL Local y entregas de vacío).
+                                            </span>
                                         </div>
                                     </div>
 
+                                    <div class="op-wizard-footer" style="margin-top: 24px;">
+                                        <div></div>
+                                        <button class="btn btn-primary btn-next-step" onclick="goToOperacionesStep(2)">
+                                            Continuar a Llenar Carátula <span class="material-symbols-outlined">arrow_forward</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- STEP 2: LLENAR CARÁTULA Y DATOS DE PROYECTO -->
+                                <div class="op-step-pane" id="op-step-pane-2" style="display: none;">
+                                    
                                     <!-- 2 Banners: Factura y Orden de Compra + Botón Agregar Contenedor -->
                                     <div class="op-step1-banners-grid">
                                         <div class="card op-badge-card">
@@ -1406,17 +1432,20 @@
                                     </div>
 
                                     <div class="op-wizard-footer">
+                                        <button class="btn btn-secondary" onclick="goToOperacionesStep(1)">
+                                            <span class="material-symbols-outlined">arrow_back</span> Tipo de Proyecto
+                                        </button>
                                         <div class="contenedores-page-indicator" id="op-contenedores-page-indicator">
                                             <!-- Page indicator rendered dynamically by JS -->
                                         </div>
-                                        <button class="btn btn-primary btn-next-step" onclick="goToOperacionesStep(2)">
+                                        <button class="btn btn-primary btn-next-step" onclick="goToOperacionesStep(3)">
                                             Guardar y continuar <span class="material-symbols-outlined">arrow_forward</span>
                                         </button>
                                     </div>
                                 </div>
 
-                                <!-- STEP 2: PREFACTURA (Imagen 4) -->
-                                <div class="op-step-pane" id="op-step-pane-2" style="display: none;">
+                                <!-- STEP 3: PREFACTURA (Imagen 4) -->
+                                <div class="op-step-pane" id="op-step-pane-3" style="display: none;">
                                     
                                     <!-- 3 Top Summary Badges -->
                                     <div class="op-summary-badges-grid">
@@ -1424,21 +1453,21 @@
                                             <div class="badge-icon"><span class="material-symbols-outlined">folder</span></div>
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de proyecto:</span>
-                                                <strong class="badge-val" id="op-step2-num-proyecto">RDP-2608XXXX</strong>
+                                                <strong class="badge-val" id="op-step3-num-proyecto">RDP-2608XXXX</strong>
                                             </div>
                                         </div>
                                         <div class="card op-badge-card">
                                             <div class="badge-icon"><span class="material-symbols-outlined">receipt</span></div>
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de factura:</span>
-                                                <strong class="badge-val" id="op-step2-num-factura">F20059</strong>
+                                                <strong class="badge-val" id="op-step3-num-factura">F20059</strong>
                                             </div>
                                         </div>
                                         <div class="card op-badge-card">
                                             <div class="badge-icon"><span class="material-symbols-outlined">assignment</span></div>
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de OC:</span>
-                                                <strong class="badge-val" id="op-step2-num-oc">12556</strong>
+                                                <strong class="badge-val" id="op-step3-num-oc">12556</strong>
                                             </div>
                                         </div>
                                     </div>
@@ -1560,8 +1589,8 @@
                                     </div>
                                 </div>
 
-                                <!-- STEP 3: DOCUMENTOS (Imagen 5) -->
-                                <div class="op-step-pane" id="op-step-pane-3" style="display: none;">
+                                <!-- STEP 4: DOCUMENTOS (Imagen 5) -->
+                                <div class="op-step-pane" id="op-step-pane-4" style="display: none;">
                                     <h2 class="op-step-heading">Documentos operativos</h2>
 
                                     <!-- 3 Top Summary Badges -->
@@ -1570,21 +1599,21 @@
                                             <div class="badge-icon"><span class="material-symbols-outlined">folder</span></div>
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de proyecto:</span>
-                                                <strong class="badge-val" id="op-step3-num-proyecto">RDP-2608XXXX</strong>
+                                                <strong class="badge-val" id="op-step4-num-proyecto">RDP-2608XXXX</strong>
                                             </div>
                                         </div>
                                         <div class="card op-badge-card">
                                             <div class="badge-icon"><span class="material-symbols-outlined">receipt</span></div>
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de factura:</span>
-                                                <strong class="badge-val" id="op-step3-num-factura">F20059</strong>
+                                                <strong class="badge-val" id="op-step4-num-factura">F20059</strong>
                                             </div>
                                         </div>
                                         <div class="card op-badge-card">
                                             <div class="badge-icon"><span class="material-symbols-outlined">assignment</span></div>
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de OC:</span>
-                                                <strong class="badge-val" id="op-step3-num-oc">12556</strong>
+                                                <strong class="badge-val" id="op-step4-num-oc">12556</strong>
                                             </div>
                                         </div>
                                     </div>
@@ -1667,8 +1696,8 @@
 
                                             <div class="doc-item-card">
                                                 <div class="doc-item-info">
-                                                    <span class="doc-title">POD</span>
-                                                    <span class="doc-sub">PDF o Folio e-Document VUCEM</span>
+                                                    <span class="doc-title">POD 1</span>
+                                                    <span class="doc-sub">Comprobante de entrega sellado</span>
                                                 </div>
                                                 <div class="doc-item-actions">
                                                     <button class="btn btn-outline-primary btn-sm" onclick="uploadDocItem('pod1')">
@@ -1680,8 +1709,8 @@
 
                                             <div class="doc-item-card">
                                                 <div class="doc-item-info">
-                                                    <span class="doc-title">POD de entrega</span>
-                                                    <span class="doc-sub">PDF o Folio e-Document VUCEM</span>
+                                                    <span class="doc-title">POD 2</span>
+                                                    <span class="doc-sub">Comprobante de entrega sellado</span>
                                                 </div>
                                                 <div class="doc-item-actions">
                                                     <button class="btn btn-outline-primary btn-sm" onclick="uploadDocItem('pod2')">
@@ -1694,17 +1723,17 @@
                                     </div>
 
                                     <div class="op-wizard-footer">
-                                        <button class="btn btn-secondary" onclick="goToOperacionesStep(2)">
+                                        <button class="btn btn-secondary" onclick="goToOperacionesStep(3)">
                                             <span class="material-symbols-outlined">arrow_back</span> Anterior
                                         </button>
-                                        <button class="btn btn-primary btn-next-step" onclick="goToOperacionesStep(4)">
+                                        <button class="btn btn-primary btn-next-step" onclick="goToOperacionesStep(5)">
                                             Pasar a Facturación <span class="material-symbols-outlined">arrow_forward</span>
                                         </button>
                                     </div>
                                 </div>
 
-                                <!-- STEP 4: FACTURACIÓN -->
-                                <div class="op-step-pane" id="op-step-pane-4" style="display: none;">
+                                <!-- STEP 5: FACTURACIÓN -->
+                                <div class="op-step-pane" id="op-step-pane-5" style="display: none;">
                                     <h2 class="op-step-heading">Facturación y Cierre de Expediente</h2>
 
                                     <!-- 3 Top Summary Badges -->
@@ -1713,21 +1742,21 @@
                                             <div class="badge-icon"><span class="material-symbols-outlined">folder</span></div>
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de proyecto:</span>
-                                                <strong class="badge-val" id="op-step4-num-proyecto">RDP-2608XXXX</strong>
+                                                <strong class="badge-val" id="op-step5-num-proyecto">RDP-2608XXXX</strong>
                                             </div>
                                         </div>
                                         <div class="card op-badge-card">
                                             <div class="badge-icon"><span class="material-symbols-outlined">receipt</span></div>
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de factura:</span>
-                                                <strong class="badge-val" id="op-step4-num-factura">F20059</strong>
+                                                <strong class="badge-val" id="op-step5-num-factura">F20059</strong>
                                             </div>
                                         </div>
                                         <div class="card op-badge-card">
                                             <div class="badge-icon"><span class="material-symbols-outlined">assignment</span></div>
                                             <div class="badge-text">
                                                 <span class="badge-label">Número de OC:</span>
-                                                <strong class="badge-val" id="op-step4-num-oc">12556</strong>
+                                                <strong class="badge-val" id="op-step5-num-oc">12556</strong>
                                             </div>
                                         </div>
                                     </div>
@@ -1742,7 +1771,7 @@
                                         </p>
 
                                         <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-                                            <button class="btn btn-secondary" onclick="goToOperacionesStep(3)">
+                                            <button class="btn btn-secondary" onclick="goToOperacionesStep(4)">
                                                 <span class="material-symbols-outlined">arrow_back</span> Regresar a Documentos
                                             </button>
                                             <button class="btn btn-primary" style="background: #10B981; border-color: #10B981; padding: 10px 24px; font-weight: 700;" onclick="finishOperacionesWizard()">

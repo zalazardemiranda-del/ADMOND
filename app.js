@@ -6632,16 +6632,16 @@ window.openOperacionesDetail = function(projectId) {
     // Populate Step 1 (Datos de proyecto - Factura, OC, Tipo de Proyecto y Formularios)
     renderStep1View(p);
 
-    // Populate Steps 2, 3, 4 Badges
-    document.querySelectorAll("#op-step2-num-proyecto, #op-step3-num-proyecto, #op-step4-num-proyecto").forEach(el => el.innerText = p.numProyecto);
-    document.querySelectorAll("#op-step2-num-factura, #op-step3-num-factura, #op-step4-num-factura").forEach(el => el.innerText = p.numFactura || "(Sin Factura)");
-    document.querySelectorAll("#op-step2-num-oc, #op-step3-num-oc, #op-step4-num-oc").forEach(el => el.innerText = p.numOC || "(Sin OC)");
+    // Populate Steps 3, 4, 5 Badges
+    document.querySelectorAll("#op-step3-num-proyecto, #op-step4-num-proyecto, #op-step5-num-proyecto").forEach(el => el.innerText = p.numProyecto);
+    document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = p.numFactura || "(Sin Factura)");
+    document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = p.numOC || "(Sin OC)");
 
     renderPartidasTable(p);
     renderProveedorClavesTable(p);
     renderPrefacturaSlider();
 
-    // Populate Step 3 (Documentos)
+    // Populate Step 4 (Documentos)
     renderDocumentosStatus(p);
 
     goToOperacionesStep(p.currentStep || 1);
@@ -6719,6 +6719,22 @@ window.renderStep1View = function(p) {
         }
     });
 
+    // Resumen descriptivo del tipo de proyecto en Paso 1
+    const summaryText = document.getElementById("op-tipo-summary-text");
+    const summaryIcon = document.getElementById("op-tipo-summary-icon");
+    if (summaryText) {
+        if (p.tipoProyecto === 'servicio_local') {
+            summaryText.innerHTML = 'Configuración seleccionada: <strong>Servicio Local</strong> (FCL Local y entregas de vacío).';
+            if (summaryIcon) summaryIcon.innerText = 'local_shipping';
+        } else if (p.tipoProyecto === 'movimientos_foraneos') {
+            summaryText.innerHTML = 'Configuración seleccionada: <strong>Movimientos Foráneos</strong> (Rutas nacionales y fletes).';
+            if (summaryIcon) summaryIcon.innerText = 'distance';
+        } else if (p.tipoProyecto === 'lavado_contenedores') {
+            summaryText.innerHTML = 'Configuración seleccionada: <strong>Lavado de Contenedores</strong> (Limpieza, inspección y evidencias fotográficas).';
+            if (summaryIcon) summaryIcon.innerText = 'local_car_wash';
+        }
+    }
+
     // 2. Factura y OC
     const facturaNumEl = document.getElementById("op-step1-factura-num");
     const ocNumEl = document.getElementById("op-step1-oc-num");
@@ -6793,16 +6809,16 @@ window.closeOperacionesDetail = function() {
 window.goToOperacionesStep = function(stepNum) {
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
 
-    // Regla 1: Validar requisitos al intentar pasar a Facturación (Paso 4)
-    if (stepNum === 4) {
+    // Regla 1: Validar requisitos al intentar pasar a Facturación (Paso 5)
+    if (stepNum === 5) {
         const valResult = validateProjectForFacturacion(p);
         if (!valResult.valid) {
-            alert("⚠️ No se puede avanzar a Facturación (Paso 4):\n\n" + valResult.errors.map(e => "• " + e).join("\n") + "\n\nEl expediente se mantendrá como PENDIENTE hasta ingresar estos datos.");
+            alert("⚠️ No se puede avanzar a Facturación (Paso 5):\n\n" + valResult.errors.map(e => "• " + e).join("\n") + "\n\nEl expediente se mantendrá como PENDIENTE hasta ingresar estos datos.");
             return;
         }
     }
 
-    if (stepNum > 4) return;
+    if (stepNum > 5) return;
 
     document.querySelectorAll(".stepper-step").forEach((el, idx) => {
         const sNum = idx + 1;
@@ -6850,10 +6866,10 @@ window.updateProjectHeaderField = function(key, val) {
     p[key] = val;
 
     if (key === 'numFactura') {
-        document.querySelectorAll("#op-step2-num-factura, #op-step3-num-factura").forEach(el => el.innerText = val || "F20059");
+        document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = val || "F20059");
     }
     if (key === 'numOC') {
-        document.querySelectorAll("#op-step2-num-oc, #op-step3-num-oc").forEach(el => el.innerText = val || "12556");
+        document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = val || "12556");
     }
 
     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
@@ -7029,7 +7045,7 @@ window.handlePrefacturaFooterNext = function() {
     if (appState.prefacturaPage === 0) {
         changePrefacturaPage(1);
     } else {
-        goToOperacionesStep(3);
+        goToOperacionesStep(4);
     }
 };
 
@@ -7038,7 +7054,7 @@ window.handlePrefacturaFooterPrev = function() {
     if (appState.prefacturaPage === 1) {
         changePrefacturaPage(-1);
     } else {
-        goToOperacionesStep(1);
+        goToOperacionesStep(2);
     }
 };
 
