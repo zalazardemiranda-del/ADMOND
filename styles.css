@@ -6605,20 +6605,23 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 }
 
 #op-step-pane-4 .op-docs-columns-grid {
-    gap: 10px;
-    margin-bottom: 6px;
+    gap: 12px;
+    margin-bottom: 8px;
 }
 
 #op-step-pane-4 .doc-column-card {
-    padding: 8px 12px;
+    padding: 10px 14px;
     border-radius: 8px;
     background: #F8FAFC;
     border: 1px solid #E2E8F0;
+    min-height: 158px;
+    display: flex;
+    flex-direction: column;
 }
 
 #op-step-pane-4 .doc-column-card .column-header {
     gap: 6px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
 
 #op-step-pane-4 .doc-column-card .column-header h3 {
@@ -6632,8 +6635,8 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 }
 
 #op-step-pane-4 .doc-item-card {
-    padding: 5px 8px;
-    margin-bottom: 5px;
+    padding: 6px 10px;
+    margin-bottom: 6px;
     border-radius: 6px;
     border: 1px solid #E2E8F0;
     box-shadow: none;
@@ -6673,8 +6676,8 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 }
 
 #op-step-pane-4 .op-wizard-footer {
-    margin-top: 6px;
-    padding-top: 6px;
+    margin-top: 14px;
+    padding-top: 8px;
 }
 
 
