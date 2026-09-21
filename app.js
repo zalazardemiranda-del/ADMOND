@@ -6813,6 +6813,70 @@ window.handleOperacionesTipoFilter = function(tipo) {
     renderOperaciones();
 };
 
+window.toggleOpCustomDropdown = function(filterType, event) {
+    if (event) event.stopPropagation();
+    const wrap = document.getElementById(`wrap-op-${filterType}-filter`);
+    if (!wrap) return;
+
+    const isOpen = wrap.classList.contains("open");
+    document.querySelectorAll(".op-custom-select-wrap.open").forEach(w => w.classList.remove("open"));
+
+    if (!isOpen) {
+        wrap.classList.add("open");
+    }
+};
+
+window.selectOpFilterOption = function(filterType, value, title, iconOrDotClass, event) {
+    if (event) event.stopPropagation();
+    const wrap = document.getElementById(`wrap-op-${filterType}-filter`);
+    const menu = document.getElementById(`op-${filterType}-dropdown-menu`);
+    const textEl = document.getElementById(`op-${filterType}-selected-text`);
+    const hiddenSelect = document.getElementById(`op-${filterType}-filter`);
+
+    if (textEl) textEl.textContent = title;
+
+    if (filterType === 'tipo') {
+        const iconEl = document.getElementById('op-tipo-selected-icon');
+        if (iconEl) iconEl.textContent = iconOrDotClass;
+        if (hiddenSelect) hiddenSelect.value = value;
+        handleOperacionesTipoFilter(value);
+    } else if (filterType === 'status') {
+        const dotEl = document.getElementById('op-status-selected-dot');
+        if (dotEl) {
+            dotEl.className = `op-status-dot ${iconOrDotClass}`;
+        }
+        if (hiddenSelect) hiddenSelect.value = value;
+        handleOperacionesStatusFilter(value);
+    }
+
+    if (menu) {
+        menu.querySelectorAll(".op-dropdown-item").forEach(item => {
+            if (item.getAttribute("data-value") === value) {
+                item.classList.add("selected");
+            } else {
+                item.classList.remove("selected");
+            }
+        });
+    }
+
+    if (wrap) wrap.classList.remove("open");
+};
+
+// Global click outside and escape listeners for operaciones custom dropdowns
+if (typeof window !== 'undefined' && !window._opCustomSelectListenersAdded) {
+    window._opCustomSelectListenersAdded = true;
+    document.addEventListener("click", function(e) {
+        if (!e.target.closest(".op-custom-select-wrap")) {
+            document.querySelectorAll(".op-custom-select-wrap.open").forEach(w => w.classList.remove("open"));
+        }
+    });
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "Escape") {
+            document.querySelectorAll(".op-custom-select-wrap.open").forEach(w => w.classList.remove("open"));
+        }
+    });
+}
+
 window.openOperacionesDetail = function(projectId) {
     const proyectos = appState.operacionesProyectos || defaultOperacionesProyectos;
     let p = proyectos.find(x => x.id === projectId || x.numProyecto === projectId || x.consecutivo === projectId);

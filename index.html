@@ -1187,8 +1187,58 @@
                                         <input type="text" id="op-search-input" placeholder="Buscar por número de proyecto o factura..." oninput="handleOperacionesSearch(this.value)">
                                     </div>
                                     
-                                    <div class="operaciones-filter-dropdown-wrap">
-                                        <select id="op-tipo-filter" onchange="handleOperacionesTipoFilter(this.value)" class="op-status-select">
+                                    <!-- Custom Dropdown: Filtrar por proyecto -->
+                                    <div class="op-custom-select-wrap" id="wrap-op-tipo-filter">
+                                        <div class="op-custom-select-trigger" onclick="toggleOpCustomDropdown('tipo', event)" id="op-tipo-filter-trigger" title="Filtrar por tipo de proyecto">
+                                            <div class="op-selected-value">
+                                                <span class="material-symbols-outlined op-select-icon" id="op-tipo-selected-icon">apps</span>
+                                                <span class="op-select-text" id="op-tipo-selected-text">Filtrar por proyecto (Todos)</span>
+                                            </div>
+                                            <span class="material-symbols-outlined op-dropdown-arrow">expand_more</span>
+                                        </div>
+                                        <div class="op-custom-dropdown-menu" id="op-tipo-dropdown-menu">
+                                            <div class="op-dropdown-item selected" data-value="all" onclick="selectOpFilterOption('tipo', 'all', 'Filtrar por proyecto (Todos)', 'apps', event)">
+                                                <div class="op-item-left">
+                                                    <span class="material-symbols-outlined op-item-icon icon-all">apps</span>
+                                                    <div class="op-item-text">
+                                                        <span class="op-item-title">Filtrar por proyecto (Todos)</span>
+                                                        <span class="op-item-desc">Ver todos los proyectos</span>
+                                                    </div>
+                                                </div>
+                                                <span class="material-symbols-outlined op-check-icon">check</span>
+                                            </div>
+                                            <div class="op-dropdown-item" data-value="servicio_local" onclick="selectOpFilterOption('tipo', 'servicio_local', 'Servicio Local', 'local_shipping', event)">
+                                                <div class="op-item-left">
+                                                    <span class="material-symbols-outlined op-item-icon icon-local">local_shipping</span>
+                                                    <div class="op-item-text">
+                                                        <span class="op-item-title">Servicio Local</span>
+                                                        <span class="op-item-desc">Movimientos locales</span>
+                                                    </div>
+                                                </div>
+                                                <span class="material-symbols-outlined op-check-icon">check</span>
+                                            </div>
+                                            <div class="op-dropdown-item" data-value="movimientos_foraneos" onclick="selectOpFilterOption('tipo', 'movimientos_foraneos', 'Movimientos Foráneos', 'rv_hookup', event)">
+                                                <div class="op-item-left">
+                                                    <span class="material-symbols-outlined op-item-icon icon-foraneo">rv_hookup</span>
+                                                    <div class="op-item-text">
+                                                        <span class="op-item-title">Movimientos Foráneos</span>
+                                                        <span class="op-item-desc">Transporte foráneo</span>
+                                                    </div>
+                                                </div>
+                                                <span class="material-symbols-outlined op-check-icon">check</span>
+                                            </div>
+                                            <div class="op-dropdown-item" data-value="lavado_contenedores" onclick="selectOpFilterOption('tipo', 'lavado_contenedores', 'Lavado de Contenedores', 'water_drop', event)">
+                                                <div class="op-item-left">
+                                                    <span class="material-symbols-outlined op-item-icon icon-lavado">water_drop</span>
+                                                    <div class="op-item-text">
+                                                        <span class="op-item-title">Lavado de Contenedores</span>
+                                                        <span class="op-item-desc">Lavado y acondicionamiento</span>
+                                                    </div>
+                                                </div>
+                                                <span class="material-symbols-outlined op-check-icon">check</span>
+                                            </div>
+                                        </div>
+                                        <select id="op-tipo-filter" onchange="handleOperacionesTipoFilter(this.value)" class="op-status-select" style="display: none;">
                                             <option value="all">Filtrar por proyecto (Todos)</option>
                                             <option value="servicio_local">Servicio Local</option>
                                             <option value="movimientos_foraneos">Movimientos Foráneos</option>
@@ -1196,8 +1246,58 @@
                                         </select>
                                     </div>
 
-                                    <div class="operaciones-filter-dropdown-wrap">
-                                        <select id="op-status-filter" onchange="handleOperacionesStatusFilter(this.value)" class="op-status-select">
+                                    <!-- Custom Dropdown: Filtrar por estatus -->
+                                    <div class="op-custom-select-wrap" id="wrap-op-status-filter">
+                                        <div class="op-custom-select-trigger" onclick="toggleOpCustomDropdown('status', event)" id="op-status-filter-trigger" title="Filtrar por estatus">
+                                            <div class="op-selected-value">
+                                                <span class="op-status-dot dot-all" id="op-status-selected-dot"></span>
+                                                <span class="op-select-text" id="op-status-selected-text">Filtrar por estatus (Todos)</span>
+                                            </div>
+                                            <span class="material-symbols-outlined op-dropdown-arrow">expand_more</span>
+                                        </div>
+                                        <div class="op-custom-dropdown-menu" id="op-status-dropdown-menu">
+                                            <div class="op-dropdown-item selected" data-value="all" onclick="selectOpFilterOption('status', 'all', 'Filtrar por estatus (Todos)', 'dot-all', event)">
+                                                <div class="op-item-left">
+                                                    <span class="op-status-dot dot-all"></span>
+                                                    <div class="op-item-text">
+                                                        <span class="op-item-title">Filtrar por estatus (Todos)</span>
+                                                        <span class="op-item-desc">Todos los expedientes</span>
+                                                    </div>
+                                                </div>
+                                                <span class="material-symbols-outlined op-check-icon">check</span>
+                                            </div>
+                                            <div class="op-dropdown-item" data-value="ABIERTO" onclick="selectOpFilterOption('status', 'ABIERTO', 'Abierto', 'dot-abierto', event)">
+                                                <div class="op-item-left">
+                                                    <span class="op-status-dot dot-abierto"></span>
+                                                    <div class="op-item-text">
+                                                        <span class="op-item-title">Abierto</span>
+                                                        <span class="op-item-desc">Expediente en curso</span>
+                                                    </div>
+                                                </div>
+                                                <span class="material-symbols-outlined op-check-icon">check</span>
+                                            </div>
+                                            <div class="op-dropdown-item" data-value="CERRADO" onclick="selectOpFilterOption('status', 'CERRADO', 'Cerrado', 'dot-cerrado', event)">
+                                                <div class="op-item-left">
+                                                    <span class="op-status-dot dot-cerrado"></span>
+                                                    <div class="op-item-text">
+                                                        <span class="op-item-title">Cerrado</span>
+                                                        <span class="op-item-desc">Expediente finalizado</span>
+                                                    </div>
+                                                </div>
+                                                <span class="material-symbols-outlined op-check-icon">check</span>
+                                            </div>
+                                            <div class="op-dropdown-item" data-value="PENDIENTE" onclick="selectOpFilterOption('status', 'PENDIENTE', 'Pendiente', 'dot-pendiente', event)">
+                                                <div class="op-item-left">
+                                                    <span class="op-status-dot dot-pendiente"></span>
+                                                    <div class="op-item-text">
+                                                        <span class="op-item-title">Pendiente</span>
+                                                        <span class="op-item-desc">Por completar carátula o docs</span>
+                                                    </div>
+                                                </div>
+                                                <span class="material-symbols-outlined op-check-icon">check</span>
+                                            </div>
+                                        </div>
+                                        <select id="op-status-filter" onchange="handleOperacionesStatusFilter(this.value)" class="op-status-select" style="display: none;">
                                             <option value="all">Filtrar por estatus (Todos)</option>
                                             <option value="ABIERTO">Abierto</option>
                                             <option value="CERRADO">Cerrado</option>
