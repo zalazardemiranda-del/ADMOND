@@ -4019,27 +4019,30 @@ window.loadProfilesList = async function() {
     const container = document.getElementById("profiles-list-container");
     
     const defaultProfiles = [
+        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO", password: "Miranda5011" },
         { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" },
-        { nombre: "Diego Miranda", email: "diego.miranda@rodipack.com", rol: "colaborador", departamento: "Operaciones", password: "Diego123" },
-        { nombre: "Jennifer López", email: "jennifer@rodipack.online", rol: "administrador", departamento: "Finanzas & Nómina", password: "Jennifer123" }
+        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas", password: "Maria5011" },
+        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "colaborador", departamento: "logistica", password: "Diego5011" }
     ];
     
-    let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles'));
-    if (!Array.isArray(localProfiles) || localProfiles.length === 0) {
-        localProfiles = [...defaultProfiles];
-        localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
-    } else {
-        let modified = false;
-        defaultProfiles.forEach(dp => {
-            if (!localProfiles.some(p => p.email && p.email.toLowerCase() === dp.email.toLowerCase())) {
-                localProfiles.push(dp);
-                modified = true;
-            }
-        });
-        if (modified) {
-            localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
+    let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
+    // Limpiar perfiles temporales o inventados
+    localProfiles = localProfiles.filter(p => {
+        if (!p || !p.email) return false;
+        const e = p.email.toLowerCase();
+        return e !== 'jennifer@rodipack.online' && e !== 'diego.miranda@rodipack.com';
+    });
+
+    defaultProfiles.forEach(dp => {
+        const idx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === dp.email.toLowerCase());
+        if (idx === -1) {
+            localProfiles.push(dp);
+        } else {
+            if (!localProfiles[idx].nombre) localProfiles[idx].nombre = dp.nombre;
+            if (!localProfiles[idx].departamento) localProfiles[idx].departamento = dp.departamento;
         }
-    }
+    });
+    localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
     
     let mergedProfiles = [...localProfiles];
     
@@ -4052,7 +4055,12 @@ window.loadProfilesList = async function() {
                 .order('created_at', { ascending: false });
                 
             if (dbProfiles && Array.isArray(dbProfiles) && !error) {
-                mergedProfiles = [...dbProfiles];
+                const cleanDbProfiles = dbProfiles.filter(p => {
+                    if (!p || !p.email) return false;
+                    const e = p.email.toLowerCase();
+                    return e !== 'jennifer@rodipack.online' && e !== 'diego.miranda@rodipack.com';
+                });
+                mergedProfiles = [...cleanDbProfiles];
                 localProfiles.forEach(lp => {
                     if (lp.email && !mergedProfiles.some(p => p.email && p.email.toLowerCase() === lp.email.toLowerCase())) {
                         mergedProfiles.unshift(lp);
@@ -4243,7 +4251,10 @@ window.handleSupabaseRegister = async function(event) {
 
     // 1. Guardar localmente siempre
     const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [
-        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" }
+        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO", password: "Miranda5011" },
+        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" },
+        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas", password: "Maria5011" },
+        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "colaborador", departamento: "logistica", password: "Diego5011" }
     ];
     const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === email.toLowerCase());
     if (existingIdx >= 0) {
