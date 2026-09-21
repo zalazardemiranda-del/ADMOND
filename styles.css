@@ -5300,8 +5300,8 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 12px;
-    padding: 8px 24px;
-    margin-bottom: 10px;
+    padding: 6px 20px;
+    margin-bottom: 8px;
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
 }
 
@@ -5910,6 +5910,10 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     gap: 6px 10px;
 }
 
+.lavado-fields-grid .field-wide {
+    grid-column: span 1;
+}
+
 .lavado-fields-grid .field-full {
     grid-column: span 2;
 }
@@ -6173,53 +6177,259 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     background: #172B4D;
 }
 
-/* Compact Step 2 Prefactura & Table Sizing for 5 rows fit without vertical scroll */
+/* Compact Step 2 (Datos de Proyecto / Carátula) - Eliminación de scroll vertical */
+#op-step-pane-2 .op-step1-banners-grid {
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+#op-step-pane-2 .op-badge-card {
+    padding: 5px 12px;
+    gap: 8px;
+    border-radius: 8px;
+}
+
+#op-step-pane-2 .op-badge-card .badge-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+}
+
+#op-step-pane-2 .op-badge-card .badge-icon .material-symbols-outlined {
+    font-size: 16px;
+}
+
+#op-step-pane-2 .op-badge-card .badge-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: 1px;
+    display: block;
+}
+
+#op-step-pane-2 .input-badge-val {
+    height: 24px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 6px;
+    margin-top: 0;
+    border-radius: 5px;
+}
+
+#op-step-pane-2 .btn-add-contenedor-top {
+    height: 38px;
+    padding: 0 14px;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#op-step-pane-2 .btn-add-contenedor-top .material-symbols-outlined {
+    font-size: 18px;
+}
+
+#op-step-pane-2 .op-info-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+}
+
+#op-step-pane-2 .op-info-card-header {
+    padding: 5px 12px;
+}
+
+#op-step-pane-2 .op-info-header-left {
+    font-size: 12px;
+    font-weight: 700;
+    gap: 6px;
+}
+
+#op-step-pane-2 .op-info-header-left .material-symbols-outlined {
+    font-size: 16px !important;
+}
+
+#op-step-pane-2 .op-info-toggle-icon {
+    font-size: 18px;
+}
+
+#op-step-pane-2 .op-info-card-body {
+    padding: 6px 12px;
+}
+
+#op-step-pane-2 .op-form-row-4 {
+    gap: 5px 8px;
+}
+
+#op-step-pane-2 .op-form-row-3 {
+    gap: 5px 8px;
+    margin-top: 4px !important;
+}
+
+#op-step-pane-2 .op-input-group label {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: 1px;
+    display: block;
+}
+
+#op-step-pane-2 .op-input-group input {
+    height: 25px;
+    padding: 2px 7px;
+    font-size: 11.5px;
+    border-radius: 5px;
+}
+
+#op-step-pane-2 .contenedores-slider-wrapper {
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+#op-step-pane-2 .contenedor-nav-rect {
+    width: 32px;
+    border-radius: 8px;
+}
+
+#op-step-pane-2 .contenedor-nav-rect .material-symbols-outlined {
+    font-size: 22px;
+}
+
+#op-step-pane-2 .contenedores-grid-container {
+    gap: 8px;
+}
+
+#op-step-pane-2 .contenedor-card {
+    padding: 6px 10px;
+    border-radius: 8px;
+}
+
+#op-step-pane-2 .contenedor-card-header {
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+#op-step-pane-2 .contenedor-num-badge {
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+}
+
+#op-step-pane-2 .contenedor-card-title {
+    font-size: 12px;
+    font-weight: 800;
+}
+
+#op-step-pane-2 .btn-delete-contenedor {
+    padding: 1px 3px;
+}
+
+#op-step-pane-2 .btn-delete-contenedor .material-symbols-outlined {
+    font-size: 16px;
+}
+
+#op-step-pane-2 .contenedor-fields-grid {
+    gap: 4px 6px;
+}
+
+#op-step-pane-2 .contenedor-fields-grid label {
+    font-size: 9.5px;
+    margin-bottom: 1px;
+}
+
+#op-step-pane-2 .contenedor-fields-grid input {
+    height: 24px;
+    padding: 2px 6px;
+    font-size: 11px;
+    border-radius: 5px;
+}
+
+#op-step-pane-2 .lavado-fields-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 8px;
+}
+
+#op-step-pane-2 .lavado-fields-grid .field-wide {
+    grid-column: span 1 !important;
+}
+
+#op-step-pane-2 .lavado-fields-grid .field-full {
+    grid-column: span 2 !important;
+}
+
+#op-step-pane-2 .lavado-fields-grid label {
+    font-size: 9.5px;
+    margin-bottom: 1px;
+}
+
+#op-step-pane-2 .lavado-fields-grid input {
+    height: 24px;
+    padding: 2px 6px;
+    font-size: 11px;
+    border-radius: 5px;
+}
+
+#op-step-pane-2 .op-wizard-footer {
+    margin-top: 4px;
+    padding-top: 2px;
+}
+
+#op-step-pane-2 .contenedores-page-indicator {
+    font-size: 11px;
+}
+
+/* Compact Step 3 Prefactura & Table Sizing for 5 rows fit without vertical scroll */
+#op-step-pane-3 .op-summary-badges-grid,
 #op-step-pane-2 .op-summary-badges-grid {
     gap: 8px;
     margin-bottom: 6px;
 }
 
-#op-step-pane-2 .op-badge-card {
+#op-step-pane-3 .op-badge-card {
     padding: 4px 10px;
     gap: 8px;
     border-radius: 6px;
 }
 
-#op-step-pane-2 .op-badge-card .badge-icon {
+#op-step-pane-3 .op-badge-card .badge-icon {
     width: 24px;
     height: 24px;
     border-radius: 5px;
 }
 
-#op-step-pane-2 .op-badge-card .badge-icon .material-symbols-outlined {
+#op-step-pane-3 .op-badge-card .badge-icon .material-symbols-outlined {
     font-size: 14px;
 }
 
-#op-step-pane-2 .op-badge-card .badge-label {
+#op-step-pane-3 .op-badge-card .badge-label {
     font-size: 9.5px;
 }
 
-#op-step-pane-2 .op-badge-card .badge-val {
+#op-step-pane-3 .op-badge-card .badge-val {
     font-size: 11px;
 }
 
-#op-step-pane-2 .op-section-card {
+#op-step-pane-3 .op-section-card {
     padding: 6px 10px;
     margin-bottom: 0;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
     border-radius: 6px;
 }
 
-#op-step-pane-2 .card-header-flex {
+#op-step-pane-3 .card-header-flex {
     margin-bottom: 4px;
 }
 
-#op-step-pane-2 .flex-title h3 {
+#op-step-pane-3 .flex-title h3 {
     font-size: 12px;
     font-weight: 700;
 }
 
-#op-step-pane-2 .table-responsive {
+#op-step-pane-3 .table-responsive {
     max-height: none !important;
     overflow-y: visible !important;
     overflow-x: auto !important;
