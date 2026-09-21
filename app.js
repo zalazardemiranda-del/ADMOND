@@ -6220,8 +6220,10 @@ const defaultOperacionesProyectos = [
         numOC: '',
         estatus: 'PENDIENTE',
         currentStep: 1,
-        servicioName: 'Servicio foráneo de contenedores',
+        tipoProyecto: 'movimientos_foraneos',
+        servicioName: 'Movimientos foráneos',
         infoViaje: { terminal: 'Manzanillo Terminal 1', mblMawb: 'MBL-99283411', destino: 'Querétaro Hub', observaciones: 'Carga prioritaria' },
+        infoLavado: { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: 0, observaciones: '' },
         contenedores: [],
         partidasConceptos: [],
         proveedoresClaves: [
@@ -6239,13 +6241,15 @@ const defaultOperacionesProyectos = [
         numOC: '12556',
         estatus: 'ABIERTO',
         currentStep: 1,
-        servicioName: 'Servicio foráneo de contenedores',
+        tipoProyecto: 'servicio_local',
+        servicioName: 'Servicio local',
         infoViaje: {
-            terminal: 'Manzanillo Terminal 1',
-            mblMawb: 'MBL-99283411',
-            destino: 'Querétaro Hub',
-            observaciones: 'Carga prioritaria'
+            terminal: 'Terminal SSA Manzanillo',
+            mblMawb: 'MSK-88192300',
+            destino: 'Patio Central',
+            observaciones: 'Entrega local prioritaria'
         },
+        infoLavado: { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: 0, observaciones: '' },
         contenedores: [
             { id: 1, label: 'Contenedor 1', fechaDespacho: '2027-03-21', horarioTerminal: '08:00 hrs', fechaEntrega: '2027-03-22', eirImpreso: 'EIR-8821', podSellado: 'Sí', entregaVacio: 'Pendiente' },
             { id: 2, label: 'Contenedor 2', fechaDespacho: '2027-03-21', horarioTerminal: '10:00 hrs', fechaEntrega: '2027-03-22', eirImpreso: 'EIR-8822', podSellado: 'Sí', entregaVacio: 'Entregado' },
@@ -6286,7 +6290,25 @@ const defaultOperacionesProyectos = [
         numFactura: 'F20060',
         numOC: '12557',
         estatus: 'ABIERTO',
-        currentStep: 1
+        currentStep: 1,
+        tipoProyecto: 'lavado_contenedores',
+        servicioName: 'Lavado de contenedores',
+        infoViaje: { terminal: '', mblMawb: '', destino: '', observaciones: '' },
+        infoLavado: {
+            sitioServicio: 'Patio Manzanillo',
+            clienteFacturar: 'Victor Hugo',
+            hbl: 'HBL-9921',
+            mbl: 'MBL-260311',
+            naviera: 'Maersk Line',
+            totalContenedores: 4,
+            observaciones: 'Lavado a vapor e inspección química'
+        },
+        contenedores: [
+            { id: 1, label: 'Lavado Contenedor 1', numContenedor: 'TNCU2312248', evidenciaFecha: '2026-09-14', observaciones: 'Lavado grado alimenticio completado' },
+            { id: 2, label: 'Lavado Contenedor 2', numContenedor: 'MSKU9981240', evidenciaFecha: '2026-09-14', observaciones: 'Evidencias fotográficas enviadas' },
+            { id: 3, label: 'Lavado Contenedor 3', numContenedor: 'CMAU1102948', evidenciaFecha: '2026-09-15', observaciones: 'Sellado y liberado' },
+            { id: 4, label: 'Lavado Contenedor 4', numContenedor: 'HLCU7721839', evidenciaFecha: '', observaciones: 'Pendiente inspección final' }
+        ]
     },
     {
         id: 'RDP-3301XXXX',
@@ -6297,7 +6319,9 @@ const defaultOperacionesProyectos = [
         numFactura: 'F20061',
         numOC: '12558',
         estatus: 'CERRADO',
-        currentStep: 4
+        currentStep: 4,
+        tipoProyecto: 'servicio_local',
+        servicioName: 'Servicio local'
     },
     {
         id: 'RDP-0911XXXX',
@@ -6308,7 +6332,9 @@ const defaultOperacionesProyectos = [
         numFactura: 'F20062',
         numOC: '12559',
         estatus: 'ABIERTO',
-        currentStep: 1
+        currentStep: 1,
+        tipoProyecto: 'movimientos_foraneos',
+        servicioName: 'Movimientos foráneos'
     },
     {
         id: 'RDP-0709XXXX',
@@ -6319,7 +6345,9 @@ const defaultOperacionesProyectos = [
         numFactura: 'F20063',
         numOC: '12560',
         estatus: 'CERRADO',
-        currentStep: 4
+        currentStep: 4,
+        tipoProyecto: 'lavado_contenedores',
+        servicioName: 'Lavado de contenedores'
     }
 ];
 
@@ -6473,6 +6501,22 @@ function cleanOperacionesLegacyData(proyectos) {
                 if (item.unitario === 0) item.unitario = '';
             });
         }
+        if (!p.tipoProyecto) {
+            const sName = (p.servicioName || '').toLowerCase();
+            if (sName.includes('lavado')) {
+                p.tipoProyecto = 'lavado_contenedores';
+            } else if (sName.includes('forán') || sName.includes('foran')) {
+                p.tipoProyecto = 'movimientos_foraneos';
+            } else {
+                p.tipoProyecto = 'servicio_local';
+            }
+        }
+        if (!p.infoViaje) {
+            p.infoViaje = { terminal: '', mblMawb: '', destino: '', observaciones: '' };
+        }
+        if (!p.infoLavado) {
+            p.infoLavado = { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: (p.contenedores || []).length, observaciones: '' };
+        }
     });
 }
 
@@ -6585,14 +6629,8 @@ window.openOperacionesDetail = function(projectId) {
     if (detailPane) detailPane.style.display = "block";
     if (topbarBack) topbarBack.style.display = "block";
 
-    // Populate Step 1 (Datos de proyecto - Factura y Orden de Compra)
-    const facturaNumEl = document.getElementById("op-step1-factura-num");
-    const ocNumEl = document.getElementById("op-step1-oc-num");
-
-    if (facturaNumEl) facturaNumEl.value = p.numFactura || "";
-    if (ocNumEl) ocNumEl.value = p.numOC || "";
-
-    renderContenedoresCards(p);
+    // Populate Step 1 (Datos de proyecto - Factura, OC, Tipo de Proyecto y Formularios)
+    renderStep1View(p);
 
     // Populate Steps 2, 3, 4 Badges
     document.querySelectorAll("#op-step2-num-proyecto, #op-step3-num-proyecto, #op-step4-num-proyecto").forEach(el => el.innerText = p.numProyecto);
@@ -6607,6 +6645,137 @@ window.openOperacionesDetail = function(projectId) {
     renderDocumentosStatus(p);
 
     goToOperacionesStep(p.currentStep || 1);
+};
+
+window.selectProjectTipo = function(tipo) {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) return;
+    p.tipoProyecto = tipo;
+    if (tipo === 'servicio_local') p.servicioName = 'Servicio local';
+    else if (tipo === 'movimientos_foraneos') p.servicioName = 'Movimientos foráneos';
+    else if (tipo === 'lavado_contenedores') p.servicioName = 'Lavado de contenedores';
+
+    if (!p.infoLavado) {
+        p.infoLavado = { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: 0, observaciones: '' };
+    }
+    if (!p.infoViaje) {
+        p.infoViaje = { terminal: '', mblMawb: '', destino: '', observaciones: '' };
+    }
+
+    if (p.contenedores && p.contenedores.length > 0) {
+        p.contenedores.forEach((c, idx) => {
+            if (tipo === 'lavado_contenedores') {
+                if (!c.label || c.label.startsWith('Contenedor')) c.label = `Lavado Contenedor ${idx + 1}`;
+            } else {
+                if (!c.label || c.label.startsWith('Lavado')) c.label = `Contenedor ${idx + 1}`;
+            }
+        });
+    }
+
+    appState.contenedoresPage = 0;
+    renderStep1View(p);
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+};
+
+window.toggleStep1GeneralInfo = function(section) {
+    const body = document.getElementById(`op-info-body-${section}`);
+    const icon = document.getElementById(`op-toggle-icon-${section}`);
+    if (!body) return;
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        if (icon) icon.innerText = 'expand_less';
+    } else {
+        body.style.display = 'none';
+        if (icon) icon.innerText = 'expand_more';
+    }
+};
+
+window.updateProjectInfoViajeField = function(key, val) {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) return;
+    if (!p.infoViaje) p.infoViaje = {};
+    p.infoViaje[key] = val;
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+};
+
+window.updateProjectInfoLavadoField = function(key, val) {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) return;
+    if (!p.infoLavado) p.infoLavado = {};
+    p.infoLavado[key] = val;
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+};
+
+window.renderStep1View = function(p) {
+    if (!p) return;
+    if (!p.tipoProyecto) p.tipoProyecto = 'servicio_local';
+
+    // 1. Selector de tipo de proyecto
+    ['servicio_local', 'movimientos_foraneos', 'lavado_contenedores'].forEach(t => {
+        const btn = document.getElementById(`btn-tipo-${t}`);
+        if (btn) {
+            if (p.tipoProyecto === t) btn.classList.add('active');
+            else btn.classList.remove('active');
+        }
+    });
+
+    // 2. Factura y OC
+    const facturaNumEl = document.getElementById("op-step1-factura-num");
+    const ocNumEl = document.getElementById("op-step1-oc-num");
+    if (facturaNumEl) facturaNumEl.value = p.numFactura || "";
+    if (ocNumEl) ocNumEl.value = p.numOC || "";
+
+    // 3. Tarjetas generales según tipo
+    const localForaneoCard = document.getElementById("op-step1-general-info-local-foraneo");
+    const lavadoCard = document.getElementById("op-step1-general-info-lavado");
+    const infoTitle = document.getElementById("op-step1-info-title");
+    const addContenedorLabel = document.getElementById("op-btn-add-contenedor-label");
+
+    if (p.tipoProyecto === 'lavado_contenedores') {
+        if (localForaneoCard) localForaneoCard.style.display = 'none';
+        if (lavadoCard) lavadoCard.style.display = 'block';
+        if (addContenedorLabel) addContenedorLabel.innerText = 'Agregar contenedor de lavado';
+
+        const info = p.infoLavado || {};
+        const sitioEl = document.getElementById("op-step1-lavado-sitio");
+        const clienteEl = document.getElementById("op-step1-lavado-cliente");
+        const hblEl = document.getElementById("op-step1-lavado-hbl");
+        const mblEl = document.getElementById("op-step1-lavado-mbl");
+        const navieraEl = document.getElementById("op-step1-lavado-naviera");
+        const totalEl = document.getElementById("op-step1-lavado-total");
+        const obsEl = document.getElementById("op-step1-lavado-obs");
+
+        if (sitioEl) sitioEl.value = info.sitioServicio || "";
+        if (clienteEl) clienteEl.value = info.clienteFacturar || "";
+        if (hblEl) hblEl.value = info.hbl || "";
+        if (mblEl) mblEl.value = info.mbl || "";
+        if (navieraEl) navieraEl.value = info.naviera || "";
+        if (totalEl) totalEl.value = `${(p.contenedores || []).length} contenedor(es)`;
+        if (obsEl) obsEl.value = info.observaciones || "";
+    } else {
+        if (localForaneoCard) localForaneoCard.style.display = 'block';
+        if (lavadoCard) lavadoCard.style.display = 'none';
+        if (addContenedorLabel) addContenedorLabel.innerText = 'Agregar contenedor';
+
+        if (infoTitle) {
+            infoTitle.innerText = p.tipoProyecto === 'movimientos_foraneos' 
+                ? 'Datos Generales - Movimientos Foráneos' 
+                : 'Datos Generales - Servicio Local';
+        }
+
+        const viaje = p.infoViaje || {};
+        const termEl = document.getElementById("op-step1-terminal");
+        const mblEl = document.getElementById("op-step1-mbl");
+        const destEl = document.getElementById("op-step1-destino");
+        const obsEl = document.getElementById("op-step1-obs");
+
+        if (termEl) termEl.value = viaje.terminal || "";
+        if (mblEl) mblEl.value = viaje.mblMawb || "";
+        if (destEl) destEl.value = viaje.destino || "";
+        if (obsEl) obsEl.value = viaje.observaciones || "";
+    }
+
+    renderContenedoresCards(p);
 };
 
 window.closeOperacionesDetail = function() {
@@ -6698,15 +6867,19 @@ function renderContenedoresCards(p) {
 
     let list = p.contenedores;
     if (!list || list.length === 0) {
-        list = [
-            { id: 1, label: 'Contenedor 1', fechaDespacho: '2027-03-21', horarioTerminal: '08:00 hrs', fechaEntrega: '2027-03-22', eirImpreso: 'EIR-8821', podSellado: 'Sí', entregaVacio: 'Pendiente' },
-            { id: 2, label: 'Contenedor 2', fechaDespacho: '2027-03-21', horarioTerminal: '10:00 hrs', fechaEntrega: '2027-03-22', eirImpreso: 'EIR-8822', podSellado: 'Sí', entregaVacio: 'Entregado' },
-            { id: 3, label: 'Contenedor 3', fechaDespacho: '2027-03-22', horarioTerminal: '12:30 hrs', fechaEntrega: '2027-03-23', eirImpreso: 'EIR-8823', podSellado: 'Pendiente', entregaVacio: 'Pendiente' },
-            { id: 4, label: 'Contenedor 4', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' },
-            { id: 5, label: 'Contenedor 5', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' },
-            { id: 6, label: 'Contenedor 6', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' },
-            { id: 7, label: 'Contenedor 7', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
-        ];
+        if (p.tipoProyecto === 'lavado_contenedores') {
+            list = [
+                { id: 1, label: 'Lavado Contenedor 1', numContenedor: 'TNCU2312248', evidenciaFecha: '2026-09-14', observaciones: 'Lavado grado alimenticio completado' },
+                { id: 2, label: 'Lavado Contenedor 2', numContenedor: 'MSKU9981240', evidenciaFecha: '2026-09-14', observaciones: 'Evidencias fotográficas enviadas' }
+            ];
+        } else {
+            list = [
+                { id: 1, label: 'Contenedor 1', fechaDespacho: '2027-03-21', horarioTerminal: '08:00 hrs', fechaEntrega: '2027-03-22', eirImpreso: 'EIR-8821', podSellado: 'Sí', entregaVacio: 'Pendiente' },
+                { id: 2, label: 'Contenedor 2', fechaDespacho: '2027-03-21', horarioTerminal: '10:00 hrs', fechaEntrega: '2027-03-22', eirImpreso: 'EIR-8822', podSellado: 'Sí', entregaVacio: 'Entregado' },
+                { id: 3, label: 'Contenedor 3', fechaDespacho: '2027-03-22', horarioTerminal: '12:30 hrs', fechaEntrega: '2027-03-23', eirImpreso: 'EIR-8823', podSellado: 'Pendiente', entregaVacio: 'Pendiente' },
+                { id: 4, label: 'Contenedor 4', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
+            ];
+        }
         p.contenedores = list;
     }
 
@@ -6717,43 +6890,74 @@ function renderContenedoresCards(p) {
     const startIdx = appState.contenedoresPage * itemsPerPage;
     const pageItems = list.slice(startIdx, startIdx + itemsPerPage);
 
-    container.innerHTML = pageItems.map(c => `
-        <div class="contenedor-card">
-            <div class="contenedor-card-header">
-                <div class="contenedor-num-badge">${c.id}</div>
-                <span class="contenedor-card-title">${c.label || ('Contenedor ' + c.id)}</span>
-                <button type="button" class="btn-delete-contenedor" onclick="deleteContenedor(${c.id})" title="Eliminar contenedor">
-                    <span class="material-symbols-outlined">delete</span>
-                </button>
-            </div>
-            <div class="contenedor-fields-grid">
-                <div>
-                    <label>Fecha de despacho</label>
-                    <input type="date" value="${c.fechaDespacho || ''}" onchange="updateContenedorField(${c.id}, 'fechaDespacho', this.value)" />
+    if (p.tipoProyecto === 'lavado_contenedores') {
+        container.innerHTML = pageItems.map(c => `
+            <div class="contenedor-card lavado-card">
+                <div class="contenedor-card-header">
+                    <div class="contenedor-num-badge">${c.id}</div>
+                    <span class="contenedor-card-title">${c.label || ('Lavado Contenedor ' + c.id)}</span>
+                    <button type="button" class="btn-delete-contenedor" onclick="deleteContenedor(${c.id})" title="Eliminar contenedor">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
                 </div>
-                <div>
-                    <label>Horario / Terminal</label>
-                    <input type="text" value="${c.horarioTerminal || ''}" placeholder="Selecciona o escribe..." oninput="updateContenedorField(${c.id}, 'horarioTerminal', this.value)" />
-                </div>
-                <div>
-                    <label>Fecha de entrega</label>
-                    <input type="date" value="${c.fechaEntrega || ''}" onchange="updateContenedorField(${c.id}, 'fechaEntrega', this.value)" />
-                </div>
-                <div>
-                    <label>EIR impreso</label>
-                    <input type="text" value="${c.eirImpreso || ''}" placeholder="Escribe número o referencia..." oninput="updateContenedorField(${c.id}, 'eirImpreso', this.value)" />
-                </div>
-                <div class="field-wide">
-                    <label>Pod sellado</label>
-                    <input type="text" value="${c.podSellado || ''}" placeholder="Selecciona o escribe..." oninput="updateContenedorField(${c.id}, 'podSellado', this.value)" />
-                </div>
-                <div class="field-wide">
-                    <label>Entrega de vacío</label>
-                    <input type="text" value="${c.entregaVacio || ''}" placeholder="Selecciona o escribe..." oninput="updateContenedorField(${c.id}, 'entregaVacio', this.value)" />
+                <div class="contenedor-fields-grid lavado-fields-grid">
+                    <div class="field-wide">
+                        <label>Lavado de contenedor (Matrícula)</label>
+                        <input type="text" value="${c.numContenedor || ''}" placeholder="Ej. TNCU2312248" oninput="updateContenedorField(${c.id}, 'numContenedor', this.value)" style="font-weight: 700; color: #15803D;" />
+                    </div>
+                    <div class="field-wide">
+                        <label>Evidencia enviada el</label>
+                        <input type="date" value="${c.evidenciaFecha || ''}" onchange="updateContenedorField(${c.id}, 'evidenciaFecha', this.value)" />
+                    </div>
+                    <div class="field-full">
+                        <label>Observaciones</label>
+                        <input type="text" value="${c.observaciones || ''}" placeholder="Notas o detalles de evidencia..." oninput="updateContenedorField(${c.id}, 'observaciones', this.value)" />
+                    </div>
                 </div>
             </div>
-        </div>
-    `).join('');
+        `).join('');
+
+        const totalEl = document.getElementById("op-step1-lavado-total");
+        if (totalEl) totalEl.value = `${list.length} contenedor(es)`;
+    } else {
+        container.innerHTML = pageItems.map(c => `
+            <div class="contenedor-card">
+                <div class="contenedor-card-header">
+                    <div class="contenedor-num-badge">${c.id}</div>
+                    <span class="contenedor-card-title">${c.label || ('Contenedor ' + c.id)}</span>
+                    <button type="button" class="btn-delete-contenedor" onclick="deleteContenedor(${c.id})" title="Eliminar contenedor">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
+                </div>
+                <div class="contenedor-fields-grid">
+                    <div>
+                        <label>Fecha de despacho</label>
+                        <input type="date" value="${c.fechaDespacho || ''}" onchange="updateContenedorField(${c.id}, 'fechaDespacho', this.value)" />
+                    </div>
+                    <div>
+                        <label>Horario / Terminal</label>
+                        <input type="text" value="${c.horarioTerminal || ''}" placeholder="Selecciona o escribe..." oninput="updateContenedorField(${c.id}, 'horarioTerminal', this.value)" />
+                    </div>
+                    <div>
+                        <label>Fecha de entrega</label>
+                        <input type="date" value="${c.fechaEntrega || ''}" onchange="updateContenedorField(${c.id}, 'fechaEntrega', this.value)" />
+                    </div>
+                    <div>
+                        <label>EIR impreso</label>
+                        <input type="text" value="${c.eirImpreso || ''}" placeholder="Escribe número o referencia..." oninput="updateContenedorField(${c.id}, 'eirImpreso', this.value)" />
+                    </div>
+                    <div class="field-wide">
+                        <label>Pod sellado</label>
+                        <input type="text" value="${c.podSellado || ''}" placeholder="Selecciona o escribe..." oninput="updateContenedorField(${c.id}, 'podSellado', this.value)" />
+                    </div>
+                    <div class="field-wide">
+                        <label>Entrega de vacío</label>
+                        <input type="text" value="${c.entregaVacio || ''}" placeholder="Selecciona o escribe..." oninput="updateContenedorField(${c.id}, 'entregaVacio', this.value)" />
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
 
     // Update nav buttons and indicator
     const prevBtn = document.getElementById("op-contenedores-prev-btn");
@@ -6777,7 +6981,11 @@ window.deleteContenedor = function(cId) {
     // Re-index remaining contenedores sequentially
     p.contenedores.forEach((c, idx) => {
         c.id = idx + 1;
-        c.label = `Contenedor ${c.id}`;
+        if (p.tipoProyecto === 'lavado_contenedores') {
+            c.label = `Lavado Contenedor ${c.id}`;
+        } else {
+            c.label = `Contenedor ${c.id}`;
+        }
     });
 
     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
@@ -6852,7 +7060,14 @@ window.addContenedorToActiveProject = function() {
     if (!p) return;
     if (!p.contenedores) p.contenedores = [];
     const nextId = p.contenedores.length + 1;
-    p.contenedores.push({ id: nextId, label: `Contenedor ${nextId}`, fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' });
+    if (p.tipoProyecto === 'lavado_contenedores') {
+        p.contenedores.push({ id: nextId, label: `Lavado Contenedor ${nextId}`, numContenedor: '', evidenciaFecha: '', observaciones: '' });
+    } else {
+        p.contenedores.push({ id: nextId, label: `Contenedor ${nextId}`, fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' });
+    }
+    // Navegar a la página donde quedó el nuevo contenedor
+    const itemsPerPage = 4;
+    appState.contenedoresPage = Math.floor((p.contenedores.length - 1) / itemsPerPage);
     renderContenedoresCards(p);
     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
 };
@@ -7402,8 +7617,10 @@ window.openNuevoProyectoModal = function() {
         numOC: String(Math.floor(10000 + Math.random() * 90000)),
         estatus: 'PENDIENTE',
         currentStep: 1,
-        servicioName: 'Servicio foráneo de contenedores',
+        tipoProyecto: 'servicio_local',
+        servicioName: 'Servicio local',
         infoViaje: { terminal: '', mblMawb: '', destino: '', observaciones: '' },
+        infoLavado: { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: 1, observaciones: '' },
         contenedores: [
             { id: 1, label: 'Contenedor 1', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
         ],

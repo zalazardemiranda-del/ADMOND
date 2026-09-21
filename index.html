@@ -1251,9 +1251,46 @@
                                         <span class="step-title">Facturación</span>
                                     </div>
                                 </div>
-                                <!-- STEP 1: DATOS DE PROYECTO (Imagen 3) -->
+                                <!-- STEP 1: DATOS DE PROYECTO (Selector de Tipo de Proyecto y Formularios) -->
                                 <div class="op-step-pane active" id="op-step-pane-1">
                                     
+                                    <!-- Selector de Tipo de Proyecto (Sustituye concepto Carátula) -->
+                                    <div class="op-project-type-section">
+                                        <div class="op-project-type-header">
+                                            <span class="material-symbols-outlined" style="color: #2563EB; font-size: 20px;">category</span>
+                                            <span class="op-project-type-title">Tipo de Proyecto</span>
+                                            <span class="op-project-type-subtitle">Selecciona el tipo de proyecto operativo:</span>
+                                        </div>
+                                        <div class="op-project-type-cards-grid">
+                                            <div class="project-type-card active" id="btn-tipo-servicio_local" onclick="selectProjectTipo('servicio_local')">
+                                                <div class="pt-icon-wrap"><span class="material-symbols-outlined">local_shipping</span></div>
+                                                <div class="pt-info">
+                                                    <span class="pt-title">Servicio Local</span>
+                                                    <span class="pt-desc">FCL Local y entregas de vacío</span>
+                                                </div>
+                                                <div class="pt-check"><span class="material-symbols-outlined">check_circle</span></div>
+                                            </div>
+
+                                            <div class="project-type-card" id="btn-tipo-movimientos_foraneos" onclick="selectProjectTipo('movimientos_foraneos')">
+                                                <div class="pt-icon-wrap"><span class="material-symbols-outlined">distance</span></div>
+                                                <div class="pt-info">
+                                                    <span class="pt-title">Movimientos Foráneos</span>
+                                                    <span class="pt-desc">Rutas nacionales y fletes</span>
+                                                </div>
+                                                <div class="pt-check"><span class="material-symbols-outlined">check_circle</span></div>
+                                            </div>
+
+                                            <div class="project-type-card" id="btn-tipo-lavado_contenedores" onclick="selectProjectTipo('lavado_contenedores')">
+                                                <div class="pt-icon-wrap"><span class="material-symbols-outlined">local_car_wash</span></div>
+                                                <div class="pt-info">
+                                                    <span class="pt-title">Lavado de Contenedores</span>
+                                                    <span class="pt-desc">Limpieza, inspección y evidencias</span>
+                                                </div>
+                                                <div class="pt-check"><span class="material-symbols-outlined">check_circle</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <!-- 2 Banners: Factura y Orden de Compra + Botón Agregar Contenedor -->
                                     <div class="op-step1-banners-grid">
                                         <div class="card op-badge-card">
@@ -1272,9 +1309,85 @@
                                             </div>
                                         </div>
 
-                                        <button type="button" class="btn btn-outline-primary btn-add-contenedor-top" onclick="addContenedorToActiveProject()">
-                                            <span class="material-symbols-outlined">add</span> Agregar contenedor
+                                        <button type="button" class="btn btn-outline-primary btn-add-contenedor-top" id="op-btn-add-contenedor" onclick="addContenedorToActiveProject()">
+                                            <span class="material-symbols-outlined">add</span> <span id="op-btn-add-contenedor-label">Agregar contenedor</span>
                                         </button>
+                                    </div>
+
+                                    <!-- Datos Generales para Servicio Local y Movimientos Foráneos -->
+                                    <div id="op-step1-general-info-local-foraneo" class="op-info-card" style="display: block;">
+                                        <div class="op-info-card-header" onclick="toggleStep1GeneralInfo('local-foraneo')">
+                                            <div class="op-info-header-left">
+                                                <span class="material-symbols-outlined" style="color: #2563EB; font-size: 18px;">alt_route</span>
+                                                <strong id="op-step1-info-title">Datos Generales del Servicio</strong>
+                                            </div>
+                                            <span class="material-symbols-outlined op-info-toggle-icon" id="op-toggle-icon-local-foraneo">expand_less</span>
+                                        </div>
+                                        <div class="op-info-card-body" id="op-info-body-local-foraneo">
+                                            <div class="op-form-row-4">
+                                                <div class="op-input-group">
+                                                    <label>Terminal</label>
+                                                    <input type="text" id="op-step1-terminal" placeholder="Ej. Manzanillo Terminal 1..." oninput="updateProjectInfoViajeField('terminal', this.value)">
+                                                </div>
+                                                <div class="op-input-group">
+                                                    <label>MBL / MAWB</label>
+                                                    <input type="text" id="op-step1-mbl" placeholder="Ej. MBL-260311..." oninput="updateProjectInfoViajeField('mblMawb', this.value)">
+                                                </div>
+                                                <div class="op-input-group">
+                                                    <label>Destino</label>
+                                                    <input type="text" id="op-step1-destino" placeholder="Ej. Querétaro Hub..." oninput="updateProjectInfoViajeField('destino', this.value)">
+                                                </div>
+                                                <div class="op-input-group">
+                                                    <label>Observaciones</label>
+                                                    <input type="text" id="op-step1-obs" placeholder="Observaciones generales..." oninput="updateProjectInfoViajeField('observaciones', this.value)">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Datos Generales para Lavado de Contenedores -->
+                                    <div id="op-step1-general-info-lavado" class="op-info-card" style="display: none;">
+                                        <div class="op-info-card-header" onclick="toggleStep1GeneralInfo('lavado')">
+                                            <div class="op-info-header-left">
+                                                <span class="material-symbols-outlined" style="color: #2563EB; font-size: 18px;">cleaning_services</span>
+                                                <strong>Datos Generales de Lavado de Contenedores</strong>
+                                            </div>
+                                            <span class="material-symbols-outlined op-info-toggle-icon" id="op-toggle-icon-lavado">expand_less</span>
+                                        </div>
+                                        <div class="op-info-card-body" id="op-info-body-lavado">
+                                            <div class="op-form-row-4">
+                                                <div class="op-input-group">
+                                                    <label>Sitio de servicio</label>
+                                                    <input type="text" id="op-step1-lavado-sitio" placeholder="Ej. Patio Manzanillo..." oninput="updateProjectInfoLavadoField('sitioServicio', this.value)">
+                                                </div>
+                                                <div class="op-input-group">
+                                                    <label>Cliente a facturar</label>
+                                                    <input type="text" id="op-step1-lavado-cliente" placeholder="Ej. Victor Hugo..." oninput="updateProjectInfoLavadoField('clienteFacturar', this.value)">
+                                                </div>
+                                                <div class="op-input-group">
+                                                    <label>HBL</label>
+                                                    <input type="text" id="op-step1-lavado-hbl" placeholder="Ej. HBL-001..." oninput="updateProjectInfoLavadoField('hbl', this.value)">
+                                                </div>
+                                                <div class="op-input-group">
+                                                    <label>MBL</label>
+                                                    <input type="text" id="op-step1-lavado-mbl" placeholder="Ej. MBL-001..." oninput="updateProjectInfoLavadoField('mbl', this.value)">
+                                                </div>
+                                            </div>
+                                            <div class="op-form-row-3" style="margin-top: 10px;">
+                                                <div class="op-input-group">
+                                                    <label>Naviera</label>
+                                                    <input type="text" id="op-step1-lavado-naviera" placeholder="Ej. Maersk / MSC..." oninput="updateProjectInfoLavadoField('naviera', this.value)">
+                                                </div>
+                                                <div class="op-input-group">
+                                                    <label>Total de contenedores</label>
+                                                    <input type="text" id="op-step1-lavado-total" placeholder="Calculado automáticamente..." readonly style="background: #F1F5F9; font-weight: 700;">
+                                                </div>
+                                                <div class="op-input-group">
+                                                    <label>Observaciones del servicio</label>
+                                                    <input type="text" id="op-step1-lavado-obs" placeholder="Observaciones generales..." oninput="updateProjectInfoLavadoField('observaciones', this.value)">
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <!-- Contenedores Grid con Navegación Lateral por Páginas de 4 Fichas -->
