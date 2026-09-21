@@ -666,7 +666,7 @@
                         
                         <!-- Back Navigation Header (Shown when viewing project detail in Operaciones) -->
                         <div class="operaciones-detail-topbar" id="op-detail-topbar" style="display: none; margin-bottom: 16px;">
-                            <button class="btn-back-operaciones" onclick="closeOperacionesDetail()">
+                            <button class="btn btn-secondary op-btn-nav btn-back-operaciones" onclick="closeOperacionesDetail()">
                                 <span class="material-symbols-outlined">arrow_back</span> Volver a Operaciones
                             </button>
                         </div>
@@ -1306,10 +1306,10 @@
                                         </div>
                                     </div>
 
-                                    <div class="op-wizard-footer" style="margin-top: 24px;">
+                                    <div class="op-wizard-footer" style="margin-top: 16px;">
                                         <div></div>
-                                        <button class="btn btn-primary btn-next-step" onclick="goToOperacionesStep(2)">
-                                            Continuar a Llenar Carátula <span class="material-symbols-outlined">arrow_forward</span>
+                                        <button class="btn btn-primary btn-next-step op-btn-nav" onclick="goToOperacionesStep(2)">
+                                            CONTINUAR <span class="material-symbols-outlined">arrow_forward</span>
                                         </button>
                                     </div>
                                 </div>
@@ -1440,14 +1440,14 @@
                                     </div>
 
                                     <div class="op-wizard-footer">
-                                        <button class="btn btn-secondary" onclick="goToOperacionesStep(1)">
-                                            <span class="material-symbols-outlined">arrow_back</span> Tipo de Proyecto
+                                        <button class="btn btn-secondary op-btn-nav" onclick="goToOperacionesStep(1)">
+                                            <span class="material-symbols-outlined">arrow_back</span> ANTERIOR
                                         </button>
                                         <div class="contenedores-page-indicator" id="op-contenedores-page-indicator">
                                             <!-- Page indicator rendered dynamically by JS -->
                                         </div>
-                                        <button class="btn btn-primary btn-next-step" onclick="goToOperacionesStep(3)">
-                                            Guardar y continuar <span class="material-symbols-outlined">arrow_forward</span>
+                                        <button class="btn btn-primary btn-next-step op-btn-nav" onclick="goToOperacionesStep(3)">
+                                            CONTINUAR <span class="material-symbols-outlined">arrow_forward</span>
                                         </button>
                                     </div>
                                 </div>
@@ -1592,14 +1592,14 @@
                                     </div>
 
                                     <div class="op-wizard-footer">
-                                        <button class="btn btn-secondary" onclick="handlePrefacturaFooterPrev()">
-                                            <span class="material-symbols-outlined">arrow_back</span> Anterior
+                                        <button class="btn btn-secondary op-btn-nav" onclick="handlePrefacturaFooterPrev()">
+                                            <span class="material-symbols-outlined">arrow_back</span> ANTERIOR
                                         </button>
                                         <div class="prefactura-page-indicator" id="op-prefactura-page-indicator">
                                             <strong>Página 1 de 2</strong> (Partidas y conceptos)
                                         </div>
-                                        <button class="btn btn-primary btn-next-step" onclick="handlePrefacturaFooterNext()">
-                                            Guardar y continuar <span class="material-symbols-outlined">arrow_forward</span>
+                                        <button class="btn btn-primary btn-next-step op-btn-nav" onclick="handlePrefacturaFooterNext()">
+                                            CONTINUAR <span class="material-symbols-outlined">arrow_forward</span>
                                         </button>
                                     </div>
                                 </div>
@@ -1745,11 +1745,11 @@
                                     </div>
 
                                     <div class="op-wizard-footer">
-                                        <button class="btn btn-secondary" onclick="goToOperacionesStep(3)">
-                                            <span class="material-symbols-outlined">arrow_back</span> Anterior
+                                        <button class="btn btn-secondary op-btn-nav" onclick="goToOperacionesStep(3)">
+                                            <span class="material-symbols-outlined">arrow_back</span> ANTERIOR
                                         </button>
-                                        <button class="btn btn-primary btn-next-step" onclick="goToOperacionesStep(5)">
-                                            Pasar a Facturación <span class="material-symbols-outlined">arrow_forward</span>
+                                        <button class="btn btn-primary btn-next-step op-btn-nav" onclick="goToOperacionesStep(5)">
+                                            CONTINUAR <span class="material-symbols-outlined">arrow_forward</span>
                                         </button>
                                     </div>
                                 </div>
@@ -1800,10 +1800,10 @@
                                         </p>
 
                                         <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-                                            <button class="btn btn-secondary" onclick="goToOperacionesStep(4)">
-                                                <span class="material-symbols-outlined">arrow_back</span> Regresar a Documentos
+                                            <button class="btn btn-secondary op-btn-nav" onclick="goToOperacionesStep(4)">
+                                                <span class="material-symbols-outlined">arrow_back</span> ANTERIOR
                                             </button>
-                                            <button class="btn btn-primary" style="background: #10B981; border-color: #10B981; padding: 10px 24px; font-weight: 700;" onclick="finishOperacionesWizard()">
+                                            <button class="btn btn-primary op-btn-nav" style="background: #10B981; border-color: #10B981; padding: 0 24px; font-weight: 700;" onclick="finishOperacionesWizard()">
                                                 <span class="material-symbols-outlined">check_circle</span> Cerrar y Finalizar Expediente
                                             </button>
                                         </div>

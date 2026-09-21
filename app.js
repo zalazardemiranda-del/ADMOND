@@ -6206,6 +6206,43 @@ window.sendQuickReply = async function() {
 };
 
 
+// Generador automático de consecutivos para proyectos de Operaciones
+// Regla: RDP + últimos 2 dígitos del año (26) + mes en 2 dígitos (09) + consecutivo numérico (ej. 112) + letra (F para local/foráneo, L para lavado)
+window.generateProjectConsecutivo = function(tipoProyecto) {
+    const now = new Date();
+    const year2 = String(now.getFullYear()).slice(-2);
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const letter = (tipoProyecto === 'lavado_contenedores') ? 'L' : 'F';
+    
+    let maxSeq = 111;
+    const projects = appState.operacionesProyectos || [];
+    projects.forEach(p => {
+        const val = (p.numConsecutivo || p.consecutivo || '').trim();
+        const m = val.match(/^RDP\d{4}(\d+)[A-Z]$/i);
+        if (m) {
+            const n = parseInt(m[1], 10);
+            if (!isNaN(n) && n > maxSeq) {
+                maxSeq = n;
+            }
+        }
+    });
+
+    const nextSeq = maxSeq + 1;
+    return `RDP${year2}${month}${nextSeq}${letter}`;
+};
+
+window.updateConsecutivoLetterForTipo = function(currentConsecutivo, tipoProyecto) {
+    const letter = (tipoProyecto === 'lavado_contenedores') ? 'L' : 'F';
+    if (!currentConsecutivo) {
+        return generateProjectConsecutivo(tipoProyecto);
+    }
+    const val = currentConsecutivo.trim();
+    if (/^RDP\d{4}\d+[A-Z]$/i.test(val)) {
+        return val.slice(0, -1) + letter;
+    }
+    return generateProjectConsecutivo(tipoProyecto);
+};
+
 // ---------------------------------------------------------------------------------
 // SECCIÓN 5: OPERACIONES (SOLO LOCALHOST - IMÁGENES 2, 3, 4, 5)
 // ---------------------------------------------------------------------------------
@@ -6218,8 +6255,8 @@ const defaultOperacionesProyectos = [
         factura: 'FAC4997',
         numFactura: '',
         numOC: '',
-        numConsecutivo: '',
-        consecutivo: '',
+        numConsecutivo: 'RDP2609110F',
+        consecutivo: 'RDP2609110F',
         estatus: 'PENDIENTE',
         currentStep: 1,
         tipoProyecto: 'movimientos_foraneos',
@@ -6241,8 +6278,8 @@ const defaultOperacionesProyectos = [
         factura: 'FODP1258',
         numFactura: 'F20059',
         numOC: '12556',
-        numConsecutivo: '001',
-        consecutivo: '001',
+        numConsecutivo: 'RDP2609111F',
+        consecutivo: 'RDP2609111F',
         estatus: 'ABIERTO',
         currentStep: 1,
         tipoProyecto: 'servicio_local',
@@ -6293,6 +6330,8 @@ const defaultOperacionesProyectos = [
         factura: 'FACP3091',
         numFactura: 'F20060',
         numOC: '12557',
+        numConsecutivo: 'RDP2609112L',
+        consecutivo: 'RDP2609112L',
         estatus: 'ABIERTO',
         currentStep: 1,
         tipoProyecto: 'lavado_contenedores',
@@ -6322,6 +6361,8 @@ const defaultOperacionesProyectos = [
         factura: 'FACX7710',
         numFactura: 'F20061',
         numOC: '12558',
+        numConsecutivo: 'RDP2608101F',
+        consecutivo: 'RDP2608101F',
         estatus: 'CERRADO',
         currentStep: 4,
         tipoProyecto: 'servicio_local',
@@ -6335,6 +6376,8 @@ const defaultOperacionesProyectos = [
         factura: 'FODP6622',
         numFactura: 'F20062',
         numOC: '12559',
+        numConsecutivo: 'RDP2609113F',
+        consecutivo: 'RDP2609113F',
         estatus: 'ABIERTO',
         currentStep: 1,
         tipoProyecto: 'movimientos_foraneos',
@@ -6348,6 +6391,8 @@ const defaultOperacionesProyectos = [
         factura: 'FACB4481',
         numFactura: 'F20063',
         numOC: '12560',
+        numConsecutivo: 'RDP2609114L',
+        consecutivo: 'RDP2609114L',
         estatus: 'CERRADO',
         currentStep: 4,
         tipoProyecto: 'lavado_contenedores',
@@ -6521,8 +6566,9 @@ function cleanOperacionesLegacyData(proyectos) {
         if (!p.infoLavado) {
             p.infoLavado = { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: (p.contenedores || []).length, observaciones: '' };
         }
-        if (p.numConsecutivo === undefined) {
-            p.numConsecutivo = p.consecutivo || '';
+        if (!p.numConsecutivo || !p.numConsecutivo.startsWith('RDP')) {
+            p.numConsecutivo = generateProjectConsecutivo(p.tipoProyecto);
+            p.consecutivo = p.numConsecutivo;
         }
     });
 }
@@ -6670,6 +6716,10 @@ window.selectProjectTipo = function(tipo) {
         p.infoViaje = { terminal: '', mblMawb: '', destino: '', observaciones: '' };
     }
 
+    // Actualizar letra de consecutivo según el tipo seleccionado (F para local/foráneo, L para lavado)
+    p.numConsecutivo = updateConsecutivoLetterForTipo(p.numConsecutivo, tipo);
+    p.consecutivo = p.numConsecutivo;
+
     if (p.contenedores && p.contenedores.length > 0) {
         p.contenedores.forEach((c, idx) => {
             if (tipo === 'lavado_contenedores') {
@@ -6744,12 +6794,17 @@ window.renderStep1View = function(p) {
     }
 
     // 2. Factura, OC y Consecutivo
+    if (!p.numConsecutivo || !p.numConsecutivo.startsWith('RDP')) {
+        p.numConsecutivo = generateProjectConsecutivo(p.tipoProyecto);
+        p.consecutivo = p.numConsecutivo;
+    }
     const facturaNumEl = document.getElementById("op-step1-factura-num");
     const ocNumEl = document.getElementById("op-step1-oc-num");
     const consecutivoNumEl = document.getElementById("op-step1-consecutivo-num");
     if (facturaNumEl) facturaNumEl.value = p.numFactura || "";
     if (ocNumEl) ocNumEl.value = p.numOC || "";
-    if (consecutivoNumEl) consecutivoNumEl.value = p.numConsecutivo || p.consecutivo || "";
+    if (consecutivoNumEl) consecutivoNumEl.value = p.numConsecutivo || "";
+    document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = p.numConsecutivo || "-");
 
     // 3. Tarjetas generales según tipo
     const localForaneoCard = document.getElementById("op-step1-general-info-local-foraneo");
@@ -7638,6 +7693,9 @@ window.openNuevoProyectoModal = function() {
     const todayStr = new Date().toISOString().split('T')[0];
     const todayDisplay = new Date().toLocaleDateString('es-MX');
 
+    const initTipo = 'servicio_local';
+    const initConsecutivo = generateProjectConsecutivo(initTipo);
+
     const newProject = {
         id: randomId,
         numProyecto: randomId,
@@ -7646,11 +7704,11 @@ window.openNuevoProyectoModal = function() {
         factura: 'FAC' + Math.floor(1000 + Math.random() * 9000),
         numFactura: 'F' + Math.floor(20000 + Math.random() * 90000),
         numOC: String(Math.floor(10000 + Math.random() * 90000)),
-        numConsecutivo: '',
-        consecutivo: '',
+        numConsecutivo: initConsecutivo,
+        consecutivo: initConsecutivo,
         estatus: 'PENDIENTE',
         currentStep: 1,
-        tipoProyecto: 'servicio_local',
+        tipoProyecto: initTipo,
         servicioName: 'Servicio local',
         infoViaje: { terminal: '', mblMawb: '', destino: '', observaciones: '' },
         infoLavado: { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: 1, observaciones: '' },
