@@ -6883,16 +6883,7 @@ window.closeOperacionesDetail = function() {
 window.goToOperacionesStep = function(stepNum) {
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
 
-    // Regla 1: Validar requisitos al intentar pasar a Facturación (Paso 5)
-    if (stepNum === 5) {
-        const valResult = validateProjectForFacturacion(p);
-        if (!valResult.valid) {
-            alert("⚠️ No se puede avanzar a Facturación (Paso 5):\n\n" + valResult.errors.map(e => "• " + e).join("\n") + "\n\nEl expediente se mantendrá como PENDIENTE hasta ingresar estos datos.");
-            return;
-        }
-    }
-
-    if (stepNum > 5) return;
+    if (stepNum > 4) return;
 
     document.querySelectorAll(".stepper-step").forEach((el, idx) => {
         const sNum = idx + 1;
@@ -8718,6 +8709,23 @@ window.finishOperacionesWizard = function() {
         localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
     }
     alert("¡Expediente operativo completado y CERRADO con éxito!");
+    closeOperacionesDetail();
+};
+
+window.generarProyectoOperaciones = function() {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (p) {
+        // Asegurar que los datos del encabezado queden persistidos
+        const facturaVal = document.getElementById("op-step1-factura-num")?.value;
+        const ocVal = document.getElementById("op-step1-oc-num")?.value;
+        const consecutivoVal = document.getElementById("op-step1-consecutivo-num")?.value;
+        if (facturaVal) p.numFactura = facturaVal;
+        if (ocVal) p.numOC = ocVal;
+        if (consecutivoVal) { p.numConsecutivo = consecutivoVal; p.consecutivo = consecutivoVal; }
+        p.currentStep = 4;
+        p.estatus = 'PENDIENTE';
+        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    }
     closeOperacionesDetail();
 };
 
