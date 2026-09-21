@@ -6294,6 +6294,39 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     border-radius: 5px;
 }
 
+#op-step-pane-2 .btn-convertir-pdf-top,
+.btn-convertir-pdf-top {
+    height: 38px;
+    padding: 0 14px;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    background: #FFFFFF;
+    color: #DC2626;
+    border: 1.5px solid #FCA5A5;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.08);
+}
+
+#op-step-pane-2 .btn-convertir-pdf-top:hover,
+.btn-convertir-pdf-top:hover {
+    background: #FEF2F2;
+    border-color: #DC2626;
+    color: #B91C1C;
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.15);
+}
+
+#op-step-pane-2 .btn-convertir-pdf-top .material-symbols-outlined,
+.btn-convertir-pdf-top .material-symbols-outlined {
+    font-size: 18px;
+    color: #DC2626;
+}
+
 #op-step-pane-2 .btn-add-contenedor-top {
     height: 38px;
     padding: 0 14px;

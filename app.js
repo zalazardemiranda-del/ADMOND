@@ -7169,6 +7169,464 @@ window.addContenedorToActiveProject = function() {
     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
 };
 
+window.convertirCaratulaPDF = function() {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) {
+        alert("No se encontró ningún proyecto activo para exportar.");
+        return;
+    }
+
+    // Obtener valores actuales (desde el DOM si existen, o del objeto del proyecto)
+    const factura = (document.getElementById("op-step1-factura-num")?.value || p.numFactura || "").trim();
+    const oc = (document.getElementById("op-step1-oc-num")?.value || p.numOC || "").trim();
+    const consecutivo = (document.getElementById("op-step1-consecutivo-num")?.value || p.numConsecutivo || "").trim();
+
+    const isLavado = p.tipoProyecto === 'lavado_contenedores';
+    const isForaneo = p.tipoProyecto === 'movimientos_foraneos';
+    const projectTypeName = isLavado ? 'Lavado de Contenedores' : (isForaneo ? 'Movimientos Foráneos' : 'Servicio Local');
+
+    // Datos Generales
+    let datosGeneralesHTML = '';
+    if (isLavado) {
+        const info = p.infoLavado || {};
+        const sitio = document.getElementById("op-step1-lavado-sitio")?.value || info.sitioServicio || "-";
+        const cliente = document.getElementById("op-step1-lavado-cliente")?.value || info.clienteFacturar || "-";
+        const hbl = document.getElementById("op-step1-lavado-hbl")?.value || info.hbl || "-";
+        const mbl = document.getElementById("op-step1-lavado-mbl")?.value || info.mbl || "-";
+        const naviera = document.getElementById("op-step1-lavado-naviera")?.value || info.naviera || "-";
+        const total = (p.contenedores || []).length;
+        const obs = document.getElementById("op-step1-lavado-obs")?.value || info.observaciones || "-";
+
+        datosGeneralesHTML = `
+            <div class="pdf-section-title">Datos Generales - Lavado de Contenedores</div>
+            <div class="pdf-grid-4">
+                <div class="pdf-field"><span class="pdf-label">Sitio de servicio:</span><span class="pdf-val">${sitio}</span></div>
+                <div class="pdf-field"><span class="pdf-label">Cliente a facturar:</span><span class="pdf-val">${cliente}</span></div>
+                <div class="pdf-field"><span class="pdf-label">HBL:</span><span class="pdf-val">${hbl}</span></div>
+                <div class="pdf-field"><span class="pdf-label">MBL:</span><span class="pdf-val">${mbl}</span></div>
+            </div>
+            <div class="pdf-grid-3" style="margin-top: 6px;">
+                <div class="pdf-field"><span class="pdf-label">Naviera:</span><span class="pdf-val">${naviera}</span></div>
+                <div class="pdf-field"><span class="pdf-label">Total de contenedores:</span><span class="pdf-val">${total} contenedor(es)</span></div>
+                <div class="pdf-field"><span class="pdf-label">Observaciones:</span><span class="pdf-val">${obs}</span></div>
+            </div>
+        `;
+    } else {
+        const viaje = p.infoViaje || {};
+        const term = document.getElementById("op-step1-terminal")?.value || viaje.terminal || "-";
+        const mbl = document.getElementById("op-step1-mbl")?.value || viaje.mblMawb || "-";
+        const dest = document.getElementById("op-step1-destino")?.value || viaje.destino || "-";
+        const obs = document.getElementById("op-step1-obs")?.value || viaje.observaciones || "-";
+
+        datosGeneralesHTML = `
+            <div class="pdf-section-title">Datos Generales - ${projectTypeName}</div>
+            <div class="pdf-grid-4">
+                <div class="pdf-field"><span class="pdf-label">Terminal:</span><span class="pdf-val">${term}</span></div>
+                <div class="pdf-field"><span class="pdf-label">MBL / MAWB:</span><span class="pdf-val">${mbl}</span></div>
+                <div class="pdf-field"><span class="pdf-label">Destino:</span><span class="pdf-val">${dest}</span></div>
+                <div class="pdf-field"><span class="pdf-label">Observaciones:</span><span class="pdf-val">${obs}</span></div>
+            </div>
+        `;
+    }
+
+    // Lista de Contenedores
+    const contenedores = (p.contenedores && p.contenedores.length > 0) ? p.contenedores : [
+        { id: 1, label: isLavado ? 'Lavado Contenedor 1' : 'Contenedor 1' }
+    ];
+
+    const maxPerPage = 7;
+    const totalPages = Math.max(1, Math.ceil(contenedores.length / maxPerPage));
+    const nowStr = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    let pagesHTML = '';
+
+    for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+        const pageItems = contenedores.slice(pageIdx * maxPerPage, (pageIdx + 1) * maxPerPage);
+
+        let contenedoresGridHTML = '';
+        if (isLavado) {
+            contenedoresGridHTML = pageItems.map(c => `
+                <div class="pdf-c-card">
+                    <div class="pdf-c-card-header">
+                        <span class="pdf-c-badge">${c.id}</span>
+                        <strong class="pdf-c-title">${c.label || ('Lavado Contenedor ' + c.id)}</strong>
+                    </div>
+                    <div class="pdf-c-fields pdf-c-lavado">
+                        <div class="pdf-c-field">
+                            <span class="pdf-label">Matrícula:</span>
+                            <span class="pdf-val bold-green">${c.numContenedor || '-'}</span>
+                        </div>
+                        <div class="pdf-c-field">
+                            <span class="pdf-label">Evidencia enviada el:</span>
+                            <span class="pdf-val">${c.evidenciaFecha || '-'}</span>
+                        </div>
+                        <div class="pdf-c-field full-row">
+                            <span class="pdf-label">Observaciones:</span>
+                            <span class="pdf-val">${c.observaciones || '-'}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            contenedoresGridHTML = pageItems.map(c => `
+                <div class="pdf-c-card">
+                    <div class="pdf-c-card-header">
+                        <span class="pdf-c-badge">${c.id}</span>
+                        <strong class="pdf-c-title">${c.label || ('Contenedor ' + c.id)}</strong>
+                    </div>
+                    <div class="pdf-c-fields">
+                        <div class="pdf-c-field"><span class="pdf-label">Fecha despacho:</span><span class="pdf-val">${c.fechaDespacho || '-'}</span></div>
+                        <div class="pdf-c-field"><span class="pdf-label">Horario / Terminal:</span><span class="pdf-val">${c.horarioTerminal || '-'}</span></div>
+                        <div class="pdf-c-field"><span class="pdf-label">Fecha entrega:</span><span class="pdf-val">${c.fechaEntrega || '-'}</span></div>
+                        <div class="pdf-c-field"><span class="pdf-label">EIR impreso:</span><span class="pdf-val">${c.eirImpreso || '-'}</span></div>
+                        <div class="pdf-c-field"><span class="pdf-label">Pod sellado:</span><span class="pdf-val">${c.podSellado || '-'}</span></div>
+                        <div class="pdf-c-field"><span class="pdf-label">Entrega vacío:</span><span class="pdf-val">${c.entregaVacio || '-'}</span></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        pagesHTML += `
+            <div class="pdf-page">
+                <!-- Encabezado de Documento -->
+                <div class="pdf-header">
+                    <div class="pdf-brand">
+                        <div class="pdf-logo-box">R</div>
+                        <div>
+                            <div class="pdf-brand-title">RODIPACK · ADMOND</div>
+                            <div class="pdf-brand-sub">Control Operativo y Expediente de Proyecto</div>
+                        </div>
+                    </div>
+                    <div class="pdf-doc-info">
+                        <div class="pdf-doc-title">EXPEDIENTE DE OPERACIONES</div>
+                        <div class="pdf-doc-type">Proyecto: <strong>${projectTypeName}</strong></div>
+                        <div class="pdf-doc-date">${nowStr}</div>
+                    </div>
+                </div>
+
+                <!-- 3 Banners Superiores (Factura, OC, Consecutivo) -->
+                <div class="pdf-banners-row">
+                    <div class="pdf-banner-card">
+                        <div class="pdf-banner-icon">📄</div>
+                        <div>
+                            <div class="pdf-banner-label">Número de factura:</div>
+                            <div class="pdf-banner-val">${factura || 'Sin factura'}</div>
+                        </div>
+                    </div>
+                    <div class="pdf-banner-card">
+                        <div class="pdf-banner-icon">📋</div>
+                        <div>
+                            <div class="pdf-banner-label">Número de OC:</div>
+                            <div class="pdf-banner-val">${oc || 'Sin OC'}</div>
+                        </div>
+                    </div>
+                    <div class="pdf-banner-card">
+                        <div class="pdf-banner-icon">🏷️</div>
+                        <div>
+                            <div class="pdf-banner-label">Consecutivo:</div>
+                            <div class="pdf-banner-val blue-text">${consecutivo || 'Sin consecutivo'}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tarjeta de Datos Generales -->
+                <div class="pdf-general-card">
+                    ${datosGeneralesHTML}
+                </div>
+
+                <!-- Sección de Contenedores -->
+                <div class="pdf-contenedores-section">
+                    <div class="pdf-c-section-header">
+                        <span>Contenedores Registrados (Página ${pageIdx + 1} de ${totalPages} · Mostrando ${pageItems.length} de ${contenedores.length})</span>
+                    </div>
+                    <div class="pdf-contenedores-grid">
+                        ${contenedoresGridHTML}
+                    </div>
+                </div>
+
+                <!-- Footer de Página -->
+                <div class="pdf-footer">
+                    <span>Expediente de Proyecto Consecutivo: <strong>${consecutivo || '-'}</strong> | ${projectTypeName}</span>
+                    <span>Página ${pageIdx + 1} de ${totalPages}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    const printHTML = `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Caratula_Operaciones_${consecutivo || 'Proyecto'}</title>
+    <style>
+        @page {
+            size: letter portrait;
+            margin: 8mm 10mm;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #1E293B;
+            background: #FFFFFF;
+            font-size: 11px;
+            line-height: 1.35;
+        }
+        .pdf-page {
+            page-break-after: always;
+            padding: 10px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .pdf-page:last-child {
+            page-break-after: avoid;
+        }
+        
+        /* Header */
+        .pdf-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2563EB;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+        }
+        .pdf-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .pdf-logo-box {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
+            color: #FFFFFF;
+            font-weight: 800;
+            font-size: 18px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pdf-brand-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: #0F172A;
+            letter-spacing: 0.5px;
+        }
+        .pdf-brand-sub {
+            font-size: 9px;
+            color: #64748B;
+        }
+        .pdf-doc-info {
+            text-align: right;
+        }
+        .pdf-doc-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: #1E3A8A;
+            letter-spacing: 0.5px;
+        }
+        .pdf-doc-type {
+            font-size: 10px;
+            color: #334155;
+            margin-top: 1px;
+        }
+        .pdf-doc-date {
+            font-size: 8.5px;
+            color: #94A3B8;
+        }
+
+        /* 3 Banners */
+        .pdf-banners-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .pdf-banner-card {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 6px;
+            padding: 6px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .pdf-banner-icon {
+            font-size: 16px;
+        }
+        .pdf-banner-label {
+            font-size: 8.5px;
+            color: #64748B;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .pdf-banner-val {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #0F172A;
+        }
+        .blue-text {
+            color: #2563EB;
+        }
+
+        /* Datos Generales */
+        .pdf-general-card {
+            background: #F8FAFC;
+            border: 1px solid #CBD5E1;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+        }
+        .pdf-section-title {
+            font-size: 10.5px;
+            font-weight: 700;
+            color: #1E3A8A;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #E2E8F0;
+            padding-bottom: 4px;
+        }
+        .pdf-grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+        .pdf-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+        .pdf-field {
+            display: flex;
+            flex-direction: column;
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 4px;
+            padding: 4px 6px;
+        }
+        .pdf-label {
+            font-size: 8px;
+            color: #64748B;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .pdf-val {
+            font-size: 9.5px;
+            font-weight: 600;
+            color: #1E293B;
+            margin-top: 1px;
+            word-break: break-word;
+        }
+        .bold-green {
+            color: #16A34A;
+            font-weight: 700;
+        }
+
+        /* Contenedores */
+        .pdf-contenedores-section {
+            margin-bottom: 10px;
+        }
+        .pdf-c-section-header {
+            font-size: 10px;
+            font-weight: 700;
+            color: #334155;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .pdf-contenedores-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .pdf-c-card {
+            background: #FFFFFF;
+            border: 1px solid #CBD5E1;
+            border-radius: 6px;
+            padding: 6px 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        }
+        .pdf-c-card-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #F1F5F9;
+            padding-bottom: 3px;
+        }
+        .pdf-c-badge {
+            background: #2563EB;
+            color: #FFFFFF;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 700;
+        }
+        .pdf-c-title {
+            font-size: 10px;
+            color: #0F172A;
+        }
+        .pdf-c-fields {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 4px;
+        }
+        .pdf-c-lavado {
+            grid-template-columns: 1fr 1fr;
+        }
+        .full-row {
+            grid-column: span 2;
+        }
+        .pdf-c-field {
+            display: flex;
+            flex-direction: column;
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 3px;
+            padding: 3px 5px;
+        }
+
+        /* Footer */
+        .pdf-footer {
+            margin-top: 8px;
+            border-top: 1px solid #E2E8F0;
+            padding-top: 4px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 8px;
+            color: #94A3B8;
+        }
+    </style>
+</head>
+<body>
+    ${pagesHTML}
+</body>
+</html>`;
+
+    const printWin = window.open('', '_blank', 'width=950,height=900');
+    if (!printWin) {
+        alert("Por favor permite las ventanas emergentes (popups) en tu navegador para ver y descargar el PDF.");
+        return;
+    }
+    printWin.document.open();
+    printWin.document.write(printHTML);
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => {
+        printWin.print();
+    }, 400);
+};
+
 const CODIGOS_SERVICIOS_OPERACIONES = {
     'F': 'Coordinacion Logistica',
     'M': 'Maniobras',
