@@ -6380,8 +6380,8 @@ window.updateConsecutivoLetterForTipo = function(currentConsecutivo, tipoProyect
 // ---------------------------------------------------------------------------------
 const defaultOperacionesProyectos = [
     {
-        id: 'RDP-1130XXXX',
-        numProyecto: 'RDP-1130XXXX',
+        id: 'RDP2609110F',
+        numProyecto: 'RDP2609110F',
         fechaInicio: '2026-09-16',
         fechaInicioDisplay: '16/09/2026',
         factura: 'FAC4997',
@@ -6403,8 +6403,8 @@ const defaultOperacionesProyectos = [
         documentos: {}
     },
     {
-        id: 'RDP-2608XXXX',
-        numProyecto: 'RDP-2608XXXX',
+        id: 'RDP2609111F',
+        numProyecto: 'RDP2609111F',
         fechaInicio: '2026-09-12',
         fechaInicioDisplay: '12/09/2026',
         factura: 'FODP1258',
@@ -6455,8 +6455,8 @@ const defaultOperacionesProyectos = [
         }
     },
     {
-        id: 'RDP-1407XXXX',
-        numProyecto: 'RDP-1407XXXX',
+        id: 'RDP2609112L',
+        numProyecto: 'RDP2609112L',
         fechaInicio: '2026-09-14',
         fechaInicioDisplay: '14/09/2026',
         factura: 'FACP3091',
@@ -6486,8 +6486,8 @@ const defaultOperacionesProyectos = [
         ]
     },
     {
-        id: 'RDP-3301XXXX',
-        numProyecto: 'RDP-3301XXXX',
+        id: 'RDP2608101F',
+        numProyecto: 'RDP2608101F',
         fechaInicio: '2026-08-01',
         fechaInicioDisplay: '01/08/2026',
         factura: 'FACX7710',
@@ -6501,8 +6501,8 @@ const defaultOperacionesProyectos = [
         servicioName: 'Servicio local'
     },
     {
-        id: 'RDP-0911XXXX',
-        numProyecto: 'RDP-0911XXXX',
+        id: 'RDP2609113F',
+        numProyecto: 'RDP2609113F',
         fechaInicio: '2026-09-10',
         fechaInicioDisplay: '10/09/2026',
         factura: 'FODP6622',
@@ -6516,8 +6516,8 @@ const defaultOperacionesProyectos = [
         servicioName: 'Movimientos foráneos'
     },
     {
-        id: 'RDP-0709XXXX',
-        numProyecto: 'RDP-0709XXXX',
+        id: 'RDP2609114L',
+        numProyecto: 'RDP2609114L',
         fechaInicio: '2026-09-05',
         fechaInicioDisplay: '05/09/2026',
         factura: 'FACB4481',
@@ -6702,6 +6702,9 @@ function cleanOperacionesLegacyData(proyectos) {
             p.numConsecutivo = generateProjectConsecutivo(p.tipoProyecto);
             p.consecutivo = p.numConsecutivo;
         }
+        if (p.consecutivo || p.numConsecutivo) {
+            p.numProyecto = p.consecutivo || p.numConsecutivo;
+        }
     });
 }
 
@@ -6724,8 +6727,11 @@ window.renderOperaciones = function() {
 
     const proyectos = appState.operacionesProyectos;
 
-    // Actualizar estatus dinámicamente según validación de Facturación y antigüedad de días
+    // Actualizar estatus dinámicamente y asegurar que el número de proyecto sea el consecutivo
     proyectos.forEach(p => {
+        if (p.consecutivo || p.numConsecutivo) {
+            p.numProyecto = p.consecutivo || p.numConsecutivo;
+        }
         p.estatus = computeProjectStatus(p);
     });
 
@@ -6750,6 +6756,7 @@ window.renderOperaciones = function() {
     if (appState.operacionesSearchQuery) {
         const q = appState.operacionesSearchQuery.trim().toLowerCase();
         filtered = filtered.filter(p => 
+            (p.consecutivo || '').toLowerCase().includes(q) ||
             (p.numProyecto || '').toLowerCase().includes(q) ||
             (p.factura || '').toLowerCase().includes(q) ||
             (p.numFactura || '').toLowerCase().includes(q)
@@ -6773,19 +6780,22 @@ window.renderOperaciones = function() {
         return;
     }
 
-    tbody.innerHTML = filtered.map(p => `
+    tbody.innerHTML = filtered.map(p => {
+        const consecutivoDisplay = p.consecutivo || p.numConsecutivo || p.numProyecto;
+        return `
         <tr>
-            <td><strong>${p.numProyecto}</strong></td>
+            <td><strong>${consecutivoDisplay}</strong></td>
             <td>${p.fechaInicioDisplay || p.fechaInicio}</td>
             <td>${p.factura || p.numFactura || '-'}</td>
             <td><span class="op-status-badge ${p.estatus}">${p.estatus}</span></td>
             <td style="text-align: right;">
-                <button class="btn-op-abrir" onclick="openOperacionesDetail('${p.id}')">
+                <button class="btn-op-abrir" onclick="openOperacionesDetail('${p.id || consecutivoDisplay}')">
                     <span class="material-symbols-outlined" style="font-size: 16px;">folder_open</span> ABRIR
                 </button>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 };
 
 window.handleOperacionesSearch = function(query) {
@@ -6805,7 +6815,7 @@ window.handleOperacionesTipoFilter = function(tipo) {
 
 window.openOperacionesDetail = function(projectId) {
     const proyectos = appState.operacionesProyectos || defaultOperacionesProyectos;
-    let p = proyectos.find(x => x.id === projectId);
+    let p = proyectos.find(x => x.id === projectId || x.numProyecto === projectId || x.consecutivo === projectId);
     if (!p) {
         p = proyectos[0];
     }
@@ -6826,11 +6836,12 @@ window.openOperacionesDetail = function(projectId) {
     // Populate Step 1 (Datos de proyecto - Factura, OC, Tipo de Proyecto y Formularios)
     renderStep1View(p);
 
-    // Populate Steps 3, 4, 5 Badges
-    document.querySelectorAll("#op-step3-num-proyecto, #op-step4-num-proyecto, #op-step5-num-proyecto").forEach(el => el.innerText = p.numProyecto);
+    // Populate Steps 3, 4, 5 Badges (Mostrando el consecutivo en Número de Proyecto)
+    const consecutivoDisplay = p.consecutivo || p.numConsecutivo || p.numProyecto;
+    document.querySelectorAll("#op-step3-num-proyecto, #op-step4-num-proyecto, #op-step5-num-proyecto").forEach(el => el.innerText = consecutivoDisplay);
     document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = p.numFactura || "(Sin Factura)");
     document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = p.numOC || "(Sin OC)");
-    document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = p.numConsecutivo || p.consecutivo || "-");
+    document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = consecutivoDisplay);
 
     renderPartidasTable(p);
     renderProveedorClavesTable(p);
@@ -6860,6 +6871,7 @@ window.selectProjectTipo = function(tipo) {
     // Actualizar letra de consecutivo según el tipo seleccionado (F para local/foráneo, L para lavado)
     p.numConsecutivo = updateConsecutivoLetterForTipo(p.numConsecutivo, tipo);
     p.consecutivo = p.numConsecutivo;
+    p.numProyecto = p.consecutivo;
 
     if (p.contenedores && p.contenedores.length > 0) {
         p.contenedores.forEach((c, idx) => {
@@ -8867,7 +8879,7 @@ window.generarProyectoOperaciones = function() {
         const consecutivoVal = document.getElementById("op-step1-consecutivo-num")?.value;
         if (facturaVal) p.numFactura = facturaVal;
         if (ocVal) p.numOC = ocVal;
-        if (consecutivoVal) { p.numConsecutivo = consecutivoVal; p.consecutivo = consecutivoVal; }
+        if (consecutivoVal) { p.numConsecutivo = consecutivoVal; p.consecutivo = consecutivoVal; p.numProyecto = consecutivoVal; }
         p.currentStep = 4;
         p.estatus = 'PENDIENTE';
         localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
@@ -8876,7 +8888,6 @@ window.generarProyectoOperaciones = function() {
 };
 
 window.openNuevoProyectoModal = function() {
-    const randomId = "RDP-" + Math.floor(1000 + Math.random() * 9000) + "XXXX";
     const todayStr = new Date().toISOString().split('T')[0];
     const todayDisplay = new Date().toLocaleDateString('es-MX');
 
@@ -8884,8 +8895,8 @@ window.openNuevoProyectoModal = function() {
     const initConsecutivo = generateProjectConsecutivo(initTipo);
 
     const newProject = {
-        id: randomId,
-        numProyecto: randomId,
+        id: initConsecutivo,
+        numProyecto: initConsecutivo,
         fechaInicio: todayStr,
         fechaInicioDisplay: todayDisplay,
         factura: 'FAC' + Math.floor(1000 + Math.random() * 9000),
