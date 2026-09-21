@@ -6902,7 +6902,7 @@ window.goToOperacionesStep = function(stepNum) {
     document.querySelectorAll(".op-step-pane").forEach((pane, idx) => {
         const sNum = idx + 1;
         if (sNum === stepNum) {
-            pane.style.display = "block";
+            pane.style.display = "flex";
         } else {
             pane.style.display = "none";
         }

@@ -6144,14 +6144,40 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     color: #475569;
 }
 
-/* Wizard Footer */
+/* Unified Step Panes (Pasos 1 al 4) - Altura Unificada y Botones Nivelados al Mismo Nivel */
+.op-step-pane {
+    display: none;
+    flex-direction: column;
+    min-height: 310px;
+    box-sizing: border-box;
+}
+
+.op-step-pane.active,
+.op-step-pane[style*="display: block"],
+.op-step-pane[style*="display: flex"] {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 310px !important;
+}
+
+.op-step-pane .op-wizard-footer,
 .op-wizard-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 10px;
-    padding-top: 8px;
+    margin-top: auto !important;
+    padding-top: 8px !important;
+    margin-bottom: 0 !important;
     border-top: 1px solid #E2E8F0;
+    flex-shrink: 0;
+    height: 48px;
+    box-sizing: border-box;
+}
+
+/* Step 1 específico */
+#op-step-pane-1 .op-project-type-section {
+    padding: 16px 20px;
+    margin-bottom: 0;
 }
 
 .btn-next-step {
@@ -6373,10 +6399,6 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     border-radius: 5px;
 }
 
-#op-step-pane-2 .op-wizard-footer {
-    margin-top: 4px;
-    padding-top: 2px;
-}
 
 #op-step-pane-2 .contenedores-page-indicator {
     font-size: 11px;
@@ -6528,10 +6550,6 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     border-top: 2px solid #CBD5E1;
 }
 
-.op-wizard-footer {
-    margin-top: 4px;
-    padding-top: 4px;
-}
 
 /* Minimalist Step 4 (Documentos Operativos) - Eliminación de scroll vertical */
 #op-step-pane-4 .op-step-heading {
@@ -6675,10 +6693,6 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     border-radius: 4px;
 }
 
-#op-step-pane-4 .op-wizard-footer {
-    margin-top: 14px;
-    padding-top: 8px;
-}
 
 
 
