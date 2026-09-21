@@ -7291,7 +7291,7 @@ window.convertirCaratulaPDF = function() {
                 <!-- Encabezado de Documento -->
                 <div class="pdf-header">
                     <div class="pdf-brand">
-                        <div class="pdf-logo-box">R</div>
+                        <img src="Logo%20interno.png" alt="Rodipack Logo" class="pdf-logo-img" />
                         <div>
                             <div class="pdf-brand-title">RODIPACK · ADMOND</div>
                             <div class="pdf-brand-sub">Control Operativo y Expediente de Proyecto</div>
@@ -7357,6 +7357,7 @@ window.convertirCaratulaPDF = function() {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <base href="${window.location.href}">
     <title>Caratula_Operaciones_${consecutivo || 'Proyecto'}</title>
     <style>
         @page {
@@ -7399,19 +7400,14 @@ window.convertirCaratulaPDF = function() {
         .pdf-brand {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
-        .pdf-logo-box {
-            width: 32px;
-            height: 32px;
-            background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
-            color: #FFFFFF;
-            font-weight: 800;
-            font-size: 18px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .pdf-logo-img {
+            height: 38px;
+            width: auto;
+            max-width: 120px;
+            object-fit: contain;
+            display: block;
         }
         .pdf-brand-title {
             font-size: 13px;
@@ -7621,10 +7617,38 @@ window.convertirCaratulaPDF = function() {
     printWin.document.open();
     printWin.document.write(printHTML);
     printWin.document.close();
-    printWin.focus();
-    setTimeout(() => {
-        printWin.print();
-    }, 400);
+
+    const imgs = printWin.document.querySelectorAll('.pdf-logo-img');
+    let pending = imgs.length;
+    const triggerPrint = () => {
+        setTimeout(() => {
+            printWin.focus();
+            printWin.print();
+        }, 200);
+    };
+
+    if (pending === 0) {
+        triggerPrint();
+    } else {
+        imgs.forEach(img => {
+            if (img.complete) {
+                pending--;
+                if (pending === 0) triggerPrint();
+            } else {
+                img.onload = () => {
+                    pending--;
+                    if (pending === 0) triggerPrint();
+                };
+                img.onerror = () => {
+                    pending--;
+                    if (pending === 0) triggerPrint();
+                };
+            }
+        });
+        setTimeout(() => {
+            if (pending > 0) triggerPrint();
+        }, 1200);
+    }
 };
 
 window.convertirPrefacturaPDF = function() {
@@ -7751,6 +7775,7 @@ window.convertirPrefacturaPDF = function() {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <base href="${window.location.href}">
     <title>Prefactura_${consecutivo || 'Proyecto'}</title>
     <style>
         @page {
@@ -7793,19 +7818,14 @@ window.convertirPrefacturaPDF = function() {
         .pdf-brand {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
-        .pdf-logo-box {
-            width: 32px;
-            height: 32px;
-            background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
-            color: #FFFFFF;
-            font-weight: 800;
-            font-size: 18px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .pdf-logo-img {
+            height: 38px;
+            width: auto;
+            max-width: 120px;
+            object-fit: contain;
+            display: block;
         }
         .pdf-brand-title {
             font-size: 13px;
@@ -7956,7 +7976,7 @@ window.convertirPrefacturaPDF = function() {
     <div class="pdf-page">
         <div class="pdf-header">
             <div class="pdf-brand">
-                <div class="pdf-logo-box">R</div>
+                <img src="Logo%20interno.png" alt="Rodipack Logo" class="pdf-logo-img" />
                 <div>
                     <div class="pdf-brand-title">RODIPACK · ADMOND</div>
                     <div class="pdf-brand-sub">Control Operativo · Expediente de Prefactura</div>
@@ -8043,7 +8063,7 @@ window.convertirPrefacturaPDF = function() {
     <div class="pdf-page">
         <div class="pdf-header">
             <div class="pdf-brand">
-                <div class="pdf-logo-box">R</div>
+                <img src="Logo%20interno.png" alt="Rodipack Logo" class="pdf-logo-img" />
                 <div>
                     <div class="pdf-brand-title">RODIPACK · ADMOND</div>
                     <div class="pdf-brand-sub">Control Operativo · Expediente de Prefactura</div>
@@ -8137,10 +8157,38 @@ window.convertirPrefacturaPDF = function() {
     printWin.document.open();
     printWin.document.write(printHTML);
     printWin.document.close();
-    printWin.focus();
-    setTimeout(() => {
-        printWin.print();
-    }, 400);
+
+    const imgs = printWin.document.querySelectorAll('.pdf-logo-img');
+    let pending = imgs.length;
+    const triggerPrint = () => {
+        setTimeout(() => {
+            printWin.focus();
+            printWin.print();
+        }, 200);
+    };
+
+    if (pending === 0) {
+        triggerPrint();
+    } else {
+        imgs.forEach(img => {
+            if (img.complete) {
+                pending--;
+                if (pending === 0) triggerPrint();
+            } else {
+                img.onload = () => {
+                    pending--;
+                    if (pending === 0) triggerPrint();
+                };
+                img.onerror = () => {
+                    pending--;
+                    if (pending === 0) triggerPrint();
+                };
+            }
+        });
+        setTimeout(() => {
+            if (pending > 0) triggerPrint();
+        }, 1200);
+    }
 };
 
 const CODIGOS_SERVICIOS_OPERACIONES = {
