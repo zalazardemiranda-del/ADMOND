@@ -4018,9 +4018,28 @@ window.toggleNewUserForm = function() {
 window.loadProfilesList = async function() {
     const container = document.getElementById("profiles-list-container");
     
-    const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [
-        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" }
+    const defaultProfiles = [
+        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" },
+        { nombre: "Diego Miranda", email: "diego.miranda@rodipack.com", rol: "colaborador", departamento: "Operaciones", password: "Diego123" },
+        { nombre: "Jennifer López", email: "jennifer@rodipack.online", rol: "administrador", departamento: "Finanzas & Nómina", password: "Jennifer123" }
     ];
+    
+    let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles'));
+    if (!Array.isArray(localProfiles) || localProfiles.length === 0) {
+        localProfiles = [...defaultProfiles];
+        localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
+    } else {
+        let modified = false;
+        defaultProfiles.forEach(dp => {
+            if (!localProfiles.some(p => p.email && p.email.toLowerCase() === dp.email.toLowerCase())) {
+                localProfiles.push(dp);
+                modified = true;
+            }
+        });
+        if (modified) {
+            localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
+        }
+    }
     
     let mergedProfiles = [...localProfiles];
     
