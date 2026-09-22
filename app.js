@@ -236,28 +236,27 @@ document.addEventListener("DOMContentLoaded", async () => {
         localStorage.removeItem('rp_meetings');
     }
     let storedChats = JSON.parse(localStorage.getItem('rp_chats'));
-    if (storedChats && (storedChats['cubicacion-ayuda'] || storedChats['tracking-status'])) {
-        delete storedChats['cubicacion-ayuda'];
-        delete storedChats['tracking-status'];
-        localStorage.setItem('rp_chats', JSON.stringify(storedChats));
-    }
-
-    appState.chats = JSON.parse(localStorage.getItem('rp_chats')) || { general: [] };
-    if (appState.chats && typeof appState.chats === 'object') {
-        Object.keys(appState.chats).forEach(k => {
-            if (Array.isArray(appState.chats[k])) {
-                const seen = new Set();
-                appState.chats[k] = appState.chats[k].filter(m => {
-                    if (!m || !m.text) return false;
-                    const sig = `${(m.sender || '').trim()}_${(m.text || '').trim()}_${(m.time || '').trim()}`;
-                    if (seen.has(sig)) return false;
-                    seen.add(sig);
+    if (storedChats && typeof storedChats === 'object') {
+        const fakeNames = new Set(["Juan Pérez", "Juan Perez", "María Gómez", "Maria Gomez", "Gerente Principal"]);
+        Object.keys(storedChats).forEach(k => {
+            if (k === 'cubicacion-ayuda' || k === 'tracking-status') {
+                delete storedChats[k];
+            } else if (Array.isArray(storedChats[k])) {
+                storedChats[k] = storedChats[k].filter(m => {
+                    if (!m) return false;
+                    const sender = (m.sender || '').trim();
+                    const text = (m.text || '').trim();
+                    if (fakeNames.has(sender)) return false;
+                    if (text.includes("cubicación del contenedor") || text.includes("tracking del despacho demorado") || text.includes("exportación de hoy")) return false;
                     return true;
                 });
             }
         });
-        localStorage.setItem('rp_chats', JSON.stringify(appState.chats));
+        localStorage.setItem('rp_chats', JSON.stringify(storedChats));
     }
+
+    appState.chats = storedChats || { general: [] };
+    if (!appState.chats.general) appState.chats.general = [];
     appState.customChannels = JSON.parse(localStorage.getItem('rp_custom_channels')) || [];
     appState.meetings = JSON.parse(localStorage.getItem('rp_meetings')) || [];
     
@@ -2426,7 +2425,7 @@ window.handleSendChatMessage = function(event) {
     
     if (!text && !attachment) return;
     
-    const senderName = appState.currentUser ? appState.currentUser.nombre : (appState.currentRole === 'gerente' ? 'Gerente Principal' : 'Colaborador');
+    const senderName = appState.currentUser ? appState.currentUser.nombre : (appState.currentRole === 'gerente' ? 'Roberto Miranda Perez' : 'Roberto Miranda Perez');
     const senderRole = appState.currentUser ? appState.currentUser.rol : appState.currentRole;
     const currentChan = appState.currentChannel || 'general';
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -3875,78 +3874,38 @@ async function fetchCloudData() {
         // Sincronizar tareas
         await fetchTasksFromCloud();
         
-        // Sincronizar mensajes de chat
+        // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)
         const { data: msgs, error: mError } = await client.from('messages').select('*').order('created_at', { ascending: true });
-        if (msgs && msgs.length > 0) {
-            let addedAny = false;
+        if (msgs) {
+            const cleanChats = { general: [] };
+            (appState.customChannels || []).forEach(c => {
+                if (!cleanChats[c.id]) cleanChats[c.id] = [];
+            });
+
             msgs.forEach(row => {
                 const channelKey = row.chat_id || 'general';
-                if (!appState.chats[channelKey]) appState.chats[channelKey] = [];
+                if (!cleanChats[channelKey]) cleanChats[channelKey] = [];
 
                 const cleanContent = (row.contenido || '').trim();
                 const senderName = row.emisor_nombre || 'Usuario';
                 const timeStr = new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const senderRole = row.emisor_role || (row.emisor_nombre === 'Sistema Rodipack' ? 'sistema' : 'colaborador');
 
-                // Deduplicar tanto por ID como por contenido y autor
-                const existingIndex = appState.chats[channelKey].findIndex(m => 
-                    m.id === row.id || 
-                    (m.sender === senderName && (m.text || '').trim() === cleanContent)
-                );
-
-                if (existingIndex >= 0) {
-                    appState.chats[channelKey][existingIndex].id = row.id;
-                    appState.chats[channelKey][existingIndex].syncedToCloud = true;
-                } else {
-                    const senderRole = row.emisor_role || (row.emisor_nombre === 'Sistema Rodipack' ? 'sistema' : 'colaborador');
-                    appState.chats[channelKey].push({
-                        id: row.id,
-                        sender: senderName,
-                        role: senderRole,
-                        text: cleanContent,
-                        time: timeStr,
-                        timestamp: row.created_at,
-                        syncedToCloud: true
-                    });
-                    addedAny = true;
-                }
-            });
-            if (addedAny) {
-                saveToStorage();
-                renderChatMessages(false);
-            }
-        }
-
-        // Subir mensajes locales no sincronizados a Supabase (con protección estricta anti-duplicados)
-        const currentMsgs = appState.chats[appState.currentChannel || 'general'] || [];
-        const cloudMsgIds = new Set((msgs || []).map(m => m.id));
-        const cloudSignatures = new Set((msgs || []).map(m => `${m.emisor_nombre || 'Usuario'}_${(m.contenido || '').trim()}`));
-
-        currentMsgs.forEach(m => {
-            const cleanText = (m.text || '').trim();
-            const sig = `${m.sender || 'Usuario'}_${cleanText}`;
-            if (!cloudMsgIds.has(m.id) && !cloudSignatures.has(sig) && cleanText && !m.syncedToCloud) {
-                m.syncedToCloud = true;
-                const validUUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-                const rawUserId = appState.currentUser?.id;
-                const validUserId = (rawUserId && validUUIDRegex.test(rawUserId)) ? rawUserId : null;
-                const newId = (m.id && validUUIDRegex.test(m.id)) ? m.id : undefined;
-
-                const payload = {
-                    chat_id: appState.currentChannel || 'general',
-                    emisor_id: validUserId,
-                    emisor_nombre: m.sender || 'Usuario',
-                    emisor_role: m.role || 'colaborador',
-                    contenido: cleanText
-                };
-                if (newId) payload.id = newId;
-
-                client.from('messages').insert([payload]).then(({ error }) => {
-                    if (error) console.warn("Notice: Message auto-sync:", error.message || error);
+                cleanChats[channelKey].push({
+                    id: row.id,
+                    sender: senderName,
+                    role: senderRole,
+                    text: cleanContent,
+                    time: timeStr,
+                    timestamp: row.created_at,
+                    syncedToCloud: true
                 });
-            } else {
-                m.syncedToCloud = true;
-            }
-        });
+            });
+
+            appState.chats = cleanChats;
+            saveToStorage();
+            renderChatMessages(false);
+        }
     } catch (err) {
         console.warn("⚠️ Error fetching cloud data:", err);
     }
