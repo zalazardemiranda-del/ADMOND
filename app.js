@@ -196,8 +196,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         const sig = `${(task.title || '').trim().toLowerCase()}____${(task.desc || '').trim().toLowerCase()}`;
         return (appState.deletedTaskIds || []).some(d => d === task.id || (sig && d === sig));
     };
-
-    storedTasks = storedTasks.filter(t => t && t.id !== 'task-1' && t.id !== 'task-2' && !isTaskDeleted(t));
+    const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
+    storedTasks = storedTasks.filter(t => {
+        if (!t || !t.title || t.id === 'task-1' || t.id === 'task-2' || isTaskDeleted(t)) return false;
+        const assignee = (t.assignee || '').trim().toLowerCase();
+        if (fakeAssignees.has(assignee)) return false;
+        if (t.id === '6929c3c3-9be4-40ec-87a8-358386733c2b' || t.id === 'c772ff39-1ddb-4911-ba44-a924d5efb841') return false;
+        return true;
+    });
 
     // Fusionar tareas predeterminadas con tareas locales basándose en ID o firma (título + descripción)
     const tasksMap = new Map();
@@ -1717,7 +1723,8 @@ window.populateTaskUserFilterOptions = function() {
     // 2. Agregar asignados de tareas existentes si no estaban registrados
     (appState.tasks || []).forEach(t => {
         const a = (t.assignee || '').trim();
-        if (a && a !== 'Sin asignar') {
+        const fakeUsers = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
+        if (a && a !== 'Sin asignar' && !fakeUsers.has(a.toLowerCase())) {
             let matchedKey = null;
             for (const [key, val] of usersMap.entries()) {
                 if (key.toLowerCase() === a.toLowerCase() || 
@@ -3942,10 +3949,14 @@ async function fetchTasksFromCloud() {
             };
         });
 
-        // Filtrar tareas que hayan sido eliminadas
+        // Filtrar tareas que hayan sido eliminadas o asignadas a usuarios inventados
+        const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
         const filteredCloudTasks = cloudTasks.filter(ct => {
             if (!ct || !ct.title) return false;
             const sig = `${(ct.title || '').trim().toLowerCase()}____${(ct.desc || '').trim().toLowerCase()}`;
+            const assignee = (ct.assignee || '').trim().toLowerCase();
+            if (fakeAssignees.has(assignee)) return false;
+            if (ct.id === '6929c3c3-9be4-40ec-87a8-358386733c2b' || ct.id === 'c772ff39-1ddb-4911-ba44-a924d5efb841') return false;
             return !appState.deletedTaskIds.includes(ct.id) && !appState.deletedTaskIds.includes(sig);
         });
 
@@ -3958,6 +3969,9 @@ async function fetchTasksFromCloud() {
             const cleanTitle = (lt.title || '').trim().toLowerCase();
             const cleanDesc = (lt.desc || '').trim().toLowerCase();
             const sig = `${cleanTitle}____${cleanDesc}`;
+            const assignee = (lt.assignee || '').trim().toLowerCase();
+            if (fakeAssignees.has(assignee)) return;
+            if (lt.id === '6929c3c3-9be4-40ec-87a8-358386733c2b' || lt.id === 'c772ff39-1ddb-4911-ba44-a924d5efb841') return;
             if (appState.deletedTaskIds.includes(lt.id) || appState.deletedTaskIds.includes(sig)) return;
 
             // Normalizar estado por seguridad
@@ -6513,159 +6527,7 @@ window.updateConsecutivoLetterForTipo = function(currentConsecutivo, tipoProyect
 // ---------------------------------------------------------------------------------
 // SECCIÓN 5: OPERACIONES (SOLO LOCALHOST - IMÁGENES 2, 3, 4, 5)
 // ---------------------------------------------------------------------------------
-const defaultOperacionesProyectos = [
-    {
-        id: 'RDP2609110F',
-        numProyecto: 'RDP2609110F',
-        fechaInicio: '2026-09-16',
-        fechaInicioDisplay: '16/09/2026',
-        factura: 'FAC4997',
-        numFactura: '',
-        numOC: '',
-        numConsecutivo: 'RDP2609110F',
-        consecutivo: 'RDP2609110F',
-        estatus: 'PENDIENTE',
-        currentStep: 1,
-        tipoProyecto: 'movimientos_foraneos',
-        servicioName: 'Movimientos foráneos',
-        infoViaje: { terminal: 'Manzanillo Terminal 1', mblMawb: 'MBL-99283411', destino: 'Querétaro Hub', observaciones: 'Carga prioritaria' },
-        infoLavado: { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: 0, observaciones: '' },
-        contenedores: [],
-        partidasConceptos: [],
-        proveedoresClaves: [
-            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: 0, unitario: 0, subtotal: 0, iva: 0, retencion: 0, total: 0 }
-        ],
-        documentos: {}
-    },
-    {
-        id: 'RDP2609111F',
-        numProyecto: 'RDP2609111F',
-        fechaInicio: '2026-09-12',
-        fechaInicioDisplay: '12/09/2026',
-        factura: 'FODP1258',
-        numFactura: 'F20059',
-        numOC: '12556',
-        numConsecutivo: 'RDP2609111F',
-        consecutivo: 'RDP2609111F',
-        estatus: 'ABIERTO',
-        currentStep: 1,
-        tipoProyecto: 'servicio_local',
-        servicioName: 'Servicio local',
-        infoViaje: {
-            terminal: 'Terminal SSA Manzanillo',
-            mblMawb: 'MSK-88192300',
-            destino: 'Patio Central',
-            observaciones: 'Entrega local prioritaria'
-        },
-        infoLavado: { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: 0, observaciones: '' },
-        contenedores: [
-            { id: 1, label: 'Contenedor 1', fechaDespacho: '2027-03-21', horarioTerminal: '08:00 hrs', fechaEntrega: '2027-03-22', eirImpreso: 'EIR-8821', podSellado: 'Sí', entregaVacio: 'Pendiente' },
-            { id: 2, label: 'Contenedor 2', fechaDespacho: '2027-03-21', horarioTerminal: '10:00 hrs', fechaEntrega: '2027-03-22', eirImpreso: 'EIR-8822', podSellado: 'Sí', entregaVacio: 'Entregado' },
-            { id: 3, label: 'Contenedor 3', fechaDespacho: '2027-03-22', horarioTerminal: '12:30 hrs', fechaEntrega: '2027-03-23', eirImpreso: 'EIR-8823', podSellado: 'Pendiente', entregaVacio: 'Pendiente' },
-            { id: 4, label: 'Contenedor 4', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' },
-            { id: 5, label: 'Contenedor 5', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' },
-            { id: 6, label: 'Contenedor 6', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' },
-            { id: 7, label: 'Contenedor 7', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
-        ],
-        partidasConceptos: [
-            { servicio: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
-        ],
-        proveedoresClaves: [
-            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
-        ],
-        documentos: {
-            factura1: { uploaded: true, fileName: 'Factura-FAC9921.pdf' },
-            factura2: { uploaded: false, fileName: '' },
-            factura3: { uploaded: false, fileName: '' },
-            pod1: { uploaded: true, fileName: 'POD-Contenedor1.pdf' },
-            pod2: { uploaded: false, fileName: '' }
-        }
-    },
-    {
-        id: 'RDP2609112L',
-        numProyecto: 'RDP2609112L',
-        fechaInicio: '2026-09-14',
-        fechaInicioDisplay: '14/09/2026',
-        factura: 'FACP3091',
-        numFactura: 'F20060',
-        numOC: '12557',
-        numConsecutivo: 'RDP2609112L',
-        consecutivo: 'RDP2609112L',
-        estatus: 'ABIERTO',
-        currentStep: 1,
-        tipoProyecto: 'lavado_contenedores',
-        servicioName: 'Lavado de contenedores',
-        infoViaje: { terminal: '', mblMawb: '', destino: '', observaciones: '' },
-        infoLavado: {
-            sitioServicio: 'Patio Manzanillo',
-            clienteFacturar: 'Victor Hugo',
-            hbl: 'HBL-9921',
-            mbl: 'MBL-260311',
-            naviera: 'Maersk Line',
-            totalContenedores: 4,
-            observaciones: 'Lavado a vapor e inspección química'
-        },
-        contenedores: [
-            { id: 1, label: 'Lavado Contenedor 1', numContenedor: 'TNCU2312248', evidenciaFecha: '2026-09-14', observaciones: 'Lavado grado alimenticio completado' },
-            { id: 2, label: 'Lavado Contenedor 2', numContenedor: 'MSKU9981240', evidenciaFecha: '2026-09-14', observaciones: 'Evidencias fotográficas enviadas' },
-            { id: 3, label: 'Lavado Contenedor 3', numContenedor: 'CMAU1102948', evidenciaFecha: '2026-09-15', observaciones: 'Sellado y liberado' },
-            { id: 4, label: 'Lavado Contenedor 4', numContenedor: 'HLCU7721839', evidenciaFecha: '', observaciones: 'Pendiente inspección final' }
-        ]
-    },
-    {
-        id: 'RDP2608101F',
-        numProyecto: 'RDP2608101F',
-        fechaInicio: '2026-08-01',
-        fechaInicioDisplay: '01/08/2026',
-        factura: 'FACX7710',
-        numFactura: 'F20061',
-        numOC: '12558',
-        numConsecutivo: 'RDP2608101F',
-        consecutivo: 'RDP2608101F',
-        estatus: 'CERRADO',
-        currentStep: 4,
-        tipoProyecto: 'servicio_local',
-        servicioName: 'Servicio local'
-    },
-    {
-        id: 'RDP2609113F',
-        numProyecto: 'RDP2609113F',
-        fechaInicio: '2026-09-10',
-        fechaInicioDisplay: '10/09/2026',
-        factura: 'FODP6622',
-        numFactura: 'F20062',
-        numOC: '12559',
-        numConsecutivo: 'RDP2609113F',
-        consecutivo: 'RDP2609113F',
-        estatus: 'ABIERTO',
-        currentStep: 1,
-        tipoProyecto: 'movimientos_foraneos',
-        servicioName: 'Movimientos foráneos'
-    },
-    {
-        id: 'RDP2609114L',
-        numProyecto: 'RDP2609114L',
-        fechaInicio: '2026-09-05',
-        fechaInicioDisplay: '05/09/2026',
-        factura: 'FACB4481',
-        numFactura: 'F20063',
-        numOC: '12560',
-        numConsecutivo: 'RDP2609114L',
-        consecutivo: 'RDP2609114L',
-        estatus: 'CERRADO',
-        currentStep: 4,
-        tipoProyecto: 'lavado_contenedores',
-        servicioName: 'Lavado de contenedores'
-    }
-];
+const defaultOperacionesProyectos = [];
 
 // Helper: Validar requisitos para avanzar a Facturación (Paso 4)
 window.validateProjectForFacturacion = function(p) {
@@ -6847,18 +6709,24 @@ window.renderOperaciones = function() {
     const listPane = document.getElementById("operaciones-view-list");
     if (!listPane) return;
 
-    if (!appState.operacionesProyectos || appState.operacionesProyectos.length === 0) {
-        const stored = localStorage.getItem('rp_operaciones_proyectos');
-        if (stored) {
-            try { appState.operacionesProyectos = JSON.parse(stored); } catch (e) {}
+    const fakeOpIds = new Set(['RDP2609110F', 'RDP2609111F', 'RDP2609112L', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F']);
+    const stored = localStorage.getItem('rp_operaciones_proyectos');
+    if (stored) {
+        try {
+            let parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+                parsed = parsed.filter(p => p && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo));
+                appState.operacionesProyectos = parsed;
+                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(parsed));
+            }
+        } catch (e) {
+            appState.operacionesProyectos = [];
         }
-        if (!appState.operacionesProyectos || appState.operacionesProyectos.length === 0) {
-            appState.operacionesProyectos = defaultOperacionesProyectos;
-        }
-        cleanOperacionesLegacyData(appState.operacionesProyectos);
-    } else {
-        cleanOperacionesLegacyData(appState.operacionesProyectos);
     }
+    if (!appState.operacionesProyectos) {
+        appState.operacionesProyectos = [];
+    }
+    cleanOperacionesLegacyData(appState.operacionesProyectos);
 
     const proyectos = appState.operacionesProyectos;
 
