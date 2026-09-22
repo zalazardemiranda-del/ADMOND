@@ -1918,14 +1918,33 @@ select option {
     color: #64748B;
 }
 
+.chat-msg-attachment.doc-attachment .doc-download-btn {
+    background: #F1F5F9;
+    border: none;
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
+.chat-msg-attachment.doc-attachment:hover .doc-download-btn {
+    background: #DBEAFE;
+}
+
 .chat-msg-attachment.doc-attachment .download-icon {
-    color: #94A3B8;
+    color: #64748B;
     font-size: 18px;
     transition: color 0.2s;
 }
 
 .chat-msg-attachment.doc-attachment:hover .download-icon {
-    color: #2563EB;
+    color: #1D4ED8;
 }
 
 /* -------------------------------------------------------------

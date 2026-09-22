@@ -418,17 +418,39 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 function saveToStorage() {
-    if (appState.tasks) localStorage.setItem('rp_tasks', JSON.stringify(appState.tasks));
-    if (appState.chats) localStorage.setItem('rp_chats', JSON.stringify(appState.chats));
-    if (appState.customChannels) localStorage.setItem('rp_custom_channels', JSON.stringify(appState.customChannels));
-    if (appState.meetings) localStorage.setItem('rp_meetings', JSON.stringify(appState.meetings));
-    if (appState.proveedores) localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
-    if (appState.nominas) localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
-    if (appState.archivosQuincenales) localStorage.setItem('rp_archivos_quincenales', JSON.stringify(appState.archivosQuincenales));
-    if (appState.concepts) localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts));
-    if (appState.proveedorNamesList) localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
-    if (appState.consecutivo) localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
-    if (appState.emails) localStorage.setItem('rp_emails_data', JSON.stringify(appState.emails));
+    try {
+        if (appState.tasks) localStorage.setItem('rp_tasks', JSON.stringify(appState.tasks));
+        if (appState.customChannels) localStorage.setItem('rp_custom_channels', JSON.stringify(appState.customChannels));
+        if (appState.meetings) localStorage.setItem('rp_meetings', JSON.stringify(appState.meetings));
+        if (appState.proveedores) localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
+        if (appState.nominas) localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
+        if (appState.archivosQuincenales) localStorage.setItem('rp_archivos_quincenales', JSON.stringify(appState.archivosQuincenales));
+        if (appState.concepts) localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts));
+        if (appState.proveedorNamesList) localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
+        if (appState.consecutivo) localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
+        if (appState.emails) localStorage.setItem('rp_emails_data', JSON.stringify(appState.emails));
+
+        if (appState.chats) {
+            try {
+                localStorage.setItem('rp_chats', JSON.stringify(appState.chats));
+            } catch (quotaErr) {
+                console.warn("⚠️ localStorage quota reached for rp_chats. Saving lightweight copy without large dataUrls:", quotaErr);
+                const lightChats = {};
+                for (const k in appState.chats) {
+                    lightChats[k] = (appState.chats[k] || []).map(m => {
+                        if (m.attachment && m.attachment.dataUrl && m.attachment.dataUrl.length > 50000) {
+                            const { dataUrl, ...restAtt } = m.attachment;
+                            return { ...m, attachment: { ...restAtt, hasCloudData: true } };
+                        }
+                        return m;
+                    });
+                }
+                localStorage.setItem('rp_chats', JSON.stringify(lightChats));
+            }
+        }
+    } catch (e) {
+        console.warn("⚠️ Error saving to localStorage:", e);
+    }
 }
 
 // 1. Role and Session Handler (Background Role Management)
@@ -2339,19 +2361,25 @@ window.handleChatFileSelected = function(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
 
+    if (file.size > 20 * 1024 * 1024) {
+        alert("El archivo excede el tamaño máximo permitido (20 MB).");
+        event.target.value = "";
+        return;
+    }
+
     let sizeStr = "";
     if (file.size < 1024) sizeStr = file.size + " B";
     else if (file.size < 1024 * 1024) sizeStr = (file.size / 1024).toFixed(1) + " KB";
     else sizeStr = (file.size / (1024 * 1024)).toFixed(1) + " MB";
 
-    const isImg = file.type.startsWith('image/');
+    const isImg = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name);
 
     const reader = new FileReader();
     reader.onload = function(e) {
         window.pendingChatAttachment = {
             name: file.name,
             size: sizeStr,
-            type: file.type,
+            type: file.type || 'application/octet-stream',
             dataUrl: e.target.result,
             isImage: isImg
         };
@@ -2372,6 +2400,12 @@ window.handleChatFileSelected = function(event) {
         } else if (previewImg && previewIcon) {
             previewImg.style.display = "none";
             previewIcon.style.display = "inline-block";
+            const lower = file.name.toLowerCase();
+            if (lower.endsWith('.pdf')) previewIcon.innerText = 'picture_as_pdf';
+            else if (lower.endsWith('.xls') || lower.endsWith('.xlsx') || lower.endsWith('.csv')) previewIcon.innerText = 'table_view';
+            else if (lower.endsWith('.doc') || lower.endsWith('.docx')) previewIcon.innerText = 'article';
+            else if (lower.endsWith('.zip') || lower.endsWith('.rar')) previewIcon.innerText = 'folder_zip';
+            else previewIcon.innerText = 'description';
         }
 
         if (previewBar) previewBar.style.display = "flex";
@@ -2408,6 +2442,143 @@ window.openChatImageModal = function(src, name) {
 window.closeChatImageModal = function() {
     const modal = document.getElementById("chat-image-modal");
     if (modal) modal.style.display = "none";
+};
+
+// Parser unificado de contenido de mensajes (texto simple, adjuntos serializados o mensajes legados)
+function parseMessageContent(rawContent) {
+    if (!rawContent) return { text: '', attachment: null };
+    if (typeof rawContent === 'object') {
+        return {
+            text: rawContent.text || '',
+            attachment: rawContent.attachment || null
+        };
+    }
+    const str = String(rawContent).trim();
+    if (str.startsWith('{') && str.endsWith('}')) {
+        try {
+            const parsed = JSON.parse(str);
+            if (parsed && (parsed._type === 'attachment_msg' || parsed.attachment)) {
+                return {
+                    text: parsed.text || '',
+                    attachment: parsed.attachment || null
+                };
+            }
+        } catch (e) {}
+    }
+
+    // Compatibilidad con mensajes legados que contienen [Adjunto: nombre]
+    const legacyMatch = str.match(/\[Adjunto:\s*(.+?)\]/i);
+    if (legacyMatch) {
+        const filename = legacyMatch[1].trim();
+        const textWithoutAdjunto = str.replace(/\[Adjunto:\s*.+?\]/i, '').trim();
+        const isImg = /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(filename);
+        return {
+            text: textWithoutAdjunto,
+            attachment: {
+                name: filename,
+                size: '',
+                type: isImg ? 'image' : 'document',
+                dataUrl: null,
+                isImage: isImg,
+                isLegacy: true
+            }
+        };
+    }
+
+    return { text: str, attachment: null };
+}
+
+// Descarga universal desde base64 Data URL convirtiendo a Blob para compatibilidad total de navegadores
+window.downloadDataUrl = function(dataUrl, filename) {
+    if (!dataUrl) return;
+    try {
+        const parts = dataUrl.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        const blob = new Blob([u8arr], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename || 'archivo';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+    } catch (err) {
+        console.warn("Direct blob download fallback:", err);
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = filename || 'archivo';
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+};
+
+// Descargar archivo adjunto de chat por ID de mensaje
+window.downloadChatAttachment = async function(msgId, event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    let foundMsg = null;
+    if (appState.chats) {
+        for (const chan in appState.chats) {
+            const m = (appState.chats[chan] || []).find(x => x.id === msgId);
+            if (m) {
+                foundMsg = m;
+                break;
+            }
+        }
+    }
+
+    if (!foundMsg || !foundMsg.attachment) {
+        alert("No se encontró el archivo adjunto.");
+        return;
+    }
+
+    const att = foundMsg.attachment;
+
+    // Si ya tenemos el archivo en memoria, descargar al instante
+    if (att.dataUrl) {
+        window.downloadDataUrl(att.dataUrl, att.name || 'documento');
+        return;
+    }
+
+    // Mensaje de versión anterior sin almacenamiento del archivo en la nube
+    if (att.isLegacy && !att.dataUrl) {
+        alert(`ℹ️ El documento "${att.name || 'archivo'}" fue registrado antes de activar la descarga en la nube.\n\nPor favor adjunta el documento nuevamente para que tú y tu equipo puedan descargarlo.`);
+        return;
+    }
+
+    // Si falta la dataUrl en memoria, obtener directamente de Supabase
+    if (window.isSupabaseActive()) {
+        try {
+            const client = window.SUPABASE_CONFIG.client;
+            const { data, error } = await client.from('messages').select('contenido').eq('id', msgId).single();
+            if (data && data.contenido) {
+                const parsed = parseMessageContent(data.contenido);
+                if (parsed.attachment && parsed.attachment.dataUrl) {
+                    att.dataUrl = parsed.attachment.dataUrl;
+                    window.downloadDataUrl(att.dataUrl, att.name || parsed.attachment.name || 'documento');
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn("Error fetching attachment from Supabase:", e);
+        }
+    }
+
+    alert("No se pudo descargar el archivo. Por favor intenta de nuevo.");
 };
 
 window.handleSendChatMessage = function(event) {
@@ -2447,7 +2618,13 @@ window.handleSendChatMessage = function(event) {
     };
 
     if (attachment) {
-        newMsg.attachment = attachment;
+        newMsg.attachment = {
+            name: attachment.name,
+            size: attachment.size,
+            type: attachment.type,
+            dataUrl: attachment.dataUrl,
+            isImage: attachment.isImage
+        };
     }
     
     if (!appState.chats[currentChan]) {
@@ -2462,10 +2639,21 @@ window.handleSendChatMessage = function(event) {
     
     // 1. Transmisión Instantánea por WebSockets Broadcast (Tablet <-> PC en tiempo real)
     if (window.chatRealtimeChannel) {
+        let broadcastMsg = { ...newMsg };
+        // Si el archivo es muy pesado (>150KB), en WebSocket enviamos metadatos ligeros para no romper el límite de WebSocket
+        if (attachment && attachment.dataUrl && attachment.dataUrl.length > 150000) {
+            broadcastMsg.attachment = {
+                name: attachment.name,
+                size: attachment.size,
+                type: attachment.type,
+                isImage: attachment.isImage,
+                hasCloudData: true
+            };
+        }
         window.chatRealtimeChannel.send({
             type: 'broadcast',
             event: 'new_message',
-            payload: newMsg
+            payload: broadcastMsg
         }).catch(err => console.warn("Broadcast warning:", err));
     }
     
@@ -2478,7 +2666,17 @@ window.handleSendChatMessage = function(event) {
 
         let supabaseContent = text;
         if (attachment) {
-            supabaseContent = (text ? text + '\n' : '') + `[Adjunto: ${attachment.name}]`;
+            supabaseContent = JSON.stringify({
+                _type: 'attachment_msg',
+                text: text,
+                attachment: {
+                    name: attachment.name,
+                    size: attachment.size,
+                    type: attachment.type,
+                    dataUrl: attachment.dataUrl,
+                    isImage: attachment.isImage
+                }
+            });
         }
 
         client.from('messages').insert([{
@@ -2501,24 +2699,42 @@ function renderChatMessages(forceScroll = false) {
     const currentChan = appState.currentChannel || 'general';
     if (!appState.chats[currentChan]) appState.chats[currentChan] = [];
 
-    // Deduplicar mensajes en memoria para este canal
-    const uniqueList = [];
-    const seenSignatures = new Set();
+    // Deduplicar y normalizar mensajes en memoria para este canal
+    const uniqueMap = new Map();
     appState.chats[currentChan].forEach(msg => {
-        if (!msg || (!msg.text && !msg.attachment)) return;
+        if (!msg) return;
+
+        // Si no tiene attachment pero el texto tiene formato JSON o [Adjunto: ...], extraerlo
+        if (!msg.attachment && msg.text) {
+            const parsed = parseMessageContent(msg.text);
+            if (parsed.attachment) {
+                msg.text = parsed.text;
+                msg.attachment = parsed.attachment;
+            }
+        }
+
+        if (!msg.text && !msg.attachment) return;
+
         const cleanText = ((msg.text || '') + (msg.attachment ? msg.attachment.name : '')).trim();
         const timeKey = (msg.time || '').trim();
         const senderKey = (msg.sender || '').trim();
-        const sig = `${senderKey}_${cleanText}_${timeKey}`;
-        if (!seenSignatures.has(sig)) {
-            seenSignatures.add(sig);
-            uniqueList.push(msg);
+        const sig = msg.id || `${senderKey}_${cleanText}_${timeKey}`;
+
+        if (!uniqueMap.has(sig)) {
+            uniqueMap.set(sig, msg);
+        } else {
+            const existing = uniqueMap.get(sig);
+            if ((!existing.attachment || !existing.attachment.dataUrl) && (msg.attachment && msg.attachment.dataUrl)) {
+                uniqueMap.set(sig, msg);
+            }
         }
     });
+
+    const uniqueList = Array.from(uniqueMap.values());
     appState.chats[currentChan] = uniqueList;
 
     const currentMsgs = uniqueList;
-    const currentHash = `${currentChan}__${currentMsgs.map(m => `${m.id || ''}_${m.sender}_${m.text || ''}_${m.attachment ? m.attachment.name : ''}_${m.time}`).join('||')}`;
+    const currentHash = `${currentChan}__${currentMsgs.map(m => `${m.id || ''}_${m.sender}_${m.text || ''}_${m.attachment ? (m.attachment.name + (m.attachment.dataUrl ? '1' : '0')) : ''}_${m.time}`).join('||')}`;
 
     // Si los mensajes no han cambiado y no se forzó el scroll, no tocar el DOM para mantener intacto el scroll del usuario
     if (!forceScroll && msgContainer.dataset.renderedHash === currentHash) {
@@ -2548,28 +2764,60 @@ function renderChatMessages(forceScroll = false) {
         
         let attachmentHtml = '';
         if (msg.attachment) {
-            if (msg.attachment.isImage) {
+            const att = msg.attachment;
+            if (att.isImage && att.dataUrl) {
                 attachmentHtml = `
-                    <div class="chat-msg-attachment image-attachment">
-                        <img src="${msg.attachment.dataUrl}" alt="${msg.attachment.name || 'Imagen'}" onclick="openChatImageModal('${msg.attachment.dataUrl}', '${msg.attachment.name || 'Imagen'}')">
+                    <div class="chat-msg-attachment image-attachment" style="margin-top: ${msg.text ? '8px' : '0'};">
+                        <img src="${att.dataUrl}" alt="${att.name || 'Imagen'}" onclick="openChatImageModal('${att.dataUrl}', '${att.name || 'Imagen'}')">
                         <div class="attachment-info">
                             <span class="material-symbols-outlined" style="font-size: 14px;">image</span>
-                            <span>${msg.attachment.name || 'Imagen'}</span>
+                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${att.name || 'Imagen'}</span>
+                            ${att.size ? `<span style="font-size: 11px; opacity: 0.8; margin-left: auto;">${att.size}</span>` : ''}
                         </div>
                     </div>
                 `;
             } else {
+                const name = att.name || 'Documento';
+                const lowerName = name.toLowerCase();
+                let icon = 'description';
+                let iconBg = '#EFF6FF';
+                let iconColor = '#2563EB';
+
+                if (lowerName.endsWith('.pdf')) {
+                    icon = 'picture_as_pdf';
+                    iconBg = '#FEE2E2';
+                    iconColor = '#DC2626';
+                } else if (lowerName.endsWith('.xls') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.csv')) {
+                    icon = 'table_view';
+                    iconBg = '#DCFCE7';
+                    iconColor = '#16A34A';
+                } else if (lowerName.endsWith('.doc') || lowerName.endsWith('.docx')) {
+                    icon = 'article';
+                    iconBg = '#DBEAFE';
+                    iconColor = '#2563EB';
+                } else if (lowerName.endsWith('.zip') || lowerName.endsWith('.rar')) {
+                    icon = 'folder_zip';
+                    iconBg = '#FEF3C7';
+                    iconColor = '#D97706';
+                } else if (att.isImage) {
+                    icon = 'image';
+                    iconBg = '#F3E8FF';
+                    iconColor = '#9333EA';
+                }
+
                 attachmentHtml = `
-                    <a href="${msg.attachment.dataUrl}" download="${msg.attachment.name || 'archivo'}" class="chat-msg-attachment doc-attachment" target="_blank" title="Descargar ${msg.attachment.name || 'archivo'}">
-                        <div class="doc-icon-wrapper">
-                            <span class="material-symbols-outlined">description</span>
+                    <div class="chat-msg-attachment doc-attachment" onclick="downloadChatAttachment('${msg.id}', event)" title="Clic para descargar ${name}" style="margin-top: ${msg.text ? '8px' : '0'}; cursor: pointer;">
+                        <div class="doc-icon-wrapper" style="background: ${iconBg}; color: ${iconColor};">
+                            <span class="material-symbols-outlined">${icon}</span>
                         </div>
                         <div class="doc-info">
-                            <span class="doc-name">${msg.attachment.name || 'Documento'}</span>
-                            <span class="doc-size">${msg.attachment.size || ''}</span>
+                            <span class="doc-name" title="${name}">${name}</span>
+                            <span class="doc-size">${att.size || (att.isLegacy ? 'Archivo enviado' : 'Documento adjunto')}</span>
                         </div>
-                        <span class="material-symbols-outlined download-icon">download</span>
-                    </a>
+                        <button type="button" class="doc-download-btn" title="Descargar documento">
+                            <span class="material-symbols-outlined download-icon">download</span>
+                        </button>
+                    </div>
                 `;
             }
         }
@@ -3746,14 +3994,19 @@ function setupRealtimeSubscriptions() {
         );
 
         if (!alreadyExists) {
-            appState.chats[channelKey].push({
+            const newEntry = {
                 id: msg.id,
+                channel: channelKey,
                 sender: msg.sender,
                 role: msg.role,
                 text: msg.text,
                 time: msg.time,
                 timestamp: msg.timestamp || new Date().toISOString()
-            });
+            };
+            if (msg.attachment) {
+                newEntry.attachment = msg.attachment;
+            }
+            appState.chats[channelKey].push(newEntry);
             saveToStorage();
             if (appState.currentChannel === channelKey) {
                 renderChatMessages(false);
@@ -3814,26 +4067,44 @@ function setupRealtimeSubscriptions() {
         const channelKey = row.chat_id || 'general';
         if (!appState.chats[channelKey]) appState.chats[channelKey] = [];
 
-        const alreadyExists = appState.chats[channelKey].some(m => m.id === row.id);
-        if (!alreadyExists) {
-            const senderRole = row.emisor_role || (row.emisor_nombre === 'Sistema Rodipack' ? 'sistema' : 'colaborador');
-            appState.chats[channelKey].push({
-                id: row.id,
-                sender: row.emisor_nombre || 'Usuario',
-                role: senderRole,
-                text: row.contenido,
-                time: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            });
-            saveToStorage();
-            if (appState.currentChannel === channelKey) {
-                renderChatMessages(false);
-            }
-            if (appState.currentTab !== 'chat') {
-                const badge = document.getElementById("unread-chat-count");
-                if (badge) {
-                    badge.style.display = "inline-flex";
-                    badge.innerText = parseInt(badge.innerText || '0', 10) + 1;
-                }
+        const parsed = parseMessageContent(row.contenido);
+        const senderRole = row.emisor_role || (row.emisor_nombre === 'Sistema Rodipack' ? 'sistema' : 'colaborador');
+        const timeStr = new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const msgObj = {
+            id: row.id,
+            channel: channelKey,
+            sender: row.emisor_nombre || 'Usuario',
+            role: senderRole,
+            text: parsed.text,
+            time: timeStr,
+            timestamp: row.created_at,
+            syncedToCloud: true
+        };
+        if (parsed.attachment) {
+            msgObj.attachment = parsed.attachment;
+        }
+
+        const existingIdx = appState.chats[channelKey].findIndex(m => m.id === row.id);
+        if (existingIdx !== -1) {
+            appState.chats[channelKey][existingIdx] = {
+                ...appState.chats[channelKey][existingIdx],
+                ...msgObj,
+                attachment: parsed.attachment || appState.chats[channelKey][existingIdx].attachment
+            };
+        } else {
+            appState.chats[channelKey].push(msgObj);
+        }
+
+        saveToStorage();
+        if (appState.currentChannel === channelKey) {
+            renderChatMessages(false);
+        }
+        if (appState.currentTab !== 'chat') {
+            const badge = document.getElementById("unread-chat-count");
+            if (badge) {
+                badge.style.display = "inline-flex";
+                badge.innerText = parseInt(badge.innerText || '0', 10) + 1;
             }
         }
     });
@@ -3879,20 +4150,26 @@ async function fetchCloudData() {
                 const channelKey = row.chat_id || 'general';
                 if (!cleanChats[channelKey]) cleanChats[channelKey] = [];
 
-                const cleanContent = (row.contenido || '').trim();
+                const parsed = parseMessageContent(row.contenido);
                 const senderName = row.emisor_nombre || 'Usuario';
                 const timeStr = new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const senderRole = row.emisor_role || (row.emisor_nombre === 'Sistema Rodipack' ? 'sistema' : 'colaborador');
 
-                cleanChats[channelKey].push({
+                const msgObj = {
                     id: row.id,
+                    channel: channelKey,
                     sender: senderName,
                     role: senderRole,
-                    text: cleanContent,
+                    text: parsed.text,
                     time: timeStr,
                     timestamp: row.created_at,
                     syncedToCloud: true
-                });
+                };
+                if (parsed.attachment) {
+                    msgObj.attachment = parsed.attachment;
+                }
+
+                cleanChats[channelKey].push(msgObj);
             });
 
             appState.chats = cleanChats;
