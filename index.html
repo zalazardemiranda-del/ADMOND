@@ -610,7 +610,7 @@
                                     <button type="button" class="chat-attach-btn" onclick="triggerChatFileSelect()" title="Adjuntar documento o imagen">
                                         <span class="material-symbols-outlined">attach_file</span>
                                     </button>
-                                    <input type="text" id="chat-input-field" placeholder="Escribe un mensaje en # general...">
+                                    <input type="text" id="chat-input-field" placeholder="Escribe un mensaje en # general..." onpaste="handleChatInputPaste(event)">
                                     <button type="submit" class="chat-send-btn">
                                         <span class="material-symbols-outlined">send</span>
                                     </button>

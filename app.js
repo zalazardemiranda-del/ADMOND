@@ -2288,6 +2288,56 @@ window.handleAddChatMember = function(event) {
 
 window.pendingChatAttachment = null;
 
+window.handleChatInputPaste = function(event) {
+    const items = (event.clipboardData || event.originalEvent?.clipboardData)?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf("image") !== -1 || (item.kind === "file" && item.type.startsWith("image/"))) {
+            const blob = item.getAsFile();
+            if (!blob) continue;
+
+            let sizeStr = "";
+            if (blob.size < 1024) sizeStr = blob.size + " B";
+            else if (blob.size < 1024 * 1024) sizeStr = (blob.size / 1024).toFixed(1) + " KB";
+            else sizeStr = (blob.size / (1024 * 1024)).toFixed(1) + " MB";
+
+            const imageName = (blob.name && blob.name !== "image.png") ? blob.name : `captura_${new Date().getHours()}${new Date().getMinutes()}${new Date().getSeconds()}.png`;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                window.pendingChatAttachment = {
+                    name: imageName,
+                    size: sizeStr,
+                    type: blob.type || 'image/png',
+                    dataUrl: e.target.result,
+                    isImage: true
+                };
+
+                const previewBar = document.getElementById("chat-attachment-preview");
+                const filenameEl = document.getElementById("chat-preview-filename");
+                const filesizeEl = document.getElementById("chat-preview-filesize");
+                const previewImg = document.getElementById("chat-preview-img");
+                const previewIcon = document.getElementById("chat-preview-icon");
+
+                if (filenameEl) filenameEl.innerText = imageName;
+                if (filesizeEl) filesizeEl.innerText = sizeStr;
+
+                if (previewImg && previewIcon) {
+                    previewImg.src = e.target.result;
+                    previewImg.style.display = "block";
+                    previewIcon.style.display = "none";
+                }
+
+                if (previewBar) previewBar.style.display = "flex";
+            };
+            reader.readAsDataURL(blob);
+            break;
+        }
+    }
+};
+
 window.triggerChatFileSelect = function() {
     const fileInput = document.getElementById("chat-file-input");
     if (fileInput) fileInput.click();
