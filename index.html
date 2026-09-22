@@ -592,10 +592,29 @@
                             </div>
 
                             <form class="chat-input-bar" onsubmit="handleSendChatMessage(event)">
-                                <input type="text" id="chat-input-field" placeholder="Escribe un mensaje en # general..." required>
-                                <button type="submit" class="chat-send-btn">
-                                    <span class="material-symbols-outlined">send</span>
-                                </button>
+                                <input type="file" id="chat-file-input" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip" style="display:none;" onchange="handleChatFileSelected(event)">
+                                <div id="chat-attachment-preview" class="chat-attachment-preview-bar" style="display: none;">
+                                    <div class="preview-content">
+                                        <span class="material-symbols-outlined preview-icon" id="chat-preview-icon">attach_file</span>
+                                        <img id="chat-preview-img" style="display: none; height: 36px; width: 36px; object-fit: cover; border-radius: 6px;" alt="preview">
+                                        <div class="preview-info">
+                                            <span class="preview-filename" id="chat-preview-filename">archivo.pdf</span>
+                                            <span class="preview-filesize" id="chat-preview-filesize">0 KB</span>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="preview-remove-btn" onclick="clearChatAttachmentPreview()" title="Quitar archivo">
+                                        <span class="material-symbols-outlined">close</span>
+                                    </button>
+                                </div>
+                                <div class="chat-input-row" style="display: flex; align-items: center; gap: 8px; width: 100%;">
+                                    <button type="button" class="chat-attach-btn" onclick="triggerChatFileSelect()" title="Adjuntar documento o imagen">
+                                        <span class="material-symbols-outlined">attach_file</span>
+                                    </button>
+                                    <input type="text" id="chat-input-field" placeholder="Escribe un mensaje en # general...">
+                                    <button type="submit" class="chat-send-btn">
+                                        <span class="material-symbols-outlined">send</span>
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -2517,6 +2536,24 @@
                     </div>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal Lightbox para imágenes del Chat -->
+    <div id="chat-image-modal" class="custom-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 999999; align-items: center; justify-content: center; padding: 20px;" onclick="closeChatImageModal()">
+        <div style="position: relative; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; align-items: center;" onclick="event.stopPropagation()">
+            <div style="width: 100%; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: #FFFFFF;">
+                <span id="chat-modal-filename" style="font-size: 14px; font-weight: 700; max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Imagen</span>
+                <div style="display: flex; gap: 10px;">
+                    <a id="chat-modal-download-btn" href="#" download class="btn-secondary" style="background: rgba(255,255,255,0.2); color: #fff; border: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">download</span> Descargar
+                    </a>
+                    <button type="button" onclick="closeChatImageModal()" style="background: rgba(255,255,255,0.2); color: #fff; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+            </div>
+            <img id="chat-modal-img-src" src="" alt="Vista previa" style="max-width: 90vw; max-height: 80vh; object-fit: contain; border-radius: 10px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
         </div>
     </div>
 

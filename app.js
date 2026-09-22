@@ -2286,11 +2286,95 @@ window.handleAddChatMember = function(event) {
     }
 };
 
+window.pendingChatAttachment = null;
+
+window.triggerChatFileSelect = function() {
+    const fileInput = document.getElementById("chat-file-input");
+    if (fileInput) fileInput.click();
+};
+
+window.handleChatFileSelected = function(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    let sizeStr = "";
+    if (file.size < 1024) sizeStr = file.size + " B";
+    else if (file.size < 1024 * 1024) sizeStr = (file.size / 1024).toFixed(1) + " KB";
+    else sizeStr = (file.size / (1024 * 1024)).toFixed(1) + " MB";
+
+    const isImg = file.type.startsWith('image/');
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        window.pendingChatAttachment = {
+            name: file.name,
+            size: sizeStr,
+            type: file.type,
+            dataUrl: e.target.result,
+            isImage: isImg
+        };
+
+        const previewBar = document.getElementById("chat-attachment-preview");
+        const filenameEl = document.getElementById("chat-preview-filename");
+        const filesizeEl = document.getElementById("chat-preview-filesize");
+        const previewImg = document.getElementById("chat-preview-img");
+        const previewIcon = document.getElementById("chat-preview-icon");
+
+        if (filenameEl) filenameEl.innerText = file.name;
+        if (filesizeEl) filesizeEl.innerText = sizeStr;
+
+        if (isImg && previewImg && previewIcon) {
+            previewImg.src = e.target.result;
+            previewImg.style.display = "block";
+            previewIcon.style.display = "none";
+        } else if (previewImg && previewIcon) {
+            previewImg.style.display = "none";
+            previewIcon.style.display = "inline-block";
+        }
+
+        if (previewBar) previewBar.style.display = "flex";
+    };
+    reader.readAsDataURL(file);
+};
+
+window.clearChatAttachmentPreview = function() {
+    window.pendingChatAttachment = null;
+    const fileInput = document.getElementById("chat-file-input");
+    if (fileInput) fileInput.value = "";
+
+    const previewBar = document.getElementById("chat-attachment-preview");
+    if (previewBar) previewBar.style.display = "none";
+};
+
+window.openChatImageModal = function(src, name) {
+    const modal = document.getElementById("chat-image-modal");
+    const imgEl = document.getElementById("chat-modal-img-src");
+    const nameEl = document.getElementById("chat-modal-filename");
+    const dlBtn = document.getElementById("chat-modal-download-btn");
+
+    if (modal && imgEl) {
+        imgEl.src = src;
+        if (nameEl) nameEl.innerText = name || "Imagen adjunta";
+        if (dlBtn) {
+            dlBtn.href = src;
+            dlBtn.download = name || "imagen.png";
+        }
+        modal.style.display = "flex";
+    }
+};
+
+window.closeChatImageModal = function() {
+    const modal = document.getElementById("chat-image-modal");
+    if (modal) modal.style.display = "none";
+};
+
 window.handleSendChatMessage = function(event) {
     event.preventDefault();
     const inputField = document.getElementById("chat-input-field");
     const text = inputField.value.trim();
-    if (!text) return;
+    const attachment = window.pendingChatAttachment;
+    
+    if (!text && !attachment) return;
     
     const senderName = appState.currentUser ? appState.currentUser.nombre : (appState.currentRole === 'gerente' ? 'Gerente Principal' : 'Colaborador');
     const senderRole = appState.currentUser ? appState.currentUser.rol : appState.currentRole;
@@ -2315,10 +2399,14 @@ window.handleSendChatMessage = function(event) {
         channel: currentChan,
         sender: senderName,
         role: senderRole,
-        text,
+        text: text,
         time: timeStr,
         timestamp: nowIso
     };
+
+    if (attachment) {
+        newMsg.attachment = attachment;
+    }
     
     if (!appState.chats[currentChan]) {
         appState.chats[currentChan] = [];
@@ -2327,6 +2415,7 @@ window.handleSendChatMessage = function(event) {
     appState.chats[currentChan].push(newMsg);
     saveToStorage();
     inputField.value = "";
+    clearChatAttachmentPreview();
     renderChatMessages(true);
     
     // 1. Transmisión Instantánea por WebSockets Broadcast (Tablet <-> PC en tiempo real)
@@ -2345,13 +2434,18 @@ window.handleSendChatMessage = function(event) {
         const rawUserId = appState.currentUser?.id;
         const validUserId = (rawUserId && validUUIDRegex.test(rawUserId)) ? rawUserId : null;
 
+        let supabaseContent = text;
+        if (attachment) {
+            supabaseContent = (text ? text + '\n' : '') + `[Adjunto: ${attachment.name}]`;
+        }
+
         client.from('messages').insert([{
             id: newMsgId,
             chat_id: currentChan,
             emisor_id: validUserId,
             emisor_nombre: senderName,
             emisor_role: senderRole,
-            contenido: text
+            contenido: supabaseContent
         }]).then(({ error }) => {
             if (error) console.warn("Notice: Message cloud sync to PostgreSQL:", error.message || error);
         });
@@ -2369,8 +2463,8 @@ function renderChatMessages(forceScroll = false) {
     const uniqueList = [];
     const seenSignatures = new Set();
     appState.chats[currentChan].forEach(msg => {
-        if (!msg || !msg.text) return;
-        const cleanText = (msg.text || '').trim();
+        if (!msg || (!msg.text && !msg.attachment)) return;
+        const cleanText = ((msg.text || '') + (msg.attachment ? msg.attachment.name : '')).trim();
         const timeKey = (msg.time || '').trim();
         const senderKey = (msg.sender || '').trim();
         const sig = `${senderKey}_${cleanText}_${timeKey}`;
@@ -2382,7 +2476,7 @@ function renderChatMessages(forceScroll = false) {
     appState.chats[currentChan] = uniqueList;
 
     const currentMsgs = uniqueList;
-    const currentHash = `${currentChan}__${currentMsgs.map(m => `${m.id || ''}_${m.sender}_${m.text}_${m.time}`).join('||')}`;
+    const currentHash = `${currentChan}__${currentMsgs.map(m => `${m.id || ''}_${m.sender}_${m.text || ''}_${m.attachment ? m.attachment.name : ''}_${m.time}`).join('||')}`;
 
     // Si los mensajes no han cambiado y no se forzó el scroll, no tocar el DOM para mantener intacto el scroll del usuario
     if (!forceScroll && msgContainer.dataset.renderedHash === currentHash) {
@@ -2409,6 +2503,37 @@ function renderChatMessages(forceScroll = false) {
         const role = (msg.role || 'colaborador').toLowerCase();
         const msgCard = document.createElement("div");
         msgCard.className = `chat-msg-card ${role}`;
+        
+        let attachmentHtml = '';
+        if (msg.attachment) {
+            if (msg.attachment.isImage) {
+                attachmentHtml = `
+                    <div class="chat-msg-attachment image-attachment">
+                        <img src="${msg.attachment.dataUrl}" alt="${msg.attachment.name || 'Imagen'}" onclick="openChatImageModal('${msg.attachment.dataUrl}', '${msg.attachment.name || 'Imagen'}')">
+                        <div class="attachment-info">
+                            <span class="material-symbols-outlined" style="font-size: 14px;">image</span>
+                            <span>${msg.attachment.name || 'Imagen'}</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                attachmentHtml = `
+                    <a href="${msg.attachment.dataUrl}" download="${msg.attachment.name || 'archivo'}" class="chat-msg-attachment doc-attachment" target="_blank" title="Descargar ${msg.attachment.name || 'archivo'}">
+                        <div class="doc-icon-wrapper">
+                            <span class="material-symbols-outlined">description</span>
+                        </div>
+                        <div class="doc-info">
+                            <span class="doc-name">${msg.attachment.name || 'Documento'}</span>
+                            <span class="doc-size">${msg.attachment.size || ''}</span>
+                        </div>
+                        <span class="material-symbols-outlined download-icon">download</span>
+                    </a>
+                `;
+            }
+        }
+
+        const bubbleText = msg.text ? `<div>${msg.text}</div>` : '';
+
         msgCard.innerHTML = `
             <div class="msg-avatar">${initials}</div>
             <div class="msg-content-wrapper">
@@ -2418,7 +2543,8 @@ function renderChatMessages(forceScroll = false) {
                     <span class="msg-time">${msg.time || ''}</span>
                 </div>
                 <div class="msg-bubble">
-                    ${msg.text}
+                    ${bubbleText}
+                    ${attachmentHtml}
                 </div>
             </div>
         `;
