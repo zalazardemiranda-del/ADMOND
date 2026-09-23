@@ -306,6 +306,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (isSessionActive && storedUser) {
         try {
             appState.currentUser = JSON.parse(storedUser);
+            if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
+                appState.currentUser.rol = 'administrativo';
+                localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
+                localStorage.setItem("rp_current_role", 'administrativo');
+            }
         } catch (e) {
             console.warn("Error parsing stored user session:", e);
         }
@@ -313,7 +318,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Restaurar rol activo persistido (o del usuario logueado)
     const storedRole = localStorage.getItem("rp_current_role");
-    if (storedRole) {
+    if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
+        appState.currentRole = 'administrativo';
+    } else if (storedRole) {
         appState.currentRole = storedRole;
     } else if (appState.currentUser && appState.currentUser.rol) {
         appState.currentRole = appState.currentUser.rol;
@@ -458,9 +465,21 @@ window.setRole = function(role) {
     appState.currentRole = role || 'gerente';
     localStorage.setItem("rp_current_role", appState.currentRole);
 
-    const r = (appState.currentRole || '').toLowerCase();
+    const r = (appState.currentRole || '').toLowerCase().trim();
     const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
-    const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
+    const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo' || r === 'administracion';
+
+    // Manejar clases en el body para control de estilos CSS inmediato e irrevocable
+    if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.remove('role-gerente', 'role-administrativo', 'role-administrador', 'role-admin', 'role-colaborador');
+        if (isGerente) {
+            document.body.classList.add('role-gerente');
+        } else if (isAdmin) {
+            document.body.classList.add('role-administrativo');
+        } else {
+            document.body.classList.add('role-colaborador');
+        }
+    }
 
     const sidebarAdminItem = document.getElementById("sidebar-item-administracion");
     const sidebarUsersItem = document.getElementById("sidebar-item-users");
@@ -475,18 +494,18 @@ window.setRole = function(role) {
         if (newTaskCard) newTaskCard.style.display = "block";
         if (tasksControlPanel) tasksControlPanel.style.display = "flex";
         if (tasksLayout) tasksLayout.classList.remove("full-width-tasks");
-        if (sidebarAdminItem) sidebarAdminItem.style.display = "flex";
-        if (sidebarUsersItem) sidebarUsersItem.style.display = "flex";
+        if (sidebarAdminItem) sidebarAdminItem.style.setProperty("display", "flex", "important");
+        if (sidebarUsersItem) sidebarUsersItem.style.setProperty("display", "flex", "important");
         if (adminWorkspace) adminWorkspace.style.display = "block";
         if (adminLockScreen) adminLockScreen.style.display = "none";
         if (btnCreateGroup) btnCreateGroup.style.display = "inline-flex";
     } else if (isAdmin) {
-        // Administrador / Administrativo: Acceso completo a Finanzas & Administración, sin asignación de tareas operativas ni usuarios
+        // Administrador / Administrativo: Acceso completo a Finanzas & Administración, SIN acceso a usuarios
         if (newTaskCard) newTaskCard.style.display = "none";
         if (tasksControlPanel) tasksControlPanel.style.display = "none";
         if (tasksLayout) tasksLayout.classList.add("full-width-tasks");
-        if (sidebarAdminItem) sidebarAdminItem.style.display = "flex";
-        if (sidebarUsersItem) sidebarUsersItem.style.display = "none";
+        if (sidebarAdminItem) sidebarAdminItem.style.setProperty("display", "flex", "important");
+        if (sidebarUsersItem) sidebarUsersItem.style.setProperty("display", "none", "important");
         if (adminWorkspace) adminWorkspace.style.display = "block";
         if (adminLockScreen) adminLockScreen.style.display = "none";
         if (btnCreateGroup) btnCreateGroup.style.display = "none";
@@ -501,8 +520,8 @@ window.setRole = function(role) {
         if (newTaskCard) newTaskCard.style.display = "none";
         if (tasksControlPanel) tasksControlPanel.style.display = "none";
         if (tasksLayout) tasksLayout.classList.add("full-width-tasks");
-        if (sidebarAdminItem) sidebarAdminItem.style.display = "none";
-        if (sidebarUsersItem) sidebarUsersItem.style.display = "none";
+        if (sidebarAdminItem) sidebarAdminItem.style.setProperty("display", "none", "important");
+        if (sidebarUsersItem) sidebarUsersItem.style.setProperty("display", "none", "important");
         if (adminWorkspace) adminWorkspace.style.display = "none";
         if (adminLockScreen) adminLockScreen.style.display = "block";
         if (btnCreateGroup) btnCreateGroup.style.display = "none";
@@ -3864,6 +3883,10 @@ async function initAuthAndRealtime() {
         } else if (isSessionActive && storedUser) {
             try {
                 appState.currentUser = JSON.parse(storedUser);
+                if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
+                    appState.currentUser.rol = 'administrativo';
+                }
+                setRole(appState.currentUser?.rol || 'gerente');
                 updateUserSessionUI();
                 updateCloudStatusUI(true, appState.currentUser);
             } catch (e) {}
@@ -3891,6 +3914,10 @@ async function initAuthAndRealtime() {
             } else if (active && localUser) {
                 try {
                     appState.currentUser = JSON.parse(localUser);
+                    if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
+                        appState.currentUser.rol = 'administrativo';
+                    }
+                    setRole(appState.currentUser?.rol || 'gerente');
                     updateUserSessionUI();
                     updateCloudStatusUI(true, appState.currentUser);
                 } catch (e) {}
@@ -3933,8 +3960,12 @@ async function handleUserSession(user) {
             };
         }
         
-        // Garantizar rol de Gerente para el administrador
-        if (profile.email === 'zalazardemiranda@gmail.com' || !profile.rol) {
+        // Garantizar rol de Gerente para el administrador y administrativo para Diego
+        if (profile.email === 'zalazardemiranda@gmail.com') {
+            profile.rol = 'gerente';
+        } else if (profile.email && profile.email.toLowerCase() === 'diego@rodipack.com') {
+            profile.rol = 'administrativo';
+        } else if (!profile.rol) {
             profile.rol = 'gerente';
         }
         
@@ -4420,6 +4451,22 @@ window.switchAuthTab = function(tabName) {
     }
 };
 
+window.forceAppRefresh = function() {
+    try {
+        if ('caches' in window) {
+            caches.keys().then(names => {
+                for (let name of names) caches.delete(name);
+            });
+        }
+    } catch (e) {}
+    try {
+        localStorage.removeItem('rp_app_version');
+    } catch (e) {}
+    const ts = Date.now();
+    const cleanUrl = window.location.origin + window.location.pathname + '?v_reload=' + ts;
+    window.location.replace(cleanUrl);
+};
+
 window.toggleNewUserForm = function() {
     const formContainer = document.getElementById("new-user-form-container");
     if (formContainer) {
@@ -4434,7 +4481,7 @@ window.loadProfilesList = async function() {
         { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO", password: "Miranda5011" },
         { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" },
         { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas", password: "Maria5011" },
-        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "colaborador", departamento: "logistica", password: "Diego5011" }
+        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración", password: "Diego5011" }
     ];
     
     let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
@@ -4452,6 +4499,9 @@ window.loadProfilesList = async function() {
         } else {
             if (!localProfiles[idx].nombre) localProfiles[idx].nombre = dp.nombre;
             if (!localProfiles[idx].departamento) localProfiles[idx].departamento = dp.departamento;
+            if (dp.email.toLowerCase() === 'diego@rodipack.com') {
+                localProfiles[idx].rol = 'administrativo';
+            }
         }
     });
     localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
@@ -4666,7 +4716,7 @@ window.handleSupabaseRegister = async function(event) {
         { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO", password: "Miranda5011" },
         { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" },
         { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas", password: "Maria5011" },
-        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "colaborador", departamento: "logistica", password: "Diego5011" }
+        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración", password: "Diego5011" }
     ];
     const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === email.toLowerCase());
     if (existingIdx >= 0) {

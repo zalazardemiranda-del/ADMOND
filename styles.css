@@ -166,10 +166,31 @@ body::before {
 
 .sidebar-nav li {
     width: 100%;
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-    margin: 0 auto !important;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 auto;
+}
+
+/* ==============================================================================
+   RESTRICCIONES POR ROL (BLINDAJE VISUAL DEFINITIVO)
+   ============================================================================== */
+/* Perfiles Administrativos: Ocultar icono de Usuarios (#sidebar-item-users) */
+body.role-administrativo #sidebar-item-users,
+body.role-administrador #sidebar-item-users,
+body.role-admin #sidebar-item-users,
+.role-administrativo #sidebar-item-users,
+.role-administrador #sidebar-item-users,
+.role-admin #sidebar-item-users {
+    display: none !important;
+}
+
+/* Perfiles Colaboradores: Ocultar Usuarios y Administración */
+body.role-colaborador #sidebar-item-users,
+body.role-colaborador #sidebar-item-administracion,
+.role-colaborador #sidebar-item-users,
+.role-colaborador #sidebar-item-administracion {
+    display: none !important;
 }
 
 .nav-item {
