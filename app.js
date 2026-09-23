@@ -7282,15 +7282,19 @@ window.renderOperaciones = function() {
         if (p.consecutivo || p.numConsecutivo) {
             p.numProyecto = p.consecutivo || p.numConsecutivo;
         }
-        p.estatus = computeProjectStatus(p);
+        if (p.archivado) {
+            p.estatus = 'CERRADO';
+        } else {
+            p.estatus = computeProjectStatus(p);
+        }
     });
 
     // Renderizar Banner de Advertencia de Cierre de Mes (si faltan 10 días o menos para el 30/31)
     renderMonthEndWarning(proyectos);
 
     // 1. Métricas KPIs
-    const closedCount = proyectos.filter(p => p.estatus === 'CERRADO').length;
-    const openCount = proyectos.filter(p => p.estatus === 'ABIERTO' || p.estatus === 'PENDIENTE' || p.estatus === 'PRIORIDAD').length;
+    const closedCount = proyectos.filter(p => p.archivado === true || p.estatus === 'CERRADO').length;
+    const openCount = proyectos.filter(p => !p.archivado && p.estatus !== 'CERRADO').length;
     const totalCount = proyectos.length;
 
     const closedEl = document.getElementById("op-kpi-closed");
@@ -7301,8 +7305,35 @@ window.renderOperaciones = function() {
     if (openEl) openEl.innerText = openCount;
     if (totalEl) totalEl.innerText = totalCount;
 
-    // 2. Filtrado y búsqueda
-    let filtered = proyectos;
+    // 2. Modo de Vista: Proyectos Activos vs Expedientes Archivados (Imagen 4)
+    if (!appState.operacionesViewMode) appState.operacionesViewMode = 'activos';
+    const isExpedienteMode = appState.operacionesViewMode === 'expedientes';
+
+    const toggleBtn = document.getElementById("btn-toggle-expedientes");
+    if (toggleBtn) {
+        if (isExpedienteMode) {
+            toggleBtn.classList.add("active");
+            toggleBtn.innerHTML = `<span class="material-symbols-outlined">arrow_back</span> PROYECTOS ACTIVOS`;
+        } else {
+            toggleBtn.classList.remove("active");
+            toggleBtn.innerHTML = `<span class="material-symbols-outlined">inventory_2</span> EXPEDIENTE ${closedCount > 0 ? `<span class="op-expediente-badge">${closedCount}</span>` : ''}`;
+        }
+    }
+
+    const tableTitleEl = document.querySelector(".operaciones-table-title");
+    if (tableTitleEl) {
+        tableTitleEl.innerHTML = isExpedienteMode 
+            ? `<span style="display:inline-flex; align-items:center; gap:8px;"><span class="material-symbols-outlined" style="color:#D97706;">inventory_2</span> Expedientes archivados (Cerrados)</span>`
+            : `Proyectos registrados`;
+    }
+
+    // Filtrar según el modo activo
+    let filtered = proyectos.filter(p => {
+        const isArchivado = p.archivado === true || p.estatus === 'CERRADO';
+        return isExpedienteMode ? isArchivado : !isArchivado;
+    });
+
+    // 3. Filtrado y búsqueda
     if (appState.operacionesSearchQuery) {
         const q = appState.operacionesSearchQuery.trim().toLowerCase();
         filtered = filtered.filter(p => 
@@ -7321,31 +7352,93 @@ window.renderOperaciones = function() {
         filtered = filtered.filter(p => (p.tipoProyecto || 'servicio_local') === appState.operacionesTipoFilter);
     }
 
-    // 3. Renderizar Tabla
+    // 4. Renderizar Tabla
     const tbody = document.getElementById("tbody-operaciones-proyectos");
     if (!tbody) return;
 
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: #64748B;">No se encontraron proyectos registrados.</td></tr>`;
+        const emptyMsg = isExpedienteMode 
+            ? "No hay expedientes archivados por el momento. Puedes archivar un expediente desde el Paso 4 (Documentos)."
+            : "No se encontraron proyectos activos registrados.";
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: #64748B;">${emptyMsg}</td></tr>`;
         return;
     }
 
     tbody.innerHTML = filtered.map(p => {
         const consecutivoDisplay = p.consecutivo || p.numConsecutivo || p.numProyecto;
+        const pId = p.id || consecutivoDisplay;
+        const isArchivado = p.archivado === true || p.estatus === 'CERRADO';
         return `
         <tr>
             <td><strong>${consecutivoDisplay}</strong></td>
-            <td>${p.fechaInicioDisplay || p.fechaInicio}</td>
+            <td>${p.fechaInicioDisplay || p.fechaInicio || '-'}</td>
             <td>${p.factura || p.numFactura || '-'}</td>
             <td><span class="op-status-badge ${p.estatus}">${p.estatus}</span></td>
-            <td style="text-align: right;">
-                <button class="btn-op-abrir" onclick="openOperacionesDetail('${p.id || consecutivoDisplay}')">
+            <td style="text-align: right; white-space: nowrap;">
+                <button class="btn-op-eliminar" onclick="eliminarProyectoOperaciones('${pId}', event)" title="Eliminar expediente">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">delete</span> ELIMINAR
+                </button>
+                <button class="btn-op-abrir" onclick="openOperacionesDetail('${pId}')" title="Abrir y revisar expediente">
                     <span class="material-symbols-outlined" style="font-size: 16px;">folder_open</span> ABRIR
                 </button>
             </td>
         </tr>
     `;
     }).join('');
+};
+
+window.toggleOperacionesExpedientesView = function() {
+    appState.operacionesViewMode = appState.operacionesViewMode === 'expedientes' ? 'activos' : 'expedientes';
+    renderOperaciones();
+};
+
+window.eliminarProyectoOperaciones = function(projectId, event) {
+    if (event) event.stopPropagation();
+    const proyectos = appState.operacionesProyectos || [];
+    const p = proyectos.find(x => x.id === projectId || x.numProyecto === projectId || x.consecutivo === projectId);
+    const name = p ? (p.consecutivo || p.numProyecto || p.id) : projectId;
+
+    if (!confirm(`¿Estás seguro de que deseas ELIMINAR el expediente "${name}"?\n\nEsta acción no se puede deshacer.`)) {
+        return;
+    }
+
+    appState.operacionesProyectos = proyectos.filter(x => x.id !== projectId && x.numProyecto !== projectId && x.consecutivo !== projectId);
+
+    if (appState.activeOperacionesProjectId === projectId) {
+        closeOperacionesDetail();
+    }
+
+    saveOperacionesStorage();
+
+    if (window.isSupabaseActive && window.isSupabaseActive()) {
+        try {
+            window.SUPABASE_CONFIG?.client?.from('operaciones')?.delete()?.eq('id', projectId);
+        } catch (e) {}
+    }
+
+    renderOperaciones();
+};
+
+window.archivarExpedienteActivo = function() {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) {
+        alert("No se encontró ningún expediente activo para archivar.");
+        return;
+    }
+
+    const consecutivo = p.consecutivo || p.numConsecutivo || p.numProyecto || 'este expediente';
+    if (!confirm(`¿Deseas ARCHIVAR el expediente ${consecutivo}?\n\nEl expediente se guardará como cerrado en la sección "EXPEDIENTE" y podrás consultarlo cuando lo requieras.`)) {
+        return;
+    }
+
+    p.archivado = true;
+    p.estatus = 'CERRADO';
+    p.fechaArchivado = new Date().toISOString();
+    p.fechaArchivadoDisplay = new Date().toLocaleDateString('es-MX');
+
+    saveOperacionesStorage();
+    closeOperacionesDetail();
+    alert(`✅ Expediente ${consecutivo} archivado con éxito.\nPuedes revisarlo en cualquier momento desde la sección "EXPEDIENTE".`);
 };
 
 window.handleOperacionesSearch = function(query) {
@@ -8996,6 +9089,31 @@ window.handlePartidaServicioInput = function(idx, inputEl, event) {
     }
 };
 
+window.handlePartidaServicioSelect = function(idx, val) {
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p || !p.partidasConceptos || !p.partidasConceptos[idx]) return;
+
+    p.partidasConceptos[idx].servicio = val;
+
+    // Si el concepto está vacío o contenía una clave anterior, autocompletar con la clave seleccionada
+    const currentConcepto = (p.partidasConceptos[idx].concepto || '').trim();
+    const allClaves = ['Coordinacion Logistica', 'Maniobras', 'Demoras', 'Lavado', 'Estadias', 'Estadías'];
+    if (!currentConcepto || allClaves.includes(currentConcepto)) {
+        p.partidasConceptos[idx].concepto = val;
+        const tbody = document.getElementById("tbody-partidas-conceptos");
+        if (tbody && tbody.children[idx]) {
+            const cInput = tbody.children[idx].querySelector('.partida-concepto-input');
+            if (cInput) {
+                cInput.value = val;
+                cInput._prevLen = val.length;
+            }
+        }
+    }
+
+    recalcPartidasTotals(p);
+    saveOperacionesStorage();
+};
+
 window.handlePartidaConceptoInput = function(idx, inputEl, event) {
     if (!inputEl) return;
     const prevLen = inputEl._prevLen !== undefined ? inputEl._prevLen : (inputEl.value.length + 1);
@@ -9134,14 +9252,16 @@ function renderPartidasTable(p) {
         return `
             <tr>
                 <td>
-                    <input type="text" 
-                           class="partida-servicio-input"
-                           value="${item.servicio || ''}" 
-                           placeholder="Servicio..." 
-                           title="Códigos: F = Coordinacion Logistica, M = Maniobras, D = Demoras, L = Lavado, E = Estadias" 
-                           onfocus="this._prevLen = this.value.length"
-                           oninput="handlePartidaServicioInput(${idx}, this, event)" 
-                           style="width:100%; border:none; background:transparent;" />
+                    <select class="partida-servicio-select" 
+                            onchange="handlePartidaServicioSelect(${idx}, this.value)">
+                        <option value="" ${!item.servicio ? 'selected' : ''}>-- Seleccionar clave --</option>
+                        <option value="Coordinacion Logistica" ${item.servicio === 'Coordinacion Logistica' ? 'selected' : ''}>Coordinación Logística (F)</option>
+                        <option value="Maniobras" ${item.servicio === 'Maniobras' ? 'selected' : ''}>Maniobras (M)</option>
+                        <option value="Demoras" ${item.servicio === 'Demoras' ? 'selected' : ''}>Demoras (D)</option>
+                        <option value="Lavado" ${item.servicio === 'Lavado' ? 'selected' : ''}>Lavado (L)</option>
+                        <option value="Estadias" ${item.servicio === 'Estadias' || item.servicio === 'Estadías' ? 'selected' : ''}>Estadías (E)</option>
+                        ${item.servicio && !['Coordinacion Logistica', 'Maniobras', 'Demoras', 'Lavado', 'Estadias', 'Estadías'].includes(item.servicio) ? `<option value="${item.servicio}" selected>${item.servicio}</option>` : ''}
+                    </select>
                 </td>
                 <td style="text-align:center;">${idx + 1}</td>
                 <td>
@@ -9325,11 +9445,16 @@ function renderProveedorClavesTable(p) {
                 </td>
                 <td style="text-align:center;">${idx + 1}</td>
                 <td style="font-size: 11px; background-color: #FEF9C3;">
-                    <input type="text" 
-                           value="${item.concepto || ''}" 
-                           placeholder="" 
-                           oninput="updateProveedorClavesFieldFast(${idx}, 'concepto', this.value)" 
-                           style="width:100%; border:none; background-color: #FEF9C3; color:#475569; outline:none;" />
+                    <select class="proveedor-concepto-select"
+                            onchange="updateProveedorClavesFieldFast(${idx}, 'concepto', this.value)">
+                        <option value="" ${!item.concepto ? 'selected' : ''}>-- Seleccionar clave --</option>
+                        <option value="Coordinacion Logistica" ${item.concepto === 'Coordinacion Logistica' ? 'selected' : ''}>Coordinación Logística (F)</option>
+                        <option value="Maniobras" ${item.concepto === 'Maniobras' ? 'selected' : ''}>Maniobras (M)</option>
+                        <option value="Demoras" ${item.concepto === 'Demoras' ? 'selected' : ''}>Demoras (D)</option>
+                        <option value="Lavado" ${item.concepto === 'Lavado' ? 'selected' : ''}>Lavado (L)</option>
+                        <option value="Estadias" ${item.concepto === 'Estadias' || item.concepto === 'Estadías' ? 'selected' : ''}>Estadías (E)</option>
+                        ${item.concepto && !['Coordinacion Logistica', 'Maniobras', 'Demoras', 'Lavado', 'Estadias', 'Estadías'].includes(item.concepto) ? `<option value="${item.concepto}" selected>${item.concepto}</option>` : ''}
+                    </select>
                 </td>
                 <td style="text-align:right;">
                     <input type="number" 
@@ -9529,6 +9654,7 @@ window.openNuevoProyectoModal = function() {
     };
 
     if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
+    appState.operacionesViewMode = 'activos';
     appState.operacionesProyectos.unshift(newProject);
     saveOperacionesStorage();
 

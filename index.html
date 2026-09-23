@@ -15,7 +15,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
     <!-- Chart.js for interactive Pie Chart -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="styles.css?v=2.5">
+    <link rel="stylesheet" href="styles.css?v=2.6">
     <script>
         (function() {
             var host = window.location.hostname;
@@ -1329,6 +1329,10 @@
                                     <button class="btn btn-primary btn-nuevo-proyecto" onclick="openNuevoProyectoModal()">
                                         <span class="material-symbols-outlined">add</span> Nuevo proyecto
                                     </button>
+
+                                    <button class="btn btn-secondary btn-op-expediente" id="btn-toggle-expedientes" onclick="toggleOperacionesExpedientesView()" title="Ver expedientes archivados y cerrados">
+                                        <span class="material-symbols-outlined">inventory_2</span> <span id="label-toggle-expedientes">EXPEDIENTE</span>
+                                    </button>
                                 </div>
 
                                 <!-- Container for Month-End Warning Banner (Días 20 a 30/31) -->
@@ -1864,6 +1868,16 @@
                                                         <span class="material-symbols-outlined">upload</span> Subir / Vincular
                                                     </button>
                                                     <span class="doc-status-badge pending" id="doc-badge-pod2">🕒 Pendiente</span>
+                                                </div>
+                                            </div>
+
+                                            <!-- Botón Archivar Expediente (Imagen 5) -->
+                                            <div class="doc-archivar-box" style="margin-top: 18px; padding: 14px; background: #FFFBEB; border: 1.5px dashed #F59E0B; border-radius: 10px; text-align: center;">
+                                                <button type="button" class="btn-archivar-expediente" onclick="archivarExpedienteActivo()" style="width: 100%;">
+                                                    <span class="material-symbols-outlined">inventory_2</span> ARCHIVAR
+                                                </button>
+                                                <div style="font-size: 11px; color: #92400E; margin-top: 6px; font-weight: 500;">
+                                                    Cierra este expediente y lo traslada a la sección <strong>"EXPEDIENTE"</strong>
                                                 </div>
                                             </div>
                                         </div>
@@ -2582,8 +2596,8 @@
 
     <!-- Supabase JS Client & App Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase_config.js?v=2.5"></script>
-    <script src="consecutivo_data.js?v=2.5"></script>
-    <script src="app.js?v=2.5"></script>
+    <script src="supabase_config.js?v=2.6"></script>
+    <script src="consecutivo_data.js?v=2.6"></script>
+    <script src="app.js?v=2.6"></script>
 </body>
 </html>
