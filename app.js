@@ -749,6 +749,7 @@ function renderAdministracion() {
     } else if (appState.currentAdminFicha === 'archivo-digital') {
         renderArchivoDigital();
     } else if (appState.currentAdminFicha === 'operaciones') {
+        if (typeof window.fetchOperacionesFromCloud === 'function') window.fetchOperacionesFromCloud();
         if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
     }
 }
@@ -4106,11 +4107,37 @@ function setupRealtimeSubscriptions() {
         }
     });
 
-    // 4. Cambios de base de datos PostgreSQL en mensajes (canal secundario)
+    // 4. Recibir Actualizaciones de Operaciones por Broadcast (Sincronización instantánea iPad <-> PC)
+    window.chatRealtimeChannel.on('broadcast', { event: 'operaciones_update' }, payload => {
+        const data = payload.payload;
+        if (!data || !Array.isArray(data.proyectos)) return;
+        if (typeof window.mergeOperacionesProjects === 'function') {
+            window.mergeOperacionesProjects(data.proyectos);
+            try {
+                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+            } catch (e) {}
+            if (appState.currentAdminFicha === 'operaciones' && typeof window.renderOperaciones === 'function') {
+                window.renderOperaciones();
+                if (appState.activeOperacionesProjectId && typeof window.renderStep1View === 'function') {
+                    const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+                    if (activeP) window.renderStep1View(activeP);
+                }
+            }
+        }
+    });
+
+    // 5. Cambios de base de datos PostgreSQL en mensajes (canal secundario)
     window.chatRealtimeChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         const row = payload.new;
         if (!row) return;
         const channelKey = row.chat_id || 'general';
+        if (channelKey.startsWith('__')) {
+            // Mensaje de sincronización interna (como snapshot de operaciones)
+            if (channelKey === '__cloud_sync_operaciones__' && typeof window.fetchOperacionesFromCloud === 'function') {
+                window.fetchOperacionesFromCloud();
+            }
+            return;
+        }
         if (!appState.chats[channelKey]) appState.chats[channelKey] = [];
 
         const parsed = parseMessageContent(row.contenido);
@@ -4155,9 +4182,16 @@ function setupRealtimeSubscriptions() {
         }
     });
 
-    // 5. Cambios de base de datos PostgreSQL en tareas
+    // 6. Cambios de base de datos PostgreSQL en tareas
     window.chatRealtimeChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, async () => {
         await fetchTasksFromCloud();
+    });
+
+    // 7. Cambios de base de datos PostgreSQL en operaciones
+    window.chatRealtimeChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'operaciones' }, async () => {
+        if (typeof window.fetchOperacionesFromCloud === 'function') {
+            await window.fetchOperacionesFromCloud();
+        }
     });
 
     window.chatRealtimeChannel.subscribe((status) => {
@@ -4183,6 +4217,11 @@ async function fetchCloudData() {
         
         // Sincronizar tareas
         await fetchTasksFromCloud();
+
+        // Sincronizar proyectos de Operaciones (nube <-> local)
+        if (typeof window.fetchOperacionesFromCloud === 'function') {
+            await window.fetchOperacionesFromCloud();
+        }
         
         // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)
         const { data: msgs, error: mError } = await client.from('messages').select('*').order('created_at', { ascending: true });
@@ -4194,6 +4233,7 @@ async function fetchCloudData() {
 
             msgs.forEach(row => {
                 const channelKey = row.chat_id || 'general';
+                if (channelKey.startsWith('__')) return; // Canales internos de sincronización
                 if (!cleanChats[channelKey]) cleanChats[channelKey] = [];
 
                 const parsed = parseMessageContent(row.contenido);
@@ -6816,46 +6856,217 @@ window.sendQuickReply = async function() {
 
 
 // Generador automático de consecutivos para proyectos de Operaciones
-// Regla: RDP + últimos 2 dígitos del año (26) + mes en 2 dígitos (09) + consecutivo numérico (ej. 112) + letra (F para local/foráneo, L para lavado)
+// Regla: RDP + últimos 2 dígitos del año actual (26) + mes en 2 dígitos (09) + número secuencial
+// - Servicio local y movimientos foráneos: sigue el 171 y el usuario define la letra
+// - Lavado de contenedores: sigue el 56 y el sistema agrega la letra 'L'
 window.generateProjectConsecutivo = function(tipoProyecto) {
     const now = new Date();
     const year2 = String(now.getFullYear()).slice(-2);
     const month = String(now.getMonth() + 1).padStart(2, '0');
-    const letter = (tipoProyecto === 'lavado_contenedores') ? 'L' : 'F';
+    const isLavado = (tipoProyecto === 'lavado_contenedores');
     
-    let maxSeq = 111;
+    // Base de secuencia especificada por el usuario
+    let maxSeq = isLavado ? 55 : 170;
+    
     const projects = appState.operacionesProyectos || [];
     projects.forEach(p => {
         const val = (p.numConsecutivo || p.consecutivo || '').trim();
-        const m = val.match(/^RDP\d{4}(\d+)[A-Z]$/i);
+        // Regex para capturar RDP + 4 dígitos de fecha (YYMM) + números + letra opcional
+        const m = val.match(/^RDP\d{4}(\d+)([A-Z]?)$/i);
         if (m) {
             const n = parseInt(m[1], 10);
-            if (!isNaN(n) && n > maxSeq) {
-                maxSeq = n;
+            const letter = (m[2] || '').toUpperCase();
+            if (isLavado && (letter === 'L' || p.tipoProyecto === 'lavado_contenedores')) {
+                if (!isNaN(n) && n > maxSeq) maxSeq = n;
+            } else if (!isLavado && letter !== 'L') {
+                if (!isNaN(n) && n > maxSeq) maxSeq = n;
             }
         }
     });
 
     const nextSeq = maxSeq + 1;
-    return `RDP${year2}${month}${nextSeq}${letter}`;
+    if (isLavado) {
+        return `RDP${year2}${month}${nextSeq}L`;
+    } else {
+        // En servicio local y foráneos, el consecutivo inicia en 171 y el usuario introduce la letra
+        return `RDP${year2}${month}${nextSeq}`;
+    }
 };
 
 window.updateConsecutivoLetterForTipo = function(currentConsecutivo, tipoProyecto) {
-    const letter = (tipoProyecto === 'lavado_contenedores') ? 'L' : 'F';
+    const isLavado = (tipoProyecto === 'lavado_contenedores');
     if (!currentConsecutivo) {
         return generateProjectConsecutivo(tipoProyecto);
     }
     const val = currentConsecutivo.trim();
-    if (/^RDP\d{4}\d+[A-Z]$/i.test(val)) {
-        return val.slice(0, -1) + letter;
+    if (isLavado) {
+        // Si no termina en L o no es serie de lavado, recalcular para serie 56L
+        if (!val.endsWith('L')) {
+            return generateProjectConsecutivo('lavado_contenedores');
+        }
+        return val;
+    } else {
+        // Si venía con 'L' de lavado, cambiar a serie de local/foráneos (171 en adelante)
+        if (val.endsWith('L')) {
+            return generateProjectConsecutivo(tipoProyecto);
+        }
+        return val;
     }
-    return generateProjectConsecutivo(tipoProyecto);
 };
 
 // ---------------------------------------------------------------------------------
 // SECCIÓN 5: OPERACIONES (SOLO LOCALHOST - IMÁGENES 2, 3, 4, 5)
 // ---------------------------------------------------------------------------------
 const defaultOperacionesProyectos = [];
+
+let _syncOperacionesTimer = null;
+window.saveOperacionesStorage = function() {
+    const list = appState.operacionesProyectos || [];
+    try {
+        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(list));
+    } catch (e) {
+        console.warn("Error saving operaciones locally:", e);
+    }
+    if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud();
+    }
+};
+
+window.syncOperacionesToCloud = function() {
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    // 1. Broadcast instantáneo por WebSockets (sub-50ms) a otros dispositivos activos (iPad, PC)
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'operaciones_update',
+                payload: {
+                    proyectos: appState.operacionesProyectos || [],
+                    sender: appState.currentUser?.email || 'operaciones',
+                    timestamp: new Date().toISOString()
+                }
+            });
+        } catch (e) {
+            console.warn("Error broadcasting operaciones:", e);
+        }
+    }
+
+    // 2. Persistencia en la nube (Debounced para agrupar pulsaciones)
+    if (_syncOperacionesTimer) clearTimeout(_syncOperacionesTimer);
+    _syncOperacionesTimer = setTimeout(async () => {
+        try {
+            const list = appState.operacionesProyectos || [];
+
+            // A. Guardar snapshot en tabla messages con chat_id especial para garantizar persistencia universal
+            await client.from('messages').insert({
+                chat_id: '__cloud_sync_operaciones__',
+                contenido: JSON.stringify(list),
+                emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                emisor_role: 'sistema'
+            });
+
+            // B. Si existe la tabla operaciones en Supabase, guardar cada proyecto
+            try {
+                for (const proj of list) {
+                    const cNum = proj.consecutivo || proj.numConsecutivo || proj.id;
+                    await client.from('operaciones').upsert({
+                        id: String(proj.id || cNum),
+                        consecutivo: String(cNum),
+                        tipo_proyecto: proj.tipoProyecto || 'servicio_local',
+                        estatus: proj.estatus || 'PENDIENTE',
+                        factura: proj.factura || proj.numFactura || '',
+                        orden_compra: proj.numOC || '',
+                        datos: proj,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'id' });
+                }
+            } catch (errDb) {}
+        } catch (err) {
+            console.warn("⚠️ Error persisting operaciones to Supabase:", err);
+        }
+    }, 600);
+};
+
+window.fetchOperacionesFromCloud = async function() {
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    try {
+        let cloudProjects = null;
+
+        // 1. Intentar leer desde tabla dedicada operaciones
+        try {
+            const { data: dbOps, error: opErr } = await client.from('operaciones').select('*').order('updated_at', { ascending: false });
+            if (dbOps && dbOps.length > 0) {
+                cloudProjects = dbOps.map(row => row.datos || {
+                    id: row.id || row.consecutivo,
+                    numProyecto: row.consecutivo,
+                    consecutivo: row.consecutivo,
+                    numConsecutivo: row.consecutivo,
+                    tipoProyecto: row.tipo_proyecto,
+                    estatus: row.estatus,
+                    numFactura: row.factura,
+                    numOC: row.orden_compra
+                });
+            }
+        } catch (e) {}
+
+        // 2. Si no hay registros en operaciones, recuperar el snapshot más reciente de messages
+        if (!cloudProjects || cloudProjects.length === 0) {
+            const { data: snapMsgs, error: snapErr } = await client.from('messages')
+                .select('contenido, created_at')
+                .eq('chat_id', '__cloud_sync_operaciones__')
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (snapMsgs && snapMsgs.length > 0 && snapMsgs[0].contenido) {
+                try {
+                    const parsed = JSON.parse(snapMsgs[0].contenido);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        cloudProjects = parsed;
+                    }
+                } catch (e) {}
+            }
+        }
+
+        if (cloudProjects && Array.isArray(cloudProjects)) {
+            window.mergeOperacionesProjects(cloudProjects);
+            try {
+                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+            } catch (e) {}
+            if (appState.currentAdminFicha === 'operaciones' && typeof window.renderOperaciones === 'function') {
+                window.renderOperaciones();
+            }
+        }
+    } catch (err) {
+        console.warn("⚠️ Error fetching operaciones from cloud:", err);
+    }
+};
+
+window.mergeOperacionesProjects = function(cloudList) {
+    if (!Array.isArray(cloudList) || cloudList.length === 0) return;
+    if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
+
+    const fakeOpIds = new Set(['RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F']);
+
+    cloudList.forEach(cp => {
+        if (!cp || fakeOpIds.has(cp.id) || fakeOpIds.has(cp.consecutivo) || fakeOpIds.has(cp.numProyecto)) return;
+        const key = cp.id || cp.consecutivo || cp.numProyecto;
+        const idx = appState.operacionesProyectos.findIndex(p => (p.id || p.consecutivo || p.numProyecto) === key);
+        if (idx === -1) {
+            appState.operacionesProyectos.push(cp);
+        } else {
+            // Combinar los datos del proyecto
+            appState.operacionesProyectos[idx] = Object.assign({}, appState.operacionesProyectos[idx], cp);
+        }
+    });
+
+    cleanOperacionesLegacyData(appState.operacionesProyectos);
+};
 
 // Helper: Validar requisitos para avanzar a Facturación (Paso 4)
 window.validateProjectForFacturacion = function(p) {
@@ -7023,7 +7234,15 @@ function cleanOperacionesLegacyData(proyectos) {
         if (!p.infoLavado) {
             p.infoLavado = { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: (p.contenedores || []).length, observaciones: '' };
         }
-        if (!p.numConsecutivo || !p.numConsecutivo.startsWith('RDP')) {
+        // Limpiar facturas y órdenes de compra predeterminadas o ficticias
+        if (p.numFactura === 'F92493' || p.numFactura === 'F20059' || p.numFactura === 'F84084' || p.numFactura === 'F60944' || (p.numFactura && p.numFactura.startsWith('FAC'))) {
+            p.numFactura = '';
+        }
+        if (p.numOC === '65560' || p.numOC === '12556' || p.numOC === '56060') {
+            p.numOC = '';
+        }
+
+        if (!p.numConsecutivo || !p.numConsecutivo.startsWith('RDP') || p.numConsecutivo.includes('112') || p.numConsecutivo.includes('110') || p.numConsecutivo.includes('111')) {
             p.numConsecutivo = generateProjectConsecutivo(p.tipoProyecto);
             p.consecutivo = p.numConsecutivo;
         }
@@ -7037,7 +7256,7 @@ window.renderOperaciones = function() {
     const listPane = document.getElementById("operaciones-view-list");
     if (!listPane) return;
 
-    const fakeOpIds = new Set(['RDP2609110F', 'RDP2609111F', 'RDP2609112L', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F']);
+    const fakeOpIds = new Set(['RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F']);
     const stored = localStorage.getItem('rp_operaciones_proyectos');
     if (stored) {
         try {
@@ -7234,8 +7453,8 @@ window.openOperacionesDetail = function(projectId) {
     // Populate Steps 3, 4, 5 Badges (Mostrando el consecutivo en Número de Proyecto)
     const consecutivoDisplay = p.consecutivo || p.numConsecutivo || p.numProyecto;
     document.querySelectorAll("#op-step3-num-proyecto, #op-step4-num-proyecto, #op-step5-num-proyecto").forEach(el => el.innerText = consecutivoDisplay);
-    document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = p.numFactura || "(Sin Factura)");
-    document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = p.numOC || "(Sin OC)");
+    document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = p.numFactura || "-");
+    document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = p.numOC || "-");
     document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = consecutivoDisplay);
 
     renderPartidasTable(p);
@@ -7280,7 +7499,7 @@ window.selectProjectTipo = function(tipo) {
 
     appState.contenedoresPage = 0;
     renderStep1View(p);
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 };
 
 window.toggleStep1GeneralInfo = function(section) {
@@ -7301,7 +7520,7 @@ window.updateProjectInfoViajeField = function(key, val) {
     if (!p) return;
     if (!p.infoViaje) p.infoViaje = {};
     p.infoViaje[key] = val;
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 };
 
 window.updateProjectInfoLavadoField = function(key, val) {
@@ -7309,7 +7528,7 @@ window.updateProjectInfoLavadoField = function(key, val) {
     if (!p) return;
     if (!p.infoLavado) p.infoLavado = {};
     p.infoLavado[key] = val;
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 };
 
 window.renderStep1View = function(p) {
@@ -7435,7 +7654,7 @@ window.goToOperacionesStep = function(stepNum) {
 
     if (p) {
         p.currentStep = stepNum;
-        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+        saveOperacionesStorage();
     }
 };
 
@@ -7456,10 +7675,10 @@ window.updateProjectHeaderField = function(key, val) {
     p[key] = val;
 
     if (key === 'numFactura') {
-        document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = val || "F20059");
+        document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = val || "-");
     }
     if (key === 'numOC') {
-        document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = val || "12556");
+        document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = val || "-");
     }
     if (key === 'numConsecutivo' || key === 'consecutivo') {
         p.numConsecutivo = val;
@@ -7467,7 +7686,7 @@ window.updateProjectHeaderField = function(key, val) {
         document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = val || "-");
     }
 
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 };
 
 function renderContenedoresCards(p) {
@@ -7599,7 +7818,7 @@ window.deleteContenedor = function(cId) {
         }
     });
 
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
     renderContenedoresCards(p);
 };
 
@@ -7663,7 +7882,7 @@ window.updateContenedorField = function(cId, key, val) {
         p.contenedores.push(item);
     }
     item[key] = val;
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 };
 
 window.addContenedorToActiveProject = function() {
@@ -7680,7 +7899,7 @@ window.addContenedorToActiveProject = function() {
     const itemsPerPage = 2;
     appState.contenedoresPage = Math.floor((p.contenedores.length - 1) / itemsPerPage);
     renderContenedoresCards(p);
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 };
 
 window.convertirCaratulaPDF = function() {
@@ -8813,7 +9032,7 @@ window.updatePartidaFieldFast = function(idx, key, val) {
     } else {
         p.partidasConceptos[idx][key] = val;
     }
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 };
 window.updatePartidaField = window.updatePartidaFieldFast;
 
@@ -8980,7 +9199,7 @@ window.addPartidaConceptoRow = function() {
     if (!p.partidasConceptos) p.partidasConceptos = [];
     p.partidasConceptos.push({ servicio: '', num: p.partidasConceptos.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 });
     renderPartidasTable(p);
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 };
 
 window.updateProveedorClavesFieldFast = function(idx, key, val) {
@@ -8993,7 +9212,7 @@ window.updateProveedorClavesFieldFast = function(idx, key, val) {
     } else {
         p.proveedoresClaves[idx][key] = val;
     }
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 };
 window.updateProveedorClavesField = window.updateProveedorClavesFieldFast;
 
@@ -9158,7 +9377,7 @@ window.addProveedorClavesRow = function() {
     if (!p.proveedoresClaves) p.proveedoresClaves = [];
     p.proveedoresClaves.push({ proveedor: '', facturaNum: '', num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 });
     renderProveedorClavesTable(p);
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 };
 
 function renderDocumentosStatus(p) {
@@ -9221,7 +9440,7 @@ window.uploadDocItem = function(docKey) {
                 lastModified: file.lastModified
             };
             renderDocumentosStatus(p);
-            localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+            saveOperacionesStorage();
         }
     };
 
@@ -9243,7 +9462,7 @@ window.finishOperacionesWizard = function() {
             return;
         }
         p.estatus = 'CERRADO';
-        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+        saveOperacionesStorage();
     }
     alert("¡Expediente operativo completado y CERRADO con éxito!");
     closeOperacionesDetail();
@@ -9261,7 +9480,7 @@ window.generarProyectoOperaciones = function() {
         if (consecutivoVal) { p.numConsecutivo = consecutivoVal; p.consecutivo = consecutivoVal; p.numProyecto = consecutivoVal; }
         p.currentStep = 4;
         p.estatus = 'PENDIENTE';
-        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+        saveOperacionesStorage();
     }
     closeOperacionesDetail();
 };
@@ -9278,9 +9497,9 @@ window.openNuevoProyectoModal = function() {
         numProyecto: initConsecutivo,
         fechaInicio: todayStr,
         fechaInicioDisplay: todayDisplay,
-        factura: 'FAC' + Math.floor(1000 + Math.random() * 9000),
-        numFactura: 'F' + Math.floor(20000 + Math.random() * 90000),
-        numOC: String(Math.floor(10000 + Math.random() * 90000)),
+        factura: '',
+        numFactura: '',
+        numOC: '',
         numConsecutivo: initConsecutivo,
         consecutivo: initConsecutivo,
         estatus: 'PENDIENTE',
@@ -9311,7 +9530,7 @@ window.openNuevoProyectoModal = function() {
 
     if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
     appState.operacionesProyectos.unshift(newProject);
-    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    saveOperacionesStorage();
 
     renderOperaciones();
     openOperacionesDetail(newProject.id);

@@ -6244,7 +6244,7 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 /* Contenedores Slider Wrapper y Botones Rectangulares Laterales */
 .contenedores-slider-wrapper {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     gap: 10px;
     margin-bottom: 8px;
     width: 100%;
@@ -6252,6 +6252,9 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 
 .contenedor-nav-rect {
     width: 38px;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -6263,6 +6266,7 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
     transition: all 0.2s ease;
     flex-shrink: 0;
+    align-self: center;
 }
 
 .contenedor-nav-rect:hover:not(:disabled) {
@@ -6646,10 +6650,18 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 /* Prefactura Slider Wrapper */
 .prefactura-slider-wrapper {
     display: flex;
-    align-items: stretch;
-    gap: 10px;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 8px;
     width: 100%;
+}
+
+.prefactura-slider-wrapper .contenedor-nav-rect {
+    width: 38px;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    align-self: center;
 }
 
 .prefactura-tables-container {
@@ -6867,7 +6879,11 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 
 #op-step-pane-2 .contenedor-nav-rect {
     width: 32px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
     border-radius: 8px;
+    align-self: center;
 }
 
 #op-step-pane-2 .contenedor-nav-rect .material-symbols-outlined {

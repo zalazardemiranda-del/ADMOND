@@ -307,7 +307,37 @@ CREATE INDEX IF NOT EXISTS idx_emails_carpeta ON public.emails(carpeta);
 CREATE INDEX IF NOT EXISTS idx_emails_created_at ON public.emails(created_at DESC);
 
 
--- 12. HABILITAR SUPABASE REALTIME EN TABLAS CLAVE
+-- 12. TABLA DE PROYECTOS DE OPERACIONES (Operaciones)
+CREATE TABLE IF NOT EXISTS public.operaciones (
+    id TEXT PRIMARY KEY,
+    consecutivo TEXT NOT NULL,
+    tipo_proyecto TEXT NOT NULL DEFAULT 'servicio_local',
+    estatus TEXT NOT NULL DEFAULT 'PENDIENTE',
+    factura TEXT DEFAULT '',
+    orden_compra TEXT DEFAULT '',
+    datos JSONB NOT NULL DEFAULT '{}'::jsonb,
+    creado_por UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.operaciones ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Permitir ver operaciones" ON public.operaciones;
+DROP POLICY IF EXISTS "Permitir crear operaciones" ON public.operaciones;
+DROP POLICY IF EXISTS "Permitir actualizar operaciones" ON public.operaciones;
+DROP POLICY IF EXISTS "Permitir eliminar operaciones" ON public.operaciones;
+
+CREATE POLICY "Permitir ver operaciones" ON public.operaciones FOR SELECT USING (true);
+CREATE POLICY "Permitir crear operaciones" ON public.operaciones FOR INSERT WITH CHECK (true);
+CREATE POLICY "Permitir actualizar operaciones" ON public.operaciones FOR UPDATE USING (true);
+CREATE POLICY "Permitir eliminar operaciones" ON public.operaciones FOR DELETE USING (true);
+
+CREATE INDEX IF NOT EXISTS idx_operaciones_consecutivo ON public.operaciones(consecutivo);
+CREATE INDEX IF NOT EXISTS idx_operaciones_estatus ON public.operaciones(estatus);
+
+
+-- 13. HABILITAR SUPABASE REALTIME EN TABLAS CLAVE
 DO $$
 BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
@@ -337,3 +367,10 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.emails;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.operaciones;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
