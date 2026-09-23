@@ -306,7 +306,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (isSessionActive && storedUser) {
         try {
             appState.currentUser = JSON.parse(storedUser);
-            if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
+            const isDiego = appState.currentUser && (
+                (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
+                (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('diego'))
+            );
+            if (isDiego) {
                 appState.currentUser.rol = 'administrativo';
                 localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
                 localStorage.setItem("rp_current_role", 'administrativo');
@@ -318,7 +322,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Restaurar rol activo persistido (o del usuario logueado)
     const storedRole = localStorage.getItem("rp_current_role");
-    if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
+    const isDiegoUser = appState.currentUser && (
+        (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
+        (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('diego'))
+    );
+    if (isDiegoUser) {
         appState.currentRole = 'administrativo';
     } else if (storedRole) {
         appState.currentRole = storedRole;
@@ -462,12 +470,19 @@ function saveToStorage() {
 
 // 1. Role and Session Handler (Background Role Management)
 window.setRole = function(role) {
+    const isDiego = appState.currentUser && (
+        (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
+        (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('diego'))
+    );
+    if (isDiego) {
+        role = 'administrativo';
+    }
     appState.currentRole = role || 'gerente';
     localStorage.setItem("rp_current_role", appState.currentRole);
 
     const r = (appState.currentRole || '').toLowerCase().trim();
-    const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
-    const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo' || r === 'administracion';
+    const isGerente = (r === 'gerente' || r === 'manager' || r === 'director') && !isDiego;
+    const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo' || r === 'administracion' || isDiego;
 
     // Manejar clases en el body para control de estilos CSS inmediato e irrevocable
     if (typeof document !== 'undefined' && document.body) {
