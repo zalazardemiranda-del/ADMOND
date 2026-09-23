@@ -7416,6 +7416,10 @@ function cleanOperacionesLegacyData(proyectos) {
         if (p.numFactura === 'F92493' || p.numFactura === 'F20059' || p.numFactura === 'F84084' || p.numFactura === 'F60944' || (p.numFactura && p.numFactura.startsWith('FAC'))) {
             p.numFactura = '';
         }
+        // También limpiar p.factura si contiene un número FAC ficticio o heredado
+        if (p.factura && (p.factura.startsWith('FAC') || p.factura === 'F92493' || p.factura === 'F20059' || p.factura === 'F84084' || p.factura === 'F60944')) {
+            p.factura = '';
+        }
         if (p.numOC === '65560' || p.numOC === '12556' || p.numOC === '56060') {
             p.numOC = '';
         }
@@ -8784,7 +8788,7 @@ window.convertirPrefacturaPDF = function() {
     <style>
         @page {
             size: letter landscape;
-            margin: 8mm 10mm;
+            margin: 6mm 8mm;
         }
         * {
             box-sizing: border-box;
@@ -8797,17 +8801,16 @@ window.convertirPrefacturaPDF = function() {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: #1E293B;
             background: #FFFFFF;
-            font-size: 11px;
-            line-height: 1.35;
+            font-size: 10px;
+            line-height: 1.3;
         }
         .pdf-page {
-            page-break-after: always;
-            padding: 10px 14px;
+            padding: 8px 12px;
             max-width: 1040px;
             margin: 0 auto;
         }
-        .pdf-page:last-child {
-            page-break-after: avoid;
+        .pdf-section-sep {
+            height: 10px;
         }
 
         /* Header */
@@ -8976,7 +8979,7 @@ window.convertirPrefacturaPDF = function() {
     </style>
 </head>
 <body>
-    <!-- PAGINA 1: Partidas y conceptos de la factura (Imagen 2) -->
+    <!-- PAGINA UNICA: Partidas + Proveedor en una sola hoja -->
     <div class="pdf-page">
         <div class="pdf-header">
             <div class="pdf-brand">
@@ -9024,6 +9027,7 @@ window.convertirPrefacturaPDF = function() {
             </div>
         </div>
 
+        <!-- SECCIÓN 1: Partidas y conceptos -->
         <div class="pdf-table-card">
             <div class="pdf-table-title">
                 <span>📋 Partidas y conceptos de la factura</span>
@@ -9057,60 +9061,9 @@ window.convertirPrefacturaPDF = function() {
             </table>
         </div>
 
-        <div class="pdf-footer">
-            <span>Expediente de Prefactura Consecutivo: <strong>${consecutivo}</strong> | ${projectTypeName}</span>
-            <span>Página 1 de 2 (Partidas y conceptos)</span>
-        </div>
-    </div>
+        <div class="pdf-section-sep"></div>
 
-    <!-- PAGINA 2: Proveedor y claves de compra (Imagen 3) -->
-    <div class="pdf-page">
-        <div class="pdf-header">
-            <div class="pdf-brand">
-                <img src="Logo%20interno.png" alt="Rodipack Logo" class="pdf-logo-img" />
-                <div>
-                    <div class="pdf-brand-title">RODIPACK · ADMOND</div>
-                    <div class="pdf-brand-sub">Control Operativo · Expediente de Prefactura</div>
-                </div>
-            </div>
-            <div class="pdf-doc-info">
-                <div class="pdf-doc-title">EXPEDIENTE DE PREFACTURA</div>
-                <div class="pdf-doc-type">Proyecto: <strong>${projectTypeName}</strong></div>
-                <div class="pdf-doc-date">${nowStr}</div>
-            </div>
-        </div>
-
-        <div class="pdf-banners-row">
-            <div class="pdf-banner-card">
-                <div class="pdf-banner-icon">📁</div>
-                <div>
-                    <div class="pdf-banner-label">Número de proyecto:</div>
-                    <div class="pdf-banner-val">${numProyecto}</div>
-                </div>
-            </div>
-            <div class="pdf-banner-card">
-                <div class="pdf-banner-icon">📄</div>
-                <div>
-                    <div class="pdf-banner-label">Número de factura:</div>
-                    <div class="pdf-banner-val">${numFactura}</div>
-                </div>
-            </div>
-            <div class="pdf-banner-card">
-                <div class="pdf-banner-icon">📋</div>
-                <div>
-                    <div class="pdf-banner-label">Número de OC:</div>
-                    <div class="pdf-banner-val">${numOC}</div>
-                </div>
-            </div>
-            <div class="pdf-banner-card">
-                <div class="pdf-banner-icon">🏷️</div>
-                <div>
-                    <div class="pdf-banner-label">Consecutivo:</div>
-                    <div class="pdf-banner-val blue-text">${consecutivo}</div>
-                </div>
-            </div>
-        </div>
-
+        <!-- SECCIÓN 2: Proveedor y claves de compra -->
         <div class="pdf-table-card">
             <div class="pdf-table-title">
                 <span>🏪 Proveedor y claves de compra</span>
@@ -9147,9 +9100,10 @@ window.convertirPrefacturaPDF = function() {
 
         <div class="pdf-footer">
             <span>Expediente de Prefactura Consecutivo: <strong>${consecutivo}</strong> | ${projectTypeName}</span>
-            <span>Página 2 de 2 (Proveedor y claves de compra)</span>
+            <span>Expediente de Prefactura (Página única)</span>
         </div>
     </div>
+
 </body>
 </html>`;
 
