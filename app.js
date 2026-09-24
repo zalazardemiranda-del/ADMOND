@@ -8290,7 +8290,7 @@ window.convertirCaratulaPDF = function() {
         { id: 1, label: isLavado ? 'Lavado Contenedor 1' : 'Contenedor 1' }
     ];
 
-    const maxPerPage = 7;
+    const maxPerPage = 6;
     const totalPages = Math.max(1, Math.ceil(contenedores.length / maxPerPage));
     const nowStr = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -8417,8 +8417,8 @@ window.convertirCaratulaPDF = function() {
     <title>Caratula_Operaciones_${consecutivo || 'Proyecto'}</title>
     <style>
         @page {
-            size: letter portrait;
-            margin: 8mm 10mm;
+            size: letter landscape;
+            margin: 6mm 8mm;
         }
         * {
             box-sizing: border-box;
@@ -8437,7 +8437,7 @@ window.convertirCaratulaPDF = function() {
         .pdf-page {
             page-break-after: always;
             padding: 10px;
-            max-width: 800px;
+            max-width: 1050px;
             margin: 0 auto;
         }
         .pdf-page:last-child {
@@ -8594,7 +8594,7 @@ window.convertirCaratulaPDF = function() {
         }
         .pdf-contenedores-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(3, 1fr);
             gap: 6px;
         }
         .pdf-c-card {
@@ -8665,7 +8665,7 @@ window.convertirCaratulaPDF = function() {
 </body>
 </html>`;
 
-    const printWin = window.open('', '_blank', 'width=950,height=900');
+    const printWin = window.open('', '_blank', 'width=1100,height=800');
     if (!printWin) {
         alert("Por favor permite las ventanas emergentes (popups) en tu navegador para ver y descargar el PDF.");
         return;
