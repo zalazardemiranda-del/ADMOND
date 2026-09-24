@@ -7608,8 +7608,56 @@ window.archivarExpedienteActivo = function() {
         return;
     }
 
+    // 1. REQUISITO IMAGEN 4: Número de factura escrita en Datos de proyecto (Paso 2)
+    const facturaInput = document.getElementById("op-step1-factura-num");
+    const numFacturaVal = ((facturaInput ? facturaInput.value : p.numFactura) || "").trim();
+    if (!numFacturaVal || numFacturaVal === '-') {
+        alert("⚠️ No se puede archivar el expediente:\n\nDebe ingresar un Número de Factura en la sección 'Datos de proyecto' (Paso 2).");
+        return;
+    }
+
+    // 2. REQUISITO IMAGEN 3: Factura # y Concepto por cada proveedor en la tabla (Paso 3 - Prefactura)
+    const provItems = p.proveedoresClaves || [];
+    for (let i = 0; i < provItems.length; i++) {
+        const item = provItems[i];
+        const tieneProveedor = item.proveedor && item.proveedor.trim() !== '' && !item.proveedor.includes("Seleccionar");
+        const tieneFactura = item.facturaNum && item.facturaNum.trim() !== '';
+        const tieneConcepto = item.concepto && item.concepto.trim() !== '' && !item.concepto.includes("Seleccionar");
+
+        if (tieneProveedor) {
+            if (!tieneFactura) {
+                alert(`⚠️ No se puede archivar el expediente:\n\nEn la tabla 'Proveedor y claves de compra' (Paso 3 - Prefactura), falta ingresar la Factura # para el proveedor '${item.proveedor}' (Fila ${i + 1}).`);
+                return;
+            }
+            if (!tieneConcepto) {
+                alert(`⚠️ No se puede archivar el expediente:\n\nEn la tabla 'Proveedor y claves de compra' (Paso 3 - Prefactura), falta seleccionar un Concepto de factura para el proveedor '${item.proveedor}' (Fila ${i + 1}).`);
+                return;
+            }
+        } else if (tieneFactura || tieneConcepto) {
+            alert(`⚠️ No se puede archivar el expediente:\n\nEn la tabla 'Proveedor y claves de compra' (Paso 3 - Prefactura), la fila ${i + 1} tiene factura/concepto pero no se ha seleccionado un Proveedor.`);
+            return;
+        }
+    }
+
+    // 3. REQUISITO IMAGEN 1 & 2: Las 3 facturas anexadas en la sección Facturas (Paso 4 - Documentos)
+    const docs = p.documentos || {};
+    const f1Uploaded = docs.factura1 && docs.factura1.uploaded === true;
+    const f2Uploaded = docs.factura2 && docs.factura2.uploaded === true;
+    const f3Uploaded = docs.factura3 && docs.factura3.uploaded === true;
+
+    if (!f1Uploaded || !f2Uploaded || !f3Uploaded) {
+        const faltantes = [];
+        if (!f1Uploaded) faltantes.push("Factura 1");
+        if (!f2Uploaded) faltantes.push("Factura 2");
+        if (!f3Uploaded) faltantes.push("Factura 3");
+
+        alert(`⚠️ No se puede archivar el expediente:\n\nDebe anexar/subir las 3 facturas en la sección 'Facturas' (Paso 4 - Documentos).\n\nDocumentos pendientes: ${faltantes.join(", ")}.`);
+        return;
+    }
+
+    // Confirmación final si cumple con todos los requisitos
     const consecutivo = p.consecutivo || p.numConsecutivo || p.numProyecto || 'este expediente';
-    if (!confirm(`¿Deseas ARCHIVAR el expediente ${consecutivo}?\n\nEl expediente se guardará como cerrado en la sección "EXPEDIENTE" y podrás consultarlo cuando lo requieras.`)) {
+    if (!confirm(`¿Deseas ARCHIVAR el expediente ${consecutivo}?\n\nEl expediente cumple con todos los requisitos y se guardará como cerrado en la sección "EXPEDIENTE".`)) {
         return;
     }
 
