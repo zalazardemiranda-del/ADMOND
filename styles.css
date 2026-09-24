@@ -5635,6 +5635,7 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     background: #F8FAFC;
     border-bottom: 1px solid #E2E8F0;
     text-transform: none;
+    text-align: center;
 }
 
 .operaciones-table td {
@@ -5643,6 +5644,7 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     font-weight: 600;
     color: #1E293B;
     border-bottom: 1px solid #F1F5F9;
+    text-align: center;
 }
 
 /* Status Badges */

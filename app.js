@@ -7556,7 +7556,7 @@ window.renderOperaciones = function() {
             <td>${p.fechaInicioDisplay || p.fechaInicio || '-'}</td>
             <td>${p.factura || p.numFactura || '-'}</td>
             <td><span class="op-status-badge ${p.estatus}">${p.estatus}</span></td>
-            <td style="text-align: right; white-space: nowrap;">
+            <td style="white-space: nowrap;">
                 <button class="btn-op-eliminar" onclick="eliminarProyectoOperaciones('${pId}', event)" title="Eliminar expediente">
                     <span class="material-symbols-outlined" style="font-size: 16px;">delete</span> ELIMINAR
                 </button>
