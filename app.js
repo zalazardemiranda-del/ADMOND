@@ -7,42 +7,26 @@ const defaultChats = {
 
 const defaultMeetings = [];
 
-// Seed data for Proveedores matching Imagen 4 & Excel
-const defaultProveedores = [
-    { folioFF: "FF-01", proveedor: "Jennifer", fecha: "", servicio: "Logistic", subtotal: 0, iva: 0, ret4: 0, retIsr: 0, total: 0, p: "P", folioFE: "FE-", op: "" },
-    { folioFF: "FF-02", proveedor: "Rama", fecha: "", servicio: "Logistic", subtotal: 0, iva: 0, ret4: 0, retIsr: 0, total: 0, p: "P", folioFE: "FE-", op: "" },
-    { folioFF: "FF-03", proveedor: "Transportes Express", fecha: "", servicio: "Logistic", subtotal: 0, iva: 0, ret4: 0, retIsr: 0, total: 0, p: "P", folioFE: "FE-", op: "" },
-    { folioFF: "FF-04", proveedor: "Jennifer", fecha: "", servicio: "Logistic", subtotal: 0, iva: 0, ret4: 0, retIsr: 0, total: 0, p: "P", folioFE: "FE-", op: "" },
-    { folioFF: "FF-05", proveedor: "Rama", fecha: "", servicio: "Logistic", subtotal: 0, iva: 0, ret4: 0, retIsr: 0, total: 0, p: "P", folioFE: "FE-", op: "" },
-    { folioFF: "FF-06", proveedor: "Transportes Express", fecha: "", servicio: "Logistic", subtotal: 0, iva: 0, ret4: 0, retIsr: 0, total: 0, p: "P", folioFE: "FE-", op: "" },
-    { folioFF: "FF-07", proveedor: "Jennifer", fecha: "", servicio: "Logistic", subtotal: 0, iva: 0, ret4: 0, retIsr: 0, total: 0, p: "P", folioFE: "FE-", op: "" },
-    { folioFF: "FF-08", proveedor: "Rama", fecha: "", servicio: "Logistic", subtotal: 0, iva: 0, ret4: 0, retIsr: 0, total: 0, p: "P", folioFE: "FE-", op: "" }
-];
+// Clean Application Default Data (Sin datos fantasma ni inventados)
+const defaultProveedores = [];
+const defaultNominas = [];
 
-// Seed data for Nóminas matching Imagen 3
-const defaultNominas = [
-    { folio: "1", empleado: "Fox", fecha: "2026-08-15", servicio: "Nomina", iva: 0, ret4: 0, retIsr: 0, total: 10600, p: "P" },
-    { folio: "2", empleado: "MP", fecha: "2026-08-15", servicio: "Nomina", iva: 0, ret4: 0, retIsr: 0, total: 1060, p: "P" },
-    { folio: "3", empleado: "Rex", fecha: "2026-08-15", servicio: "Nomina", iva: 0, ret4: 0, retIsr: 0, total: 1060, p: "P" },
-    { folio: "4", empleado: "RM", fecha: "2026-08-15", servicio: "Nomina", iva: 0, ret4: 0, retIsr: 0, total: 1060, p: "P" },
-    { folio: "5", empleado: "", fecha: "", servicio: "", iva: 0, ret4: 0, retIsr: 0, total: 0, p: "P" },
-    { folio: "6", empleado: "", fecha: "", servicio: "", iva: 0, ret4: 0, retIsr: 0, total: 0, p: "P" },
-    { folio: "7", empleado: "", fecha: "", servicio: "", iva: 0, ret4: 0, retIsr: 0, total: 0, p: "X" },
-    { folio: "8", empleado: "", fecha: "", servicio: "", iva: 0, ret4: 0, retIsr: 0, total: 0, p: "X" }
-];
-
-// Default Concept values matching Imagen 2
 const defaultConcepts = {
-    bancos: 10000,
+    bancos: 0,
     ingresos: 0,
-    gastosInd: 670,
+    gastosInd: 0,
     impuestos: 0
 };
 
-const defaultProveedorNames = ["Jennifer", "Rama", "Transportes Express"];
+const defaultProveedorNames = [
+    "Jennufer Marylin Gonzales Franco",
+    "RAMA MULTIMODAL S DE RL DE CV",
+    "Transportes Express"
+];
 
 // Environment helper: detección de Localhost vs Producción
-window.isLocalhostEnvironment = function() {
+function isLocalhostEnvironment() {
+    window.isLocalhostEnvironment = isLocalhostEnvironment;
     try {
         const host = window.location.hostname;
         const proto = window.location.protocol;
@@ -77,6 +61,7 @@ let appState = {
     currentTab: 'tasks', // 'tasks', 'chat', 'meetings', 'administracion'
     currentAdminFicha: 'visualizacion', // 'visualizacion', 'quincenal', 'proveedores', 'consecutivo'
     selectedProveedorFilter: 'all', // 'all' or specific name
+    proveedorStatusFilter: 'all', // 'all', 'P', 'C'
     currentChannel: 'general',
     currentFilter: 'all',
     currentTaskUserFilter: 'all', // 'all' or collaborator name
@@ -115,78 +100,14 @@ let appState = {
 let pieChartInstance = null;
 
 // Initialize Application
-document.addEventListener("DOMContentLoaded", async () => {
+const runInitialAppSetup = async () => {
     if (window.isLocalhostEnvironment()) {
         if (document.documentElement) document.documentElement.classList.add('is-localhost');
         if (document.body) document.body.classList.add('is-localhost');
     }
 
-    // Lista de tareas base creadas por el usuario para recuperación automática
-    const defaultUserTasks = [
-        {
-            id: 'task-rodiload-pagos',
-            title: 'rodiload" sistema"',
-            desc: 'Habilitar sistema de pagos anuales y mensuales para iniciar secion . para ello conectar api de sistema de pagos.',
-            priority: 'baja',
-            status: 'pending',
-            assignee: 'Roberto Miranda',
-            createdAt: '2026-09-08T12:00:00.000Z'
-        },
-        {
-            id: 'task-rodiload-email',
-            title: 'rodiload "Sistema"',
-            desc: 'Conectar sistema a correo electronico para recuperacion de contraseña ( para ello hacer un correo electronico con el dominio y usar thunderbird para la gestion de correos internos)',
-            priority: 'baja',
-            status: 'pending',
-            assignee: 'Roberto Miranda',
-            createdAt: '2026-09-08T12:05:00.000Z'
-        },
-        {
-            id: 'task-rodiload-medidas',
-            title: 'Rodiload "sistema"',
-            desc: '- Revisar y ajustar medidas de unidades',
-            priority: 'baja',
-            status: 'pending',
-            assignee: 'Roberto Miranda',
-            createdAt: '2026-09-08T12:10:00.000Z'
-        },
-        {
-            id: 'task-roditrack-apk-ios',
-            title: 'Roditrack online "sistema"',
-            desc: '- Testeo de roditrack con el apk -Subir sistema a IOS ( Para ello pagar computadora en linea y pagar anualidad ( 99 usd) -Conectar a api de sistema de pagos - Conectar correo electronico del sistema para la recuperacion de contraseñas',
-            priority: 'alta',
-            status: 'pending',
-            assignee: 'Roberto Miranda',
-            createdAt: '2026-09-08T12:15:00.000Z'
-        },
-        {
-            id: 'task-roditrack-web',
-            title: 'roditrack (web)',
-            desc: '- poner el sistema descargable - poner direccion de correo electronico ( roditrack@.com) - Hacer pagina en linkedin de roditrack o rodipack - poner links y planes del sistema',
-            priority: 'media',
-            status: 'pending',
-            assignee: 'Roberto Miranda',
-            createdAt: '2026-09-08T12:20:00.000Z'
-        },
-        {
-            id: 'task-roditrack-uber',
-            title: 'Roditrack online',
-            desc: 'Testeo del nuevo apk ( revisar que este haciendo el rastreo tipo uber )',
-            priority: 'alta',
-            status: 'pending',
-            assignee: 'Roberto Miranda Perez',
-            createdAt: '2026-09-08T13:30:00.000Z'
-        },
-        {
-            id: 'task-roditrack-email-recov',
-            title: 'Roditrack online',
-            desc: 'Crear y conectar correo electronico para recuperacion de contraseñas',
-            priority: 'alta',
-            status: 'pending',
-            assignee: 'Roberto Miranda Perez',
-            createdAt: '2026-09-08T13:40:00.000Z'
-        }
-    ];
+    // Lista de tareas base (Sin tareas fantasma ni inventadas)
+    const defaultUserTasks = [];
 
     appState.deletedTaskIds = JSON.parse(localStorage.getItem('rp_deleted_task_ids')) || [];
     let storedTasks = JSON.parse(localStorage.getItem('rp_tasks')) || [];
@@ -266,38 +187,95 @@ document.addEventListener("DOMContentLoaded", async () => {
     appState.customChannels = JSON.parse(localStorage.getItem('rp_custom_channels')) || [];
     appState.meetings = JSON.parse(localStorage.getItem('rp_meetings')) || [];
     
+    // Load Operaciones Data
+    try {
+        const storedOps = localStorage.getItem('rp_operaciones_proyectos');
+        if (storedOps) {
+            const fakeOpIds = new Set(['RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F']);
+            const parsed = JSON.parse(storedOps);
+            if (Array.isArray(parsed)) {
+                appState.operacionesProyectos = parsed.filter(p => p && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
+            }
+        }
+    } catch(e) {}
+
     // Load Administration Data
-    appState.proveedores = JSON.parse(localStorage.getItem('rp_proveedores_data')) || defaultProveedores;
+    let storedProv = [];
+    try {
+        storedProv = JSON.parse(localStorage.getItem('rp_proveedores_data')) || defaultProveedores;
+    } catch(e) {
+        storedProv = defaultProveedores;
+    }
+    // Purga estricta: Solo filas enlazadas con Operaciones (con OP válido)
+    appState.proveedores = (Array.isArray(storedProv) ? storedProv : []).filter(r => r && r.op && String(r.op).trim() !== '');
+    appState.proveedores.forEach((r, i) => {
+        r.folioFF = `FF-${String(i + 1).padStart(2, '0')}`;
+    });
+    try {
+        localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
+    } catch(e) {}
     appState.nominas = JSON.parse(localStorage.getItem('rp_nominas_data')) || defaultNominas;
     appState.archivosQuincenales = JSON.parse(localStorage.getItem('rp_archivos_quincenales')) || [];
     appState.viewingArchiveId = null;
-    appState.concepts = JSON.parse(localStorage.getItem('rp_admin_concepts')) || defaultConcepts;
-    appState.proveedorNamesList = JSON.parse(localStorage.getItem('rp_proveedor_names')) || defaultProveedorNames;
-    
-    // Load Consecutivo Data (with robust fallback to initialConsecutivoData if stored is empty or invalid)
-    const storedConsecutivo = localStorage.getItem('rp_consecutivo_data');
-    if (storedConsecutivo) {
-        try {
-            const parsed = JSON.parse(storedConsecutivo);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-                appState.consecutivo = parsed;
-            } else {
-                appState.consecutivo = (window.initialConsecutivoData && window.initialConsecutivoData.length > 0) ? window.initialConsecutivoData : [];
-            }
-        } catch (e) {
-            appState.consecutivo = (window.initialConsecutivoData && window.initialConsecutivoData.length > 0) ? window.initialConsecutivoData : [];
+    let storedProvNames = [];
+    try {
+        storedProvNames = JSON.parse(localStorage.getItem('rp_proveedor_names')) || [];
+    } catch(e) {}
+    // Purga definitiva de proveedores no deseados (Jennifer y Rama)
+    storedProvNames = storedProvNames.filter(n => {
+        const lower = String(n || '').trim().toLowerCase();
+        return lower !== 'jennifer' && lower !== 'rama';
+    });
+    defaultProveedorNames.forEach(n => {
+        if (!storedProvNames.some(s => s.toLowerCase() === n.toLowerCase())) {
+            storedProvNames.push(n);
         }
+    });
+    appState.proveedorNamesList = storedProvNames;
+    try {
+        localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
+    } catch(e) {}
+    
+    // Load Consecutivo Data (18 filas blancas limpias predeterminadas)
+    if (!localStorage.getItem('rp_consecutivo_18_blank_v1')) {
+        appState.consecutivo = JSON.parse(JSON.stringify(window.initialConsecutivoData || []));
+        try {
+            localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
+            localStorage.setItem('rp_consecutivo_18_blank_v1', 'true');
+        } catch (e) {}
     } else {
-        appState.consecutivo = (window.initialConsecutivoData && window.initialConsecutivoData.length > 0) ? window.initialConsecutivoData : [];
+        const storedConsecutivo = localStorage.getItem('rp_consecutivo_data');
+        if (storedConsecutivo) {
+            try {
+                const parsed = JSON.parse(storedConsecutivo);
+                appState.consecutivo = (Array.isArray(parsed) && parsed.length > 0) ? parsed : (window.initialConsecutivoData || []);
+            } catch (e) {
+                appState.consecutivo = window.initialConsecutivoData || [];
+            }
+        }
     }
     
-    // Auto-fix migration: If all loaded proveedores happen to be set to 'Jennifer', distribute them across available names
-    if (appState.proveedores && appState.proveedores.length > 0 && appState.proveedores.every(p => p.proveedor === "Jennifer")) {
-        const names = appState.proveedorNamesList.length > 0 ? appState.proveedorNamesList : defaultProveedorNames;
-        appState.proveedores.forEach((p, idx) => {
-            p.proveedor = names[idx % names.length];
+    // Ensure consecutivo rows default to 'sin estatus' ("")
+    if (appState.consecutivo && Array.isArray(appState.consecutivo)) {
+        appState.consecutivo.forEach(item => {
+            const stVal = String(item.st || '').trim().toUpperCase();
+            if (stVal === 'P' || !item.st) {
+                item.st = '';
+            }
         });
-        saveToStorage();
+    }
+    
+    // Purga de filas de proveedores con "Jennifer" o "Rama"
+    if (appState.proveedores && Array.isArray(appState.proveedores)) {
+        let changed = false;
+        appState.proveedores.forEach(p => {
+            const cur = String(p.proveedor || '').trim().toLowerCase();
+            if (cur === 'jennifer' || cur === 'rama') {
+                p.proveedor = cur === 'rama' ? "RAMA MULTIMODAL S DE RL DE CV" : "Jennufer Marylin Gonzales Franco";
+                changed = true;
+            }
+        });
+        if (changed) saveToStorage();
     }
     
     // Garantizar que las credenciales locales de Diego estén actualizadas a FoxMiranda30 y rol administrativo
@@ -427,28 +405,49 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Initialize Cloud & Realtime
     initAuthAndRealtime();
     
+    // Sincronizar y purgar proveedores estrictamente desde Operaciones
+    if (typeof syncAllOperacionesToProveedores === 'function') {
+        syncAllOperacionesToProveedores();
+    }
+    
     // Ocultar Pantalla de Carga Global solo cuando las fuentes e iconos (Material Symbols) estén 100% listos
     const hideLoader = async () => {
         const loader = document.getElementById("app-loading-screen");
         if (!loader) return;
         
-        try {
-            if (document.fonts && document.fonts.ready) {
-                await document.fonts.ready;
-            }
-        } catch (e) {
-            console.warn("Fonts ready check fallback:", e);
-        }
-        
-        setTimeout(() => {
+        const forceHide = () => {
+            if (loader.dataset.hidden) return;
+            loader.dataset.hidden = "true";
             loader.style.opacity = "0";
             loader.style.visibility = "hidden";
-            setTimeout(() => { if (loader.parentNode) loader.parentNode.removeChild(loader); }, 450);
-        }, 500);
+            setTimeout(() => {
+                if (loader.parentNode) loader.parentNode.removeChild(loader);
+            }, 400);
+        };
+
+        const timer = setTimeout(forceHide, 400);
+
+        try {
+            if (document.fonts && document.fonts.ready) {
+                await Promise.race([
+                    document.fonts.ready,
+                    new Promise(resolve => setTimeout(resolve, 300))
+                ]);
+            }
+        } catch (e) {}
+
+        clearTimeout(timer);
+        forceHide();
     };
     
     hideLoader();
-});
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener("DOMContentLoaded", runInitialAppSetup);
+} else {
+    runInitialAppSetup();
+}
 
 function saveToStorage() {
     try {
@@ -487,7 +486,8 @@ function saveToStorage() {
 }
 
 // 1. Role and Session Handler (Background Role Management)
-window.setRole = function(role) {
+function setRole(role) {
+
     const isDiego = appState.currentUser && (
         (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
         (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('diego'))
@@ -588,7 +588,8 @@ window.setRole = function(role) {
     updateGlobalStats();
 };
 
-window.updateUserSessionUI = function() {
+function updateUserSessionUI() {
+
     const userAvatarEl = document.getElementById("user-avatar");
     const userNameEl = document.getElementById("user-display-name");
     const userRoleEl = document.getElementById("user-display-role");
@@ -639,7 +640,8 @@ window.updateUserSessionUI = function() {
     }
 };
 
-window.handleAuthNavItemClick = function(e) {
+function handleAuthNavItemClick(e) {
+    window.handleAuthNavItemClick = handleAuthNavItemClick;
     if (e) e.preventDefault();
     if (appState.currentUser) {
         openAuthModal();
@@ -652,7 +654,8 @@ window.handleAuthNavItemClick = function(e) {
 };
 
 // 2. Tab Switcher
-window.switchTab = function(tabName) {
+function switchTab(tabName) {
+    window.switchTab = switchTab;
     // Si no está en localhost, bloquear Centro de Correos y redirigir a tareas
     if (tabName === 'emails' && typeof window.isLocalhostEnvironment === 'function' && !window.isLocalhostEnvironment()) {
         tabName = 'tasks';
@@ -724,7 +727,8 @@ window.switchTab = function(tabName) {
 };
 
 // 3. Ficha Switching in Administración
-window.switchAdminFicha = function(fichaName) {
+function switchAdminFicha(fichaName) {
+    window.switchAdminFicha = switchAdminFicha;
     appState.currentAdminFicha = fichaName;
     localStorage.setItem("rp_current_admin_ficha", fichaName);
     
@@ -760,6 +764,9 @@ function renderAdministracion() {
     } else if (appState.currentAdminFicha === 'quincenal') {
         renderNominas();
     } else if (appState.currentAdminFicha === 'proveedores') {
+        if (typeof window.syncAllOperacionesToProveedores === 'function') {
+            window.syncAllOperacionesToProveedores();
+        }
         renderProveedorChips();
         renderProveedores();
     } else if (appState.currentAdminFicha === 'consecutivo') {
@@ -881,7 +888,8 @@ function renderVisualizacion() {
     renderPieChart(totals);
 }
 
-window.updateAdminConcept = function(key, value) {
+function updateAdminConcept(key, value) {
+    window.updateAdminConcept = updateAdminConcept;
     appState.concepts[key] = Number(value) || 0;
     saveToStorage();
     renderVisualizacion();
@@ -1011,7 +1019,8 @@ function renderNominas() {
     recalculateNominasTableTotals();
 }
 
-window.handlePInputChange = function(inputEl, index, type) {
+function handlePInputChange(inputEl, index, type) {
+    window.handlePInputChange = handlePInputChange;
     const val = inputEl.value;
     const isX = val.trim().toUpperCase() === 'X';
     
@@ -1035,7 +1044,8 @@ window.handlePInputChange = function(inputEl, index, type) {
     }
 };
 
-window.updateNominaCell = function(index, key, val) {
+function updateNominaCell(index, key, val) {
+    window.updateNominaCell = updateNominaCell;
     const list = window.getActiveNominasList();
     if (list[index]) {
         list[index][key] = val;
@@ -1043,7 +1053,8 @@ window.updateNominaCell = function(index, key, val) {
     }
 };
 
-window.updateNominaManualTotal = function(index, val) {
+function updateNominaManualTotal(index, val) {
+    window.updateNominaManualTotal = updateNominaManualTotal;
     const list = window.getActiveNominasList();
     if (list[index]) {
         list[index].total = Number(val) || 0;
@@ -1053,7 +1064,8 @@ window.updateNominaManualTotal = function(index, val) {
     }
 };
 
-window.liveUpdateNominaTotals = function(index) {
+function liveUpdateNominaTotals(index) {
+    window.liveUpdateNominaTotals = liveUpdateNominaTotals;
     const list = window.getActiveNominasList();
     if (!list || !list[index]) return;
 
@@ -1078,7 +1090,8 @@ window.liveUpdateNominaTotals = function(index) {
     renderVisualizacion();
 };
 
-window.recalculateNominasTableTotals = function() {
+function recalculateNominasTableTotals() {
+    window.recalculateNominasTableTotals = recalculateNominasTableTotals;
     let sumIva = 0;
     let sumRet4 = 0;
     let sumRetIsr = 0;
@@ -1109,7 +1122,8 @@ window.recalculateNominasTableTotals = function() {
     }
 };
 
-window.addNewNominaRow = function() {
+function addNewNominaRow() {
+    window.addNewNominaRow = addNewNominaRow;
     const nextNum = window.getActiveNominasList().length + 1;
     window.getActiveNominasList().push({
         folio: String(nextNum),
@@ -1127,7 +1141,8 @@ window.addNewNominaRow = function() {
     renderVisualizacion();
 };
 
-window.deleteNominaRecord = function(index) {
+function deleteNominaRecord(index) {
+    window.deleteNominaRecord = deleteNominaRecord;
     if (confirm("¿Estás seguro de que deseas eliminar este registro de nómina?")) {
         window.getActiveNominasList().splice(index, 1);
         saveToStorage();
@@ -1140,39 +1155,88 @@ window.deleteNominaRecord = function(index) {
 // 6. FICHA 3: PROVEEDORES CON CHIPS (IMAGEN 4)
 // ---------------------------------------------------------------------------------
 function renderProveedorChips() {
+    window.renderProveedorChips = renderProveedorChips;
     const container = document.getElementById("proveedor-chips-container");
     if (!container) return;
     container.innerHTML = "";
     
+    // Purga activa de Jennifer y Rama de la lista de proveedores
+    if (appState.proveedorNamesList && Array.isArray(appState.proveedorNamesList)) {
+        const filteredNames = appState.proveedorNamesList.filter(n => {
+            const low = String(n || '').trim().toLowerCase();
+            return low !== 'jennifer' && low !== 'rama';
+        });
+        if (filteredNames.length !== appState.proveedorNamesList.length) {
+            appState.proveedorNamesList = filteredNames;
+            saveToStorage();
+        }
+    }
+
+    if (appState.selectedProveedorFilter && (appState.selectedProveedorFilter.toLowerCase() === 'jennifer' || appState.selectedProveedorFilter.toLowerCase() === 'rama')) {
+        appState.selectedProveedorFilter = 'all';
+    }
+
+    const validLinked = (appState.proveedores || []).filter(p => p && p.op && String(p.op).trim() !== '');
+
     // "Todos" Chip
     const allChip = document.createElement("button");
     allChip.className = `proveedor-chip ${appState.selectedProveedorFilter === 'all' ? 'active' : ''}`;
-    allChip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">apps</span> Todos (${appState.proveedores.length})`;
+    allChip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">apps</span> Todos (${validLinked.length})`;
     allChip.onclick = () => filterByProveedor('all');
     container.appendChild(allChip);
     
     // Dynamic Chips from provider names list
     appState.proveedorNamesList.forEach(name => {
-        const count = appState.proveedores.filter(p => p.proveedor.toLowerCase() === name.toLowerCase()).length;
+        const low = String(name || '').trim().toLowerCase();
+        if (low === 'jennifer' || low === 'rama') return;
+
+        const count = validLinked.filter(p => p.proveedor && p.proveedor.toLowerCase() === name.toLowerCase()).length;
         const chip = document.createElement("button");
         chip.className = `proveedor-chip ${appState.selectedProveedorFilter.toLowerCase() === name.toLowerCase() ? 'active' : ''}`;
-        chip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">person</span> ${name} (${count})`;
-        chip.onclick = () => filterByProveedor(name);
+        chip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">person</span> ${name} (${count}) <span class="material-symbols-outlined chip-delete-btn" style="font-size: 14px; margin-left: 6px; opacity: 0.6;" title="Eliminar proveedor" onclick="deleteProveedorName('${name}', event)">close</span>`;
+        chip.onclick = (e) => {
+            if (e.target && e.target.classList.contains('chip-delete-btn')) return;
+            filterByProveedor(name);
+        };
         container.appendChild(chip);
     });
+
+    updateProveedorStatusCounts();
 }
 
-window.filterByProveedor = function(name) {
+function deleteProveedorName(name, event) {
+    window.deleteProveedorName = deleteProveedorName;
+    if (event) event.stopPropagation();
+    if (confirm(`¿Eliminar al proveedor "${name}" de la lista y del sistema?`)) {
+        appState.proveedorNamesList = (appState.proveedorNamesList || []).filter(n => n.toLowerCase() !== name.toLowerCase());
+        if (appState.selectedProveedorFilter.toLowerCase() === name.toLowerCase()) {
+            appState.selectedProveedorFilter = 'all';
+        }
+        saveToStorage();
+        renderProveedorChips();
+        renderProveedores();
+    }
+}
+window.deleteProveedorName = deleteProveedorName;
+
+function filterByProveedor(name) {
+    window.filterByProveedor = filterByProveedor;
     appState.selectedProveedorFilter = name;
     renderProveedorChips();
     renderProveedores();
-};
+}
 
-window.promptAddProveedor = function() {
+function promptAddProveedor() {
+    window.promptAddProveedor = promptAddProveedor;
     const name = prompt("Ingresa el nombre del nuevo proveedor:");
     if (name && name.trim()) {
         const cleanName = name.trim();
-        if (!appState.proveedorNamesList.some(n => n.toLowerCase() === cleanName.toLowerCase())) {
+        const low = cleanName.toLowerCase();
+        if (low === 'jennifer' || low === 'rama') {
+            alert("Este proveedor está en desuso. Utilice 'Jennufer Marylin Gonzales Franco' o 'RAMA MULTIMODAL S DE RL DE CV'.");
+            return;
+        }
+        if (!appState.proveedorNamesList.some(n => n.toLowerCase() === low)) {
             appState.proveedorNamesList.push(cleanName);
         }
         appState.selectedProveedorFilter = cleanName;
@@ -1180,42 +1244,489 @@ window.promptAddProveedor = function() {
         renderProveedorChips();
         renderProveedores();
     }
-};
+}
+
+// Generador unificado de opciones de proveedor para que Imagen 3 e Imagen 4 coincidan idénticamente
+function getProveedorOptionsHTML(selectedName) {
+    window.getProveedorOptionsHTML = getProveedorOptionsHTML;
+    const names = (appState.proveedorNamesList && appState.proveedorNamesList.length > 0)
+        ? appState.proveedorNamesList
+        : defaultProveedorNames;
+
+    let html = `<option value="">-- Seleccionar proveedor --</option>`;
+    names.forEach(n => {
+        const low = String(n || '').trim().toLowerCase();
+        if (low === 'jennifer' || low === 'rama') return;
+        const isSel = (selectedName && selectedName.trim().toLowerCase() === low);
+        html += `<option value="${n}" ${isSel ? 'selected' : ''}>${n}</option>`;
+    });
+
+    const selLow = String(selectedName || '').trim().toLowerCase();
+    if (selectedName && selectedName.trim() && selLow !== 'jennifer' && selLow !== 'rama' && !names.some(n => n.toLowerCase() === selLow)) {
+        html += `<option value="${selectedName.trim()}" selected>${selectedName.trim()}</option>`;
+    }
+
+    html += `<option value="__NEW_PROVEEDOR__" style="color: #2563EB; font-weight: 700;">+ Añadir nuevo proveedor...</option>`;
+    return html;
+}
+window.getProveedorOptionsHTML = getProveedorOptionsHTML;
+
+// Manejo centralizado del select de proveedor
+function handleProveedorSelectChange(tableType, index, val) {
+    window.handleProveedorSelectChange = handleProveedorSelectChange;
+    if (val === '__NEW_PROVEEDOR__') {
+        const newName = prompt("Ingresa el nombre del nuevo proveedor:");
+        if (newName && newName.trim()) {
+            const clean = newName.trim();
+            if (!appState.proveedorNamesList.some(n => n.toLowerCase() === clean.toLowerCase())) {
+                appState.proveedorNamesList.push(clean);
+                saveToStorage();
+                renderProveedorChips();
+            }
+            if (tableType === 'proveedores') {
+                updateProveedorCell(index, 'proveedor', clean);
+                renderProveedores();
+            } else if (tableType === 'operaciones') {
+                updateProveedorClavesFieldFast(index, 'proveedor', clean);
+                const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+                if (p) renderProveedorClavesTable(p);
+            }
+        } else {
+            if (tableType === 'proveedores') renderProveedores();
+            else {
+                const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+                if (p) renderProveedorClavesTable(p);
+            }
+        }
+        return;
+    }
+
+    if (tableType === 'proveedores') {
+        updateProveedorCell(index, 'proveedor', val);
+    } else if (tableType === 'operaciones') {
+        updateProveedorClavesFieldFast(index, 'proveedor', val);
+    }
+}
+window.handleProveedorSelectChange = handleProveedorSelectChange;
+
+// Filtros de Estatus en Control de Proveedores: P = Por pagar, C = Por cobrar (Imagen 5)
+function filterProveedoresByStatus(status, btnEl) {
+    window.filterProveedoresByStatus = filterProveedoresByStatus;
+    appState.proveedorStatusFilter = status || 'all';
+
+    const group = document.getElementById("proveedor-status-filter-group");
+    if (group) {
+        group.querySelectorAll(".btn-status-filter").forEach(b => b.classList.remove("active"));
+    }
+    if (btnEl) {
+        btnEl.classList.add("active");
+    } else {
+        const targetBtn = document.getElementById(`btn-status-filter-${String(status).toLowerCase()}`);
+        if (targetBtn) targetBtn.classList.add("active");
+    }
+
+    renderProveedores();
+}
+window.filterProveedoresByStatus = filterProveedoresByStatus;
+
+function updateProveedorStatusCounts() {
+    window.updateProveedorStatusCounts = updateProveedorStatusCounts;
+    let list = (appState.proveedores || []).filter(p => p && p.op && String(p.op).trim() !== '');
+    if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
+        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
+    }
+    const countAll = list.length;
+    const countP = list.filter(p => {
+        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
+        return st === 'p' || (!st.includes('cancel') && st !== 'c');
+    }).length;
+    const countC = list.filter(p => {
+        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
+        return st === 'c';
+    }).length;
+    const countCancel = list.filter(p => {
+        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
+        return st.includes('cancel');
+    }).length;
+
+    const elAll = document.getElementById("count-status-all");
+    const elP = document.getElementById("count-status-p");
+    const elC = document.getElementById("count-status-c");
+    const elCancel = document.getElementById("count-status-cancelado");
+    if (elAll) elAll.textContent = countAll;
+    if (elP) elP.textContent = countP;
+    if (elC) elC.textContent = countC;
+    if (elCancel) elCancel.textContent = countCancel;
+}
+window.updateProveedorStatusCounts = updateProveedorStatusCounts;
+
+// Helper para encontrar el proyecto activo en Operaciones de forma robusta
+function getActiveOperacionesProject() {
+    if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos)) return null;
+    const activeId = appState.activeOperacionesProjectId;
+    if (!activeId) return appState.operacionesProyectos[0] || null;
+    return appState.operacionesProyectos.find(x => 
+        x && (
+            x.id === activeId ||
+            String(x.id).toLowerCase() === String(activeId).toLowerCase() ||
+            (x.numProyecto && String(x.numProyecto).toLowerCase() === String(activeId).toLowerCase()) ||
+            (x.consecutivo && String(x.consecutivo).toLowerCase() === String(activeId).toLowerCase()) ||
+            (x.numConsecutivo && String(x.numConsecutivo).toLowerCase() === String(activeId).toLowerCase())
+        )
+    ) || appState.operacionesProyectos[0] || null;
+}
+window.getActiveOperacionesProject = getActiveOperacionesProject;
+
+// Sincronización bidireccional entre Proveedores y Operaciones por expediente (Imágenes 1 y 2)
+function syncProjectToProveedores(p) {
+    window.syncProjectToProveedores = syncProjectToProveedores;
+    syncAllOperacionesToProveedores();
+}
+window.syncProjectToProveedores = syncProjectToProveedores;
+
+function syncAllOperacionesToProveedores() {
+    window.syncAllOperacionesToProveedores = syncAllOperacionesToProveedores;
+    if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos) || appState.operacionesProyectos.length === 0) {
+        const stored = localStorage.getItem('rp_operaciones_proyectos');
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored);
+                if (Array.isArray(parsed)) {
+                    appState.operacionesProyectos = parsed;
+                }
+            } catch (e) {}
+        }
+    }
+
+    if (!Array.isArray(appState.proveedores)) {
+        appState.proveedores = [];
+    }
+
+    // Preservar estatus (P / C / Cancelado) asignados por el usuario en Control de Proveedores
+    const statusMap = new Map();
+    appState.proveedores.forEach(r => {
+        if (!r) return;
+        const st = r.p || r.estatus;
+        if (st) {
+            if (r.opRefId) statusMap.set(r.opRefId, st);
+            if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
+            if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
+        }
+    });
+
+    const newProveedoresList = [];
+
+    if (Array.isArray(appState.operacionesProyectos) && appState.operacionesProyectos.length > 0) {
+        appState.operacionesProyectos.forEach(p => {
+            if (!p) return;
+            const projOp = p.numProyecto || p.consecutivo || p.numConsecutivo || p.id;
+            if (!projOp || String(projOp).trim() === '') return;
+
+            const provClaves = p.proveedoresClaves || [];
+            provClaves.forEach((item, idx) => {
+                if (!item) return;
+
+                const cant = parseFloat(item.cantidad) || 0;
+                const unit = parseFloat(item.unitario) || 0;
+                const sub = (cant > 0 && unit > 0) ? (cant * unit) : (cant > 0 ? cant : (unit > 0 ? unit : (parseFloat(item.subtotal) || 0)));
+                const ret = parseFloat(item.retencion) || (parseFloat(item.ret4) || 0);
+                const iva = (item.iva !== undefined && item.iva !== null && item.iva !== '' && Number(item.iva) > 0) ? Number(item.iva) : (sub > 0 ? (sub * 0.16) : 0);
+                const tot = (sub > 0 || ret > 0) ? (sub + iva - ret) : (parseFloat(item.total) || 0);
+
+                const provName = (item.proveedor && !item.proveedor.includes('-- Seleccionar')) ? item.proveedor.trim() : '';
+                const concepto = (item.concepto && !item.concepto.includes('-- Seleccionar')) ? item.concepto.trim() : '';
+
+                // Factura: Prioridad 1 Factura de la fila (FE5556, FE 152), Prioridad 2 Factura del proyecto
+                let facturaNum = '';
+                if (item.facturaNum && String(item.facturaNum).trim() !== '' && String(item.facturaNum).trim() !== '-') {
+                    facturaNum = String(item.facturaNum).trim();
+                } else if (p.numFactura && String(p.numFactura).trim() !== '' && String(p.numFactura).trim() !== '-') {
+                    facturaNum = String(p.numFactura).trim();
+                } else if (p.factura && String(p.factura).trim() !== '' && String(p.factura).trim() !== '-') {
+                    facturaNum = String(p.factura).trim();
+                }
+
+                // La fila es válida si tiene proveedor, factura, concepto, o cantidades/importes
+                const hasData = Boolean(
+                    provName ||
+                    facturaNum ||
+                    concepto ||
+                    sub > 0 ||
+                    tot > 0 ||
+                    cant > 0 ||
+                    unit > 0 ||
+                    ret > 0
+                );
+
+                if (!hasData) return;
+
+                const opRefId = `${p.id}_${idx}`;
+                const savedStatus = statusMap.get(opRefId) || 
+                                    statusMap.get(`${p.id}_${idx}`) || 
+                                    statusMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
+                                    item.p || item.estatus || 'P';
+
+                // Mantener sincronizado el objeto del proyecto en memoria
+                item.subtotal = sub;
+                item.iva = iva;
+                item.retencion = ret;
+                item.total = tot;
+                item.p = savedStatus;
+                item.estatus = savedStatus;
+
+                const nextNum = newProveedoresList.length + 1;
+                newProveedoresList.push({
+                    folioFF: `FF-${String(nextNum).padStart(2, '0')}`,
+                    proveedor: provName || (p.proveedor || '-'),
+                    fecha: p.fecha || (p.infoViaje && p.infoViaje.fecha) || new Date().toISOString().split('T')[0],
+                    servicio: concepto || "Logistic",
+                    subtotal: sub,
+                    iva: iva,
+                    ret4: ret,
+                    retIsr: 0,
+                    total: tot,
+                    p: savedStatus,
+                    estatus: savedStatus,
+                    folioFE: facturaNum,
+                    op: projOp,
+                    opRefId: opRefId,
+                    opRowIndex: idx,
+                    projectId: p.id
+                });
+
+                if (provName && !appState.proveedorNamesList.some(n => n.toLowerCase() === provName.toLowerCase())) {
+                    appState.proveedorNamesList.push(provName);
+                }
+            });
+        });
+    }
+
+    appState.proveedores = newProveedoresList;
+    saveToStorage();
+    if (typeof updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
+    if (typeof renderProveedorChips === 'function') renderProveedorChips();
+}
+window.syncAllOperacionesToProveedores = syncAllOperacionesToProveedores;
+
+function syncProveedorRowBackToOperaciones(row) {
+    window.syncProveedorRowBackToOperaciones = syncProveedorRowBackToOperaciones;
+    if (!row) return;
+    const opTarget = row.op ? String(row.op).trim().toLowerCase() : '';
+    const projId = row.projectId;
+    if (!opTarget && !projId) return;
+
+    const p = (appState.operacionesProyectos || []).find(proj => 
+        (projId && proj.id === projId) ||
+        (opTarget && (
+            (proj.numProyecto && String(proj.numProyecto).trim().toLowerCase() === opTarget) ||
+            (proj.consecutivo && String(proj.consecutivo).trim().toLowerCase() === opTarget) ||
+            (proj.numConsecutivo && String(proj.numConsecutivo).trim().toLowerCase() === opTarget) ||
+            (proj.id && String(proj.id).trim().toLowerCase() === opTarget)
+        ))
+    );
+
+    if (!p) return;
+    if (!p.proveedoresClaves) p.proveedoresClaves = [];
+    const rIdx = (row.opRowIndex !== undefined && row.opRowIndex !== null) ? row.opRowIndex : 0;
+
+    // Solo sincronizar el estatus hacia Operaciones, sin sobreescribir las cantidades financieras
+    if (p.proveedoresClaves[rIdx]) {
+        const item = p.proveedoresClaves[rIdx];
+        if (row.p) {
+            item.p = row.p;
+            item.estatus = row.p;
+        }
+    }
+
+    saveOperacionesStorage();
+}
+window.syncProveedorRowBackToOperaciones = syncProveedorRowBackToOperaciones;
+
+function toggleProvEstatusDropdown(index, event) {
+    window.toggleProvEstatusDropdown = toggleProvEstatusDropdown;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    
+    let menu = document.getElementById("global-prov-estatus-menu");
+    if (!menu) {
+        menu = document.createElement("div");
+        menu.id = "global-prov-estatus-menu";
+        menu.className = "prov-estatus-global-menu";
+        menu.innerHTML = `
+            <div class="prov-dropdown-option option-p" onclick="selectGlobalProvEstatus('P', event)">
+                <span class="prov-badge-dot badge-dot-p"></span>
+                <span class="option-name">P (Por pagar)</span>
+            </div>
+            <div class="prov-dropdown-option option-c" onclick="selectGlobalProvEstatus('C', event)">
+                <span class="prov-badge-dot badge-dot-c"></span>
+                <span class="option-name">C (Por cobrar)</span>
+            </div>
+            <div class="prov-dropdown-option option-cancelado" onclick="selectGlobalProvEstatus('Cancelado', event)">
+                <span class="prov-badge-dot badge-dot-cancel"></span>
+                <span class="option-name">Cancelado</span>
+            </div>
+        `;
+        document.body.appendChild(menu);
+    }
+    
+    if (menu.style.display === "block" && menu.dataset.currentIndex === String(index)) {
+        menu.style.display = "none";
+        return;
+    }
+    
+    menu.dataset.currentIndex = String(index);
+    
+    const currentItem = appState.proveedores[index];
+    const currentSt = currentItem ? (currentItem.p || currentItem.estatus || 'P').trim() : 'P';
+    const isCancel = currentSt.toLowerCase().includes('cancel');
+    const isC = currentSt.toUpperCase() === 'C';
+    
+    menu.querySelectorAll(".prov-dropdown-option").forEach(opt => opt.classList.remove("selected"));
+    if (isCancel) {
+        const oCanc = menu.querySelector(".option-cancelado");
+        if (oCanc) oCanc.classList.add("selected");
+    } else if (isC) {
+        const oC = menu.querySelector(".option-c");
+        if (oC) oC.classList.add("selected");
+    } else {
+        const oP = menu.querySelector(".option-p");
+        if (oP) oP.classList.add("selected");
+    }
+    
+    const trigger = (event && (event.currentTarget || event.target.closest(".prov-estatus-trigger"))) || document.getElementById(`prov-estatus-trigger-${index}`);
+    if (trigger) {
+        const rect = trigger.getBoundingClientRect();
+        menu.style.position = "fixed";
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.left = `${rect.left + (rect.width / 2)}px`;
+        menu.style.transform = "translateX(-50%)";
+        menu.style.zIndex = "99999999";
+        menu.style.display = "block";
+    }
+}
+window.toggleProvEstatusDropdown = toggleProvEstatusDropdown;
+
+function selectGlobalProvEstatus(newStatus, event) {
+    window.selectGlobalProvEstatus = selectGlobalProvEstatus;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const menu = document.getElementById("global-prov-estatus-menu");
+    if (!menu) return;
+    const idx = parseInt(menu.dataset.currentIndex, 10);
+    menu.style.display = "none";
+    
+    if (isNaN(idx) || !appState.proveedores[idx]) return;
+    
+    updateProveedorCell(idx, 'p', newStatus);
+}
+window.selectGlobalProvEstatus = selectGlobalProvEstatus;
+
+function cycleProveedorEstatus(index, event) {
+    window.cycleProveedorEstatus = cycleProveedorEstatus;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const menu = document.getElementById("global-prov-estatus-menu");
+    if (menu) menu.style.display = "none";
+
+    const item = appState.proveedores[index];
+    if (!item) return;
+
+    const currentSt = (item.p || item.estatus || 'P').trim();
+    let nextSt = 'P';
+    if (currentSt.toLowerCase().includes('cancel')) {
+        nextSt = 'P';
+    } else if (currentSt.toUpperCase() === 'P') {
+        nextSt = 'C';
+    } else if (currentSt.toUpperCase() === 'C') {
+        nextSt = 'Cancelado';
+    } else {
+        nextSt = 'C';
+    }
+
+    updateProveedorCell(index, 'p', nextSt);
+}
+window.cycleProveedorEstatus = cycleProveedorEstatus;
+
+function selectProvEstatusOption(index, value, event) {
+    window.selectProvEstatusOption = selectProvEstatusOption;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const menu = document.getElementById("global-prov-estatus-menu");
+    if (menu) menu.style.display = "none";
+    updateProveedorCell(index, 'p', value);
+}
+window.selectProvEstatusOption = selectProvEstatusOption;
 
 function renderProveedores() {
+    window.renderProveedores = renderProveedores;
     const tbody = document.getElementById("tbody-proveedores");
     if (!tbody) return;
     tbody.innerHTML = "";
     
-    let list = appState.proveedores || [];
+    // Filtrar estrictamente solo filas enlazadas con Operaciones (con OP válido)
+    let list = (appState.proveedores || []).filter(p => p && p.op && String(p.op).trim() !== '');
     
     // Filter by active chip
-    if (appState.selectedProveedorFilter !== 'all') {
-        list = list.filter(p => p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
+    if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
+        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
+    }
+
+    // Filter by active status (P = Por pagar, C = Por cobrar, Cancelado)
+    if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
+        const filterVal = appState.proveedorStatusFilter.toLowerCase();
+        list = list.filter(p => {
+            const st = (p.p || p.estatus || 'P').trim().toLowerCase();
+            if (filterVal === 'cancelado') {
+                return st.includes('cancel');
+            }
+            if (filterVal === 'c') {
+                return st === 'c';
+            }
+            if (filterVal === 'p') {
+                return st === 'p' || (!st.includes('cancel') && st !== 'c');
+            }
+            return st === filterVal;
+        });
     }
     
     list.forEach((item, index) => {
-        // Find real index in parent array
         const realIndex = appState.proveedores.indexOf(item);
-        
-        const names = appState.proveedorNamesList || defaultProveedorNames;
-        const provOptions = names.map(n => `<option value="${n}" ${item.proveedor === n ? 'selected' : ''}>${n}</option>`).join('');
-        const isKnown = names.includes(item.proveedor);
-        const customOpt = (!isKnown && item.proveedor) ? `<option value="${item.proveedor}" selected>${item.proveedor}</option>` : '';
+        const rawSt = (item.p || item.estatus || 'P').trim();
+        let currentStatus = 'P';
+        let displayLabel = 'P';
+        let estatusClass = 'estatus-p';
+        if (rawSt.toLowerCase().includes('cancel')) {
+            currentStatus = 'Cancelado';
+            displayLabel = 'Canc';
+            estatusClass = 'estatus-cancelado';
+        } else if (rawSt.toUpperCase() === 'C') {
+            currentStatus = 'C';
+            displayLabel = 'C';
+            estatusClass = 'estatus-c';
+        } else {
+            currentStatus = 'P';
+            displayLabel = 'P';
+            estatusClass = 'estatus-p';
+        }
 
         const tr = document.createElement("tr");
         tr.innerHTML = `
-            <td>
-                <input type="text" class="excel-input" value="${item.folioFF || ""}" oninput="updateProveedorCell(${realIndex}, 'folioFF', this.value)">
+            <td style="text-align: center;">
+                <input type="text" class="excel-input" value="${item.folioFF || ""}" oninput="updateProveedorCell(${realIndex}, 'folioFF', this.value)" style="text-align: center;">
             </td>
-            <td>
-                <select class="excel-input custom-excel-select" onchange="updateProveedorCell(${realIndex}, 'proveedor', this.value)" style="font-weight: 700; cursor: pointer; background-color: transparent;">
-                    ${provOptions}
-                    ${customOpt}
-                </select>
+            <td style="padding-left: 8px;">
+                <span class="prov-name-locked" title="${item.proveedor || ''}">${item.proveedor || '-'}</span>
             </td>
-            <td>
-                <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateProveedorCell(${realIndex}, 'fecha', this.value)">
+            <td style="text-align: center;">
+                <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateProveedorCell(${realIndex}, 'fecha', this.value)" style="text-align: center;">
             </td>
             <td>
                 <input type="text" class="excel-input" value="${item.servicio || "Logistic"}" oninput="updateProveedorCell(${realIndex}, 'servicio', this.value)">
@@ -1235,19 +1746,17 @@ function renderProveedores() {
             <td>
                 <input type="number" id="prov-total-input-${realIndex}" class="excel-input number-input readonly" value="${item.total || 0}" readonly style="font-weight: 700;">
             </td>
-            <td>
-                <input type="text" class="excel-input ${(item.p || '').trim().toUpperCase() === 'X' ? 'excel-p-flag-x' : ''}" value="${item.p || "P"}" oninput="handlePInputChange(this, ${realIndex}, 'proveedor')" style="text-align: center; font-weight: 700;">
+            <td class="td-prov-estatus" style="text-align: center; position: relative;">
+                <div class="prov-estatus-trigger ${estatusClass}" id="prov-estatus-trigger-${realIndex}" onclick="toggleProvEstatusDropdown(${realIndex}, event)" ondblclick="cycleProveedorEstatus(${realIndex}, event)" title="Estatus: ${currentStatus}. Haz clic para cambiar el estatus.">
+                    <span>${displayLabel}</span>
+                    <span class="material-symbols-outlined prov-arrow">expand_more</span>
+                </div>
             </td>
-            <td>
-                <input type="text" class="excel-input" value="${item.folioFE || "FE-"}" oninput="updateProveedorCell(${realIndex}, 'folioFE', this.value)">
+            <td style="text-align: center;">
+                <input type="text" class="excel-input readonly" value="${(item.folioFE && item.folioFE !== 'FE-') ? item.folioFE : ''}" placeholder="-" readonly style="text-align: center; font-weight: 700; color: #0F172A; cursor: default;" title="Factura vinculada desde Operaciones">
             </td>
-            <td>
-                <input type="text" class="excel-input" value="${item.op || ""}" oninput="updateProveedorCell(${realIndex}, 'op', this.value)">
-            </td>
-            <td>
-                <button class="btn-delete-task" onclick="deleteProveedorRecord(${realIndex})" title="Eliminar Registro">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
-                </button>
+            <td style="text-align: center;">
+                <input type="text" class="excel-input" value="${item.op || ""}" oninput="updateProveedorCell(${realIndex}, 'op', this.value)" style="text-align: center;">
             </td>
         `;
         tbody.appendChild(tr);
@@ -1260,11 +1769,16 @@ function renderProveedores() {
     tbody.appendChild(summaryTr);
     
     recalculateProveedoresTableTotals();
+    updateProveedorStatusCounts();
 }
 
-window.updateProveedorCell = function(index, key, val) {
-    if (appState.proveedores[index]) {
+function updateProveedorCell(index, key, val) {
+    window.updateProveedorCell = updateProveedorCell;
+    if (appState.proveedores && appState.proveedores[index]) {
         appState.proveedores[index][key] = val;
+        if (key === 'p') {
+            appState.proveedores[index].estatus = val;
+        }
         
         // If updated provider name, check if in names list
         if (key === 'proveedor') {
@@ -1272,14 +1786,24 @@ window.updateProveedorCell = function(index, key, val) {
                 appState.proveedorNamesList.push(val.trim());
             }
             renderProveedorChips();
-            renderProveedores();
+        }
+
+        // Two-way sync back to Operaciones
+        const row = appState.proveedores[index];
+        if (typeof window.syncProveedorRowBackToOperaciones === 'function') {
+            window.syncProveedorRowBackToOperaciones(row);
         }
         
         saveToStorage();
+        if (key === 'p' || key === 'proveedor') {
+            updateProveedorStatusCounts();
+            renderProveedores();
+        }
     }
-};
+}
 
-window.liveUpdateProveedorTotals = function(index) {
+function liveUpdateProveedorTotals(index) {
+    window.liveUpdateProveedorTotals = liveUpdateProveedorTotals;
     const subtotalEl = document.getElementById(`prov-subtotal-input-${index}`);
     const ivaEl = document.getElementById(`prov-iva-input-${index}`);
     const ret4El = document.getElementById(`prov-ret4-input-${index}`);
@@ -1303,22 +1827,44 @@ window.liveUpdateProveedorTotals = function(index) {
         appState.proveedores[index].retIsr = retisr;
         appState.proveedores[index].total = total;
         
+        if (typeof window.syncProveedorRowBackToOperaciones === 'function') {
+            window.syncProveedorRowBackToOperaciones(appState.proveedores[index]);
+        }
+
         recalculateProveedoresTableTotals();
         saveToStorage();
         renderVisualizacion();
     }
-};
+}
 
-window.recalculateProveedoresTableTotals = function() {
+function recalculateProveedoresTableTotals() {
+    window.recalculateProveedoresTableTotals = recalculateProveedoresTableTotals;
     let sumSubtotal = 0;
     let sumIva = 0;
     let sumRet4 = 0;
     let sumRetIsr = 0;
     let sumTotal = 0;
     
-    let list = appState.proveedores || [];
-    if (appState.selectedProveedorFilter !== 'all') {
-        list = list.filter(p => p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
+    let list = (appState.proveedores || []).filter(p => p && p.op && String(p.op).trim() !== '');
+    if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
+        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
+    }
+
+    if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
+        const filterVal = appState.proveedorStatusFilter.toLowerCase();
+        list = list.filter(p => {
+            const st = (p.p || p.estatus || 'P').trim().toLowerCase();
+            if (filterVal === 'cancelado') {
+                return st.includes('cancel');
+            }
+            if (filterVal === 'c') {
+                return st === 'c';
+            }
+            if (filterVal === 'p') {
+                return st === 'p' || (!st.includes('cancel') && st !== 'c');
+            }
+            return st === filterVal;
+        });
     }
     
     list.forEach(item => {
@@ -1332,61 +1878,60 @@ window.recalculateProveedoresTableTotals = function() {
     const totalsRow = document.getElementById("excel-proveedores-totals-row");
     if (totalsRow) {
         totalsRow.innerHTML = `
-            <td>Total General</td>
-            <td>Suma Calculada</td>
+            <td style="text-align: center; font-weight: 700;">Total</td>
+            <td style="padding-left: 8px;">Suma Calculada</td>
             <td></td>
             <td></td>
-            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumSubtotal)}</td>
-            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumIva)}</td>
-            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumRet4)}</td>
-            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumRetIsr)}</td>
-            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumTotal)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumSubtotal)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumIva)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumRet4)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumRetIsr)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumTotal)}</td>
             <td></td>
             <td></td>
-            <td></td>
-            <td><span class="material-symbols-outlined" style="font-size: 16px;">lock</span></td>
+            <td style="text-align: center;"><span class="material-symbols-outlined" style="font-size: 15px;">lock</span></td>
         `;
     }
-};
+}
 
-window.addNewProveedorRow = function() {
-    const nextNum = appState.proveedores.length + 1;
-    const defaultProv = appState.selectedProveedorFilter !== 'all' ? appState.selectedProveedorFilter : "Jennifer";
-    
-    appState.proveedores.push({
-        folioFF: `FF-${String(nextNum).padStart(2, '0')}`,
-        proveedor: defaultProv,
-        fecha: new Date().toISOString().split('T')[0],
-        servicio: "Logistic",
-        subtotal: 0,
-        iva: 0,
-        ret4: 0,
-        retIsr: 0,
-        total: 0,
-        p: "P",
-        folioFE: "FE-",
-        op: ""
-    });
-    saveToStorage();
-    renderProveedorChips();
-    renderProveedores();
-    renderVisualizacion();
-};
+function addNewProveedorRow() {
+    window.addNewProveedorRow = addNewProveedorRow;
+    alert("Las filas de proveedores se generan automáticamente enlazadas a cada expediente desde Operaciones (Paso 3: Proveedor y claves de compra).");
+    if (typeof switchAdminSubTab === 'function') {
+        switchAdminSubTab('operaciones');
+    }
+}
 
-window.deleteProveedorRecord = function(index) {
+function deleteProveedorRecord(index) {
+    window.deleteProveedorRecord = deleteProveedorRecord;
     if (confirm("¿Estás seguro de que deseas eliminar este registro de proveedor?")) {
+        const deletedRow = appState.proveedores[index];
+        if (deletedRow && (deletedRow.op || deletedRow.projectId)) {
+            const p = (appState.operacionesProyectos || []).find(proj => 
+                (deletedRow.projectId && proj.id === deletedRow.projectId) ||
+                (deletedRow.op && (proj.numProyecto === deletedRow.op || proj.consecutivo === deletedRow.op || proj.id === deletedRow.op))
+            );
+            if (p && p.proveedoresClaves) {
+                const rIdx = deletedRow.opRowIndex !== undefined ? deletedRow.opRowIndex : -1;
+                if (rIdx >= 0 && p.proveedoresClaves[rIdx]) {
+                    p.proveedoresClaves.splice(rIdx, 1);
+                    saveOperacionesStorage();
+                }
+            }
+        }
         appState.proveedores.splice(index, 1);
         saveToStorage();
         renderProveedorChips();
         renderProveedores();
         renderVisualizacion();
     }
-};
+}
 
 // ---------------------------------------------------------------------------------
 // 7. TASK MANAGEMENT LOGIC
 // ---------------------------------------------------------------------------------
-window.handleCreateTask = function(event) {
+function handleCreateTask(event) {
+    window.handleCreateTask = handleCreateTask;
     event.preventDefault();
     const title = document.getElementById("task-title").value.trim();
     const desc = document.getElementById("task-desc").value.trim();
@@ -1455,7 +2000,8 @@ window.handleCreateTask = function(event) {
     }
 };
 
-window.toggleTaskComplete = function(taskId) {
+function toggleTaskComplete(taskId) {
+    window.toggleTaskComplete = toggleTaskComplete;
     const taskIndex = appState.tasks.findIndex(t => t.id === taskId);
     if (taskIndex !== -1) {
         const task = appState.tasks[taskIndex];
@@ -1493,7 +2039,8 @@ window.toggleTaskComplete = function(taskId) {
     }
 };
 
-window.deleteTask = function(taskId) {
+function deleteTask(taskId) {
+    window.deleteTask = deleteTask;
     if (typeof isManagerUser === 'function' && !isManagerUser()) {
         alert("Solo los usuarios con rol de Manager tienen permiso para eliminar tareas.");
         return;
@@ -1534,7 +2081,8 @@ window.deleteTask = function(taskId) {
     }
 };
 
-window.openEditTaskModal = function(taskId) {
+function openEditTaskModal(taskId) {
+    window.openEditTaskModal = openEditTaskModal;
     if (typeof isManagerUser === 'function' && !isManagerUser()) {
         alert("Solo los usuarios con rol de Manager tienen permiso para editar tareas.");
         return;
@@ -1559,12 +2107,14 @@ window.openEditTaskModal = function(taskId) {
     if (modal) modal.style.display = "flex";
 };
 
-window.closeEditTaskModal = function() {
+function closeEditTaskModal() {
+    window.closeEditTaskModal = closeEditTaskModal;
     const modal = document.getElementById("edit-task-modal");
     if (modal) modal.style.display = "none";
 };
 
-window.handleSaveTaskEdit = function(event) {
+function handleSaveTaskEdit(event) {
+    window.handleSaveTaskEdit = handleSaveTaskEdit;
     event.preventDefault();
     if (typeof isManagerUser === 'function' && !isManagerUser()) {
         alert("Solo los usuarios con rol de Manager tienen permiso para editar tareas.");
@@ -1614,14 +2164,16 @@ window.handleSaveTaskEdit = function(event) {
     }
 };
 
-window.filterTasks = function(filter, buttonElement) {
+function filterTasks(filter, buttonElement) {
+    window.filterTasks = filterTasks;
     appState.currentFilter = filter;
     document.querySelectorAll(".filter-btn").forEach(btn => btn.classList.remove("active"));
     buttonElement.classList.add("active");
     renderTasks();
 };
 
-window.scrollTasksGrid = function(direction) {
+function scrollTasksGrid(direction) {
+    window.scrollTasksGrid = scrollTasksGrid;
     const container = document.getElementById("tasks-slider-container");
     if (!container) return;
     const scrollAmount = container.clientWidth;
@@ -1633,7 +2185,7 @@ window.scrollTasksGrid = function(direction) {
     setTimeout(updateTasksScrollNavState, 350);
 };
 
-window.updateTasksScrollNavState = function() {
+function updateTasksScrollNavState() {
     const container = document.getElementById("tasks-slider-container");
     const prevBtn = document.getElementById("btn-tasks-prev");
     const nextBtn = document.getElementById("btn-tasks-next");
@@ -1717,7 +2269,8 @@ function taskMatchesFilterUser(task, filterUser) {
     return isTaskAssignedToUser(task, { nombre: filterUser });
 }
 
-window.toggleTaskUserFilterMenu = function(event) {
+function toggleTaskUserFilterMenu(event) {
+    window.toggleTaskUserFilterMenu = toggleTaskUserFilterMenu;
     if (event) event.stopPropagation();
     const menu = document.getElementById("custom-user-filter-menu");
     const trigger = document.getElementById("custom-user-filter-trigger");
@@ -1733,7 +2286,8 @@ window.toggleTaskUserFilterMenu = function(event) {
     }
 };
 
-window.selectTaskUserFilterOption = function(val) {
+function selectTaskUserFilterOption(val) {
+    window.selectTaskUserFilterOption = selectTaskUserFilterOption;
     appState.currentTaskUserFilter = val;
     const select = document.getElementById("task-user-filter-select");
     if (select) select.value = val;
@@ -1759,7 +2313,8 @@ if (typeof window !== 'undefined' && !window._userFilterOutsideClickListenerAdde
     });
 }
 
-window.populateTaskUserFilterOptions = function() {
+function populateTaskUserFilterOptions() {
+    window.populateTaskUserFilterOptions = populateTaskUserFilterOptions;
     const select = document.getElementById("task-user-filter-select");
     const menu = document.getElementById("custom-user-filter-menu");
     const displayEl = document.getElementById("filter-selected-user-display");
@@ -1910,13 +2465,15 @@ window.populateTaskUserFilterOptions = function() {
     }
 };
 
-window.handleTaskUserFilterChange = function(selectedUser) {
+function handleTaskUserFilterChange(selectedUser) {
+    window.handleTaskUserFilterChange = handleTaskUserFilterChange;
     appState.currentTaskUserFilter = selectedUser;
     renderTasks();
     updateGlobalStats();
 };
 
-window.filterTasksFromUserSection = function(type) {
+function filterTasksFromUserSection(type) {
+    window.filterTasksFromUserSection = filterTasksFromUserSection;
     if (type === 'pending') {
         const btn = document.querySelector(`.filter-btn[data-filter='all']`);
         if (btn) filterTasks('all', btn);
@@ -2079,7 +2636,8 @@ function renderTasks() {
 // ---------------------------------------------------------------------------------
 // 8. CHAT MANAGEMENT
 // ---------------------------------------------------------------------------------
-window.renderChatChannels = function() {
+function renderChatChannels() {
+    window.renderChatChannels = renderChatChannels;
     const container = document.getElementById("chat-channels-list-container");
     if (!container) return;
     
@@ -2103,7 +2661,8 @@ window.renderChatChannels = function() {
     container.innerHTML = html;
 };
 
-window.selectChannel = function(channelId) {
+function selectChannel(channelId) {
+    window.selectChannel = selectChannel;
     appState.currentChannel = channelId;
     document.querySelectorAll(".channel-item").forEach(item => item.classList.remove("active"));
     const activeItem = document.getElementById(`channel-${channelId}`);
@@ -2136,7 +2695,8 @@ window.selectChannel = function(channelId) {
 // ---------------------------------------------------------------------------------
 // CREAR GRUPOS & AÑADIR INTEGRANTES AL CHAT
 // ---------------------------------------------------------------------------------
-window.renderProfileChecklistCard = function(p, inputName) {
+function renderProfileChecklistCard(p, inputName) {
+    window.renderProfileChecklistCard = renderProfileChecklistCard;
     const initial = (p.nombre || p.email || 'U').charAt(0).toUpperCase();
     const r = (p.rol || '').toLowerCase();
     const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
@@ -2166,7 +2726,8 @@ window.renderProfileChecklistCard = function(p, inputName) {
     `;
 };
 
-window.openCreateGroupModal = function() {
+function openCreateGroupModal() {
+    window.openCreateGroupModal = openCreateGroupModal;
     const modal = document.getElementById("create-group-modal");
     const checklist = document.getElementById("group-members-checklist");
     if (!modal) return;
@@ -2183,12 +2744,14 @@ window.openCreateGroupModal = function() {
     }
 };
 
-window.closeCreateGroupModal = function() {
+function closeCreateGroupModal() {
+    window.closeCreateGroupModal = closeCreateGroupModal;
     const modal = document.getElementById("create-group-modal");
     if (modal) modal.style.display = "none";
 };
 
-window.handleCreateChatGroup = function(event) {
+function handleCreateChatGroup(event) {
+    window.handleCreateChatGroup = handleCreateChatGroup;
     event.preventDefault();
     const nameInput = document.getElementById("new-group-name");
     if (!nameInput) return;
@@ -2271,7 +2834,8 @@ window.handleCreateChatGroup = function(event) {
     }
 };
 
-window.openAddMemberModal = function() {
+function openAddMemberModal() {
+    window.openAddMemberModal = openAddMemberModal;
     const modal = document.getElementById("add-member-modal");
     const checklist = document.getElementById("add-member-checklist");
     if (!modal) return;
@@ -2287,12 +2851,14 @@ window.openAddMemberModal = function() {
     }
 };
 
-window.closeAddMemberModal = function() {
+function closeAddMemberModal() {
+    window.closeAddMemberModal = closeAddMemberModal;
     const modal = document.getElementById("add-member-modal");
     if (modal) modal.style.display = "none";
 };
 
-window.handleAddChatMember = function(event) {
+function handleAddChatMember(event) {
+    window.handleAddChatMember = handleAddChatMember;
     event.preventDefault();
     const checkboxes = document.querySelectorAll('input[name="add-members"]:checked');
     const selectedNames = Array.from(checkboxes).map(cb => cb.value);
@@ -2355,7 +2921,8 @@ window.handleAddChatMember = function(event) {
 
 window.pendingChatAttachment = null;
 
-window.handleChatInputPaste = function(event) {
+function handleChatInputPaste(event) {
+    window.handleChatInputPaste = handleChatInputPaste;
     const items = (event.clipboardData || event.originalEvent?.clipboardData)?.items;
     if (!items) return;
 
@@ -2405,12 +2972,14 @@ window.handleChatInputPaste = function(event) {
     }
 };
 
-window.triggerChatFileSelect = function() {
+function triggerChatFileSelect() {
+    window.triggerChatFileSelect = triggerChatFileSelect;
     const fileInput = document.getElementById("chat-file-input");
     if (fileInput) fileInput.click();
 };
 
-window.handleChatFileSelected = function(event) {
+function handleChatFileSelected(event) {
+    window.handleChatFileSelected = handleChatFileSelected;
     const file = event.target.files && event.target.files[0];
     if (!file) return;
 
@@ -2466,7 +3035,8 @@ window.handleChatFileSelected = function(event) {
     reader.readAsDataURL(file);
 };
 
-window.clearChatAttachmentPreview = function() {
+function clearChatAttachmentPreview() {
+    window.clearChatAttachmentPreview = clearChatAttachmentPreview;
     window.pendingChatAttachment = null;
     const fileInput = document.getElementById("chat-file-input");
     if (fileInput) fileInput.value = "";
@@ -2475,7 +3045,8 @@ window.clearChatAttachmentPreview = function() {
     if (previewBar) previewBar.style.display = "none";
 };
 
-window.openChatImageModal = function(src, name) {
+function openChatImageModal(src, name) {
+    window.openChatImageModal = openChatImageModal;
     const modal = document.getElementById("chat-image-modal");
     const imgEl = document.getElementById("chat-modal-img-src");
     const nameEl = document.getElementById("chat-modal-filename");
@@ -2492,7 +3063,8 @@ window.openChatImageModal = function(src, name) {
     }
 };
 
-window.closeChatImageModal = function() {
+function closeChatImageModal() {
+    window.closeChatImageModal = closeChatImageModal;
     const modal = document.getElementById("chat-image-modal");
     if (modal) modal.style.display = "none";
 };
@@ -2542,7 +3114,8 @@ function parseMessageContent(rawContent) {
 }
 
 // Descarga universal desde base64 Data URL convirtiendo a Blob para compatibilidad total de navegadores
-window.downloadDataUrl = function(dataUrl, filename) {
+function downloadDataUrl(dataUrl, filename) {
+    window.downloadDataUrl = downloadDataUrl;
     if (!dataUrl) return;
     try {
         const parts = dataUrl.split(',');
@@ -2577,7 +3150,8 @@ window.downloadDataUrl = function(dataUrl, filename) {
 };
 
 // Descargar archivo adjunto de chat por ID de mensaje
-window.downloadChatAttachment = async function(msgId, event) {
+async function downloadChatAttachment(msgId, event) {
+    window.downloadChatAttachment = downloadChatAttachment;
     if (event) {
         event.preventDefault();
         event.stopPropagation();
@@ -2634,7 +3208,8 @@ window.downloadChatAttachment = async function(msgId, event) {
     alert("No se pudo descargar el archivo. Por favor intenta de nuevo.");
 };
 
-window.handleSendChatMessage = function(event) {
+function handleSendChatMessage(event) {
+    window.handleSendChatMessage = handleSendChatMessage;
     event.preventDefault();
     const inputField = document.getElementById("chat-input-field");
     const text = inputField.value.trim();
@@ -2904,7 +3479,8 @@ function renderChatMessages(forceScroll = false) {
 // ---------------------------------------------------------------------------------
 // 9. MEETINGS MANAGEMENT
 // ---------------------------------------------------------------------------------
-window.handleCreateMeeting = function(event) {
+function handleCreateMeeting(event) {
+    window.handleCreateMeeting = handleCreateMeeting;
     event.preventDefault();
     const title = document.getElementById("meeting-title").value;
     const date = document.getElementById("meeting-date").value;
@@ -2927,7 +3503,8 @@ window.handleCreateMeeting = function(event) {
     renderMeetings();
 };
 
-window.deleteMeeting = function(meetId) {
+function deleteMeeting(meetId) {
+    window.deleteMeeting = deleteMeeting;
     appState.meetings = appState.meetings.filter(m => m.id !== meetId);
     saveToStorage();
     renderMeetings();
@@ -3068,6 +3645,7 @@ function getFilteredConsecutivoList() {
 }
 
 function renderConsecutivo() {
+    if (typeof window.syncAllOperacionesToConsecutivo === "function") window.syncAllOperacionesToConsecutivo();
     const tbody = document.getElementById("tbody-consecutivo");
     if (!tbody) return;
     tbody.innerHTML = "";
@@ -3105,17 +3683,18 @@ function renderConsecutivo() {
     
     if (pageItems.length === 0) {
         const emptyTr = document.createElement("tr");
-        emptyTr.innerHTML = `<td colspan="20" style="text-align: center; padding: 30px; color: var(--text-muted);">No se encontraron facturas que coincidan con los filtros aplicados.</td>`;
+        emptyTr.innerHTML = `<td colspan="12" style="text-align: center; padding: 30px; color: var(--text-muted);">No se encontraron facturas que coincidan con los filtros aplicados.</td>`;
         tbody.appendChild(emptyTr);
     } else {
         pageItems.forEach((item) => {
             const realIndex = appState.consecutivo.indexOf(item);
             const isCanceled = String(item.fechaEmision || '').toLowerCase().includes('cancel') || String(item.cliente || '').toLowerCase().includes('cancel') || String(item.st || '').toLowerCase().includes('cancel');
             
-            const stVal = String(item.st || 'P').trim().toUpperCase();
-            let stBadgeClass = 'st-badge-p';
+            const stVal = String(item.st || '').trim().toUpperCase();
+            let stBadgeClass = 'st-badge-empty';
             if (isCanceled || stVal === 'CANCELADO') stBadgeClass = 'st-badge-cancelado';
             else if (stVal === 'C') stBadgeClass = 'st-badge-c';
+            else if (stVal === 'P') stBadgeClass = 'st-badge-p';
             
             const cleanEmision = String(item.fechaEmision || '').replace(' 00:00:00', '').trim();
             const cleanPago = String(item.fechaPago || '').replace(' 00:00:00', '').trim();
@@ -3138,21 +3717,40 @@ function renderConsecutivo() {
                 <td title="${item.folioCliente || ''}">
                     <input type="text" class="excel-input" value="${item.folioCliente || ''}" oninput="updateConsecutivoCell(${realIndex}, 'folioCliente', this.value)">
                 </td>
-                <td title="Subtotal: ${item.subtotal || 0}">
-                    <input type="number" id="consec-subtotal-${realIndex}" class="excel-input number-input font-bold" value="${item.subtotal || 0}" step="50" oninput="liveUpdateConsecutivoRow(${realIndex})">
+                <td title="Subtotal: ${item.subtotal || ''}">
+                    <input type="number" id="consec-subtotal-${realIndex}" class="excel-input number-input font-bold" value="${(item.subtotal !== '' && item.subtotal !== null && item.subtotal !== undefined) ? item.subtotal : ''}" step="50" oninput="liveUpdateConsecutivoRow(${realIndex})">
                 </td>
-                <td title="IVA: ${item.iva || 0}">
-                    <input type="number" id="consec-iva-${realIndex}" class="excel-input number-input readonly" value="${item.iva || 0}" readonly>
+                <td title="IVA: ${item.iva || ''}">
+                    <input type="number" id="consec-iva-${realIndex}" class="excel-input number-input readonly" value="${(item.iva !== '' && item.iva !== null && item.iva !== undefined) ? item.iva : ''}" readonly>
                 </td>
-                <td title="Total: ${item.total || 0}">
-                    <input type="number" id="consec-total-${realIndex}" class="excel-input number-input readonly font-bold" value="${item.total || 0}" readonly style="color: #059669;">
+                <td title="Total: ${item.total || ''}">
+                    <input type="number" id="consec-total-${realIndex}" class="excel-input number-input readonly font-bold" value="${(item.total !== '' && item.total !== null && item.total !== undefined) ? item.total : ''}" readonly style="color: #059669;">
                 </td>
-                <td style="text-align: center;">
-                    <select class="excel-input st-badge ${stBadgeClass}" onchange="updateConsecutivoCell(${realIndex}, 'st', this.value); renderConsecutivo();" style="border: none; cursor: pointer; text-align-last: center; width: 100%; padding: 1px;">
-                        <option value="P" ${stVal === 'P' ? 'selected' : ''}>P</option>
-                        <option value="C" ${stVal === 'C' ? 'selected' : ''}>C</option>
-                        <option value="Cancelado" ${isCanceled || stVal === 'CANCELADO' ? 'selected' : ''}>Canc</option>
-                    </select>
+                <td style="text-align: center; position: relative;">
+                    <div class="st-custom-dropdown-wrap" id="st-wrap-${realIndex}">
+                        <div class="st-badge ${stBadgeClass} st-badge-trigger" onclick="toggleStBadgeDropdown(${realIndex}, event)" title="Cambiar estatus">
+                            <span>${isCanceled || stVal === 'CANCELADO' ? 'Canc' : (stVal || '-')}</span>
+                            <span class="material-symbols-outlined st-arrow">expand_more</span>
+                        </div>
+                        <div class="st-dropdown-menu" id="st-menu-${realIndex}">
+                            <div class="st-dropdown-option ${!stVal ? 'selected' : ''}" onclick="selectStOption(${realIndex}, '', event)">
+                                <span class="st-badge st-badge-empty">-</span>
+                                <span class="option-name">Sin Estatus</span>
+                            </div>
+                            <div class="st-dropdown-option ${stVal === 'P' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'P', event)">
+                                <span class="st-badge st-badge-p">P</span>
+                                <span class="option-name">Pagado</span>
+                            </div>
+                            <div class="st-dropdown-option ${stVal === 'C' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'C', event)">
+                                <span class="st-badge st-badge-c">C</span>
+                                <span class="option-name">Por Cobrar</span>
+                            </div>
+                            <div class="st-dropdown-option ${isCanceled || stVal === 'CANCELADO' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'Cancelado', event)">
+                                <span class="st-badge st-badge-cancelado">Canc</span>
+                                <span class="option-name">Cancelado</span>
+                            </div>
+                        </div>
+                    </div>
                 </td>
                 <td title="${cleanPago}">
                     <input type="text" class="excel-input" value="${cleanPago}" oninput="updateConsecutivoCell(${realIndex}, 'fechaPago', this.value)">
@@ -3163,32 +3761,7 @@ function renderConsecutivo() {
                 <td title="${item.servicio || ''}">
                     <input type="text" class="excel-input" value="${item.servicio || ''}" oninput="updateConsecutivoCell(${realIndex}, 'servicio', this.value)">
                 </td>
-                <td title="${item.detalle || ''}">
-                    <input type="text" class="excel-input" value="${item.detalle || ''}" oninput="updateConsecutivoCell(${realIndex}, 'detalle', this.value)">
-                </td>
-                <td title="${item.nota || ''}">
-                    <input type="text" class="excel-input" value="${item.nota || ''}" oninput="updateConsecutivoCell(${realIndex}, 'nota', this.value)">
-                </td>
-                <td title="% RDP: ${item.porcRodipak || 0}%">
-                    <input type="text" id="consec-porc-rodipak-${realIndex}" class="excel-input number-input readonly" value="${item.porcRodipak ? item.porcRodipak + '%' : '0%'}" readonly>
-                </td>
-                <td title="Rodipak: ${item.rodipak || 0}">
-                    <input type="number" id="consec-rodipak-${realIndex}" class="excel-input number-input" value="${item.rodipak || 0}" step="50" oninput="liveUpdateConsecutivoRow(${realIndex})">
-                </td>
-                <td title="Hugo Com: ${item.hugoComision || 0}">
-                    <input type="number" id="consec-hugo-com-${realIndex}" class="excel-input number-input" value="${item.hugoComision || 0}" step="50" oninput="liveUpdateConsecutivoRow(${realIndex})">
-                </td>
-                <td title="Hugo Total: ${item.hugoTotal || 0}">
-                    <input type="number" id="consec-hugo-tot-${realIndex}" class="excel-input number-input" value="${item.hugoTotal || 0}" step="50" oninput="liveUpdateConsecutivoRow(${realIndex})">
-                </td>
-                <td title="% Hugo: ${item.porcHugo || 0}%">
-                    <input type="text" id="consec-porc-hugo-${realIndex}" class="excel-input number-input readonly" value="${item.porcHugo ? item.porcHugo + '%' : '0%'}" readonly>
-                </td>
-                <td style="text-align: center;">
-                    <button class="btn-delete-task" onclick="deleteConsecutivoRecord(${realIndex})" title="Eliminar Registro">
-                        <span class="material-symbols-outlined" style="font-size: 14px;">delete</span>
-                    </button>
-                </td>
+                
             `;
             tbody.appendChild(tr);
         });
@@ -3204,52 +3777,38 @@ function renderConsecutivo() {
 function updateConsecutivoKPIs(list) {
     let sumSubtotal = 0;
     let sumIva = 0;
-    let sumTotal = 0;
-    let sumRodipak = 0;
-    let sumHugo = 0;
     
     list.forEach(item => {
-        const sub = Number(item.subtotal) || 0;
-        const iv = Number(item.iva) || 0;
-        const tot = Number(item.total) || 0;
-        const rdp = Number(item.rodipak) || 0;
-        const hg = Number(item.hugoComision) || 0;
-        
-        sumSubtotal += sub;
-        sumIva += iv;
-        sumTotal += tot;
-        sumRodipak += rdp;
-        sumHugo += hg;
+        const stVal = String(item.st || '').trim().toUpperCase();
+        if (stVal === 'C' || stVal === 'POR COBRAR') {
+            const sub = Number(item.subtotal) || 0;
+            const iv = Number(item.iva) || 0;
+            
+            sumSubtotal += sub;
+            sumIva += iv;
+        }
     });
+    
+    const sumTotalFacturado = sumSubtotal + sumIva;
     
     const subEl = document.getElementById("consecutivo-kpi-subtotal");
     const ivaEl = document.getElementById("consecutivo-kpi-iva");
     const totEl = document.getElementById("consecutivo-kpi-total");
-    const rdpEl = document.getElementById("consecutivo-kpi-rodipak");
-    const hgEl = document.getElementById("consecutivo-kpi-hugo");
     
     if (subEl) subEl.innerText = formatCurrency(sumSubtotal);
     if (ivaEl) ivaEl.innerText = formatCurrency(sumIva);
-    if (totEl) totEl.innerText = formatCurrency(sumTotal);
-    if (rdpEl) rdpEl.innerText = formatCurrency(sumRodipak);
-    if (hgEl) hgEl.innerText = formatCurrency(sumHugo);
+    if (totEl) totEl.innerText = formatCurrency(sumTotalFacturado);
 }
 
 function renderConsecutivoFooterTotals(list) {
     let sumSubtotal = 0;
     let sumIva = 0;
     let sumTotal = 0;
-    let sumRodipak = 0;
-    let sumHugoCom = 0;
-    let sumHugoTot = 0;
     
     list.forEach(item => {
         sumSubtotal += Number(item.subtotal) || 0;
         sumIva += Number(item.iva) || 0;
         sumTotal += Number(item.total) || 0;
-        sumRodipak += Number(item.rodipak) || 0;
-        sumHugoCom += Number(item.hugoComision) || 0;
-        sumHugoTot += Number(item.hugoTotal) || 0;
     });
     
     const totalsRow = document.getElementById("excel-consecutivo-totals-row");
@@ -3260,12 +3819,7 @@ function renderConsecutivoFooterTotals(list) {
             <td style="text-align: right; font-weight: 800;">${formatCurrency(sumSubtotal)}</td>
             <td style="text-align: right; font-weight: 800;">${formatCurrency(sumIva)}</td>
             <td style="text-align: right; font-weight: 800;">${formatCurrency(sumTotal)}</td>
-            <td colspan="6"></td>
-            <td style="text-align: right; font-weight: 800;">${formatCurrency(sumRodipak)}</td>
-            <td style="text-align: right; font-weight: 800;">${formatCurrency(sumHugoCom)}</td>
-            <td style="text-align: right; font-weight: 800;">${formatCurrency(sumHugoTot)}</td>
-            <td></td>
-            <td style="text-align: center;"><span class="material-symbols-outlined" style="font-size: 14px;">lock</span></td>
+            <td colspan="4"></td>
         `;
     }
 }
@@ -3323,14 +3877,16 @@ function renderConsecutivoPagination(totalPages) {
     container.appendChild(nextBtn);
 }
 
-window.updateConsecutivoCell = function(index, key, val) {
+function updateConsecutivoCell(index, key, val) {
+    window.updateConsecutivoCell = updateConsecutivoCell;
     if (appState.consecutivo[index]) {
         appState.consecutivo[index][key] = val;
         saveToStorage();
     }
 };
 
-window.liveUpdateConsecutivoRow = function(index) {
+function liveUpdateConsecutivoRow(index) {
+    window.liveUpdateConsecutivoRow = liveUpdateConsecutivoRow;
     const subtotalEl = document.getElementById(`consec-subtotal-${index}`);
     const ivaEl = document.getElementById(`consec-iva-${index}`);
     const totalEl = document.getElementById(`consec-total-${index}`);
@@ -3372,7 +3928,8 @@ window.liveUpdateConsecutivoRow = function(index) {
     }
 };
 
-window.addNewConsecutivoRow = function() {
+function addNewConsecutivoRow() {
+    window.addNewConsecutivoRow = addNewConsecutivoRow;
     // 1. Auto-calculate next consecutive (#) and invoice (FE-xxx) numbers
     let maxConsecutivo = 0;
     let maxFacturaNum = 0;
@@ -3407,7 +3964,7 @@ window.addNewConsecutivoRow = function() {
         subtotal: 0,
         iva: 0,
         total: 0,
-        st: "P",
+        st: "",
         fechaPago: today,
         referenciaOp: "",
         servicio: "Flete",
@@ -3458,7 +4015,8 @@ window.addNewConsecutivoRow = function() {
     }, 150);
 };
 
-window.deleteConsecutivoRecord = function(index) {
+function deleteConsecutivoRecord(index) {
+    window.deleteConsecutivoRecord = deleteConsecutivoRecord;
     if (confirm("¿Estás seguro de que deseas eliminar este registro del consecutivo?")) {
         appState.consecutivo.splice(index, 1);
         saveToStorage();
@@ -3466,13 +4024,15 @@ window.deleteConsecutivoRecord = function(index) {
     }
 };
 
-window.handleConsecutivoSearch = function(val) {
+function handleConsecutivoSearch(val) {
+    window.handleConsecutivoSearch = handleConsecutivoSearch;
     appState.consecutivoSearch = val;
     appState.consecutivoPage = 1;
     renderConsecutivo();
 };
 
-window.filterConsecutivoByST = function(st, btn) {
+function filterConsecutivoByST(st, btn) {
+    window.filterConsecutivoByST = filterConsecutivoByST;
     appState.consecutivoStFilter = st;
     appState.consecutivoPage = 1;
     document.querySelectorAll(".consecutivo-filter-btn").forEach(b => b.classList.remove("active"));
@@ -3480,19 +4040,22 @@ window.filterConsecutivoByST = function(st, btn) {
     renderConsecutivo();
 };
 
-window.filterConsecutivoByClient = function(client) {
+function filterConsecutivoByClient(client) {
+    window.filterConsecutivoByClient = filterConsecutivoByClient;
     appState.consecutivoClientFilter = client;
     appState.consecutivoPage = 1;
     renderConsecutivo();
 };
 
-window.changeConsecutivoPageSize = function(size) {
+function changeConsecutivoPageSize(size) {
+    window.changeConsecutivoPageSize = changeConsecutivoPageSize;
     appState.consecutivoPageSize = size === 'all' ? 99999 : Number(size);
     appState.consecutivoPage = 1;
     renderConsecutivo();
 };
 
-window.exportConsecutivoToCSV = function() {
+function exportConsecutivoToCSV() {
+    window.exportConsecutivoToCSV = exportConsecutivoToCSV;
     const list = getFilteredConsecutivoList();
     if (!list || list.length === 0) {
         alert("No hay datos para exportar.");
@@ -3548,7 +4111,8 @@ window.exportConsecutivoToCSV = function() {
 // ---------------------------------------------------------------------------------
 // 10. HARMONIZED CUSTOM DROPDOWN COMPONENT LOGIC
 // ---------------------------------------------------------------------------------
-window.toggleCustomDropdown = function(type, event) {
+function toggleCustomDropdown(type, event) {
+    window.toggleCustomDropdown = toggleCustomDropdown;
     if (event) event.stopPropagation();
     const wrapper = document.getElementById(`wrapper-task-${type}`);
     if (!wrapper) return;
@@ -3563,7 +4127,8 @@ window.toggleCustomDropdown = function(type, event) {
     }
 };
 
-window.selectCustomOption = function(type, value, param1, param2, event) {
+function selectCustomOption(type, value, param1, param2, event) {
+    window.selectCustomOption = selectCustomOption;
     if (event) event.stopPropagation();
     
     const input = document.getElementById(`task-${type}`);
@@ -3614,11 +4179,128 @@ document.addEventListener("click", function(event) {
     if (!event.target.closest(".custom-select-wrapper")) {
         document.querySelectorAll(".custom-select-wrapper").forEach(w => w.classList.remove("open"));
     }
+    if (!event.target.closest(".st-custom-dropdown-wrap")) {
+        document.querySelectorAll(".st-custom-dropdown-wrap.open").forEach(w => w.classList.remove("open"));
+    }
+    const globalProvMenu = document.getElementById("global-prov-estatus-menu");
+    if (globalProvMenu && globalProvMenu.style.display === "block") {
+        if (!event.target.closest("#global-prov-estatus-menu") && !event.target.closest(".prov-estatus-trigger")) {
+            globalProvMenu.style.display = "none";
+        }
+    }
     const assigneeWrapper = document.querySelector(".assignee-autocomplete-wrapper");
     if (assigneeWrapper && !assigneeWrapper.contains(event.target)) {
         if (typeof closeAssigneeDropdown === 'function') closeAssigneeDropdown();
     }
 });
+
+// Close dropdowns on scroll
+window.addEventListener("scroll", function() {
+    document.querySelectorAll(".st-custom-dropdown-wrap.open").forEach(w => w.classList.remove("open"));
+    const globalProvMenu = document.getElementById("global-prov-estatus-menu");
+    if (globalProvMenu && globalProvMenu.style.display === "block") {
+        globalProvMenu.style.display = "none";
+    }
+}, true);
+
+// Custom Dropdown Handlers for Consecutivo Cliente Filter & ST Badges
+function toggleConsecutivoClientDropdown(event) {
+    window.toggleConsecutivoClientDropdown = toggleConsecutivoClientDropdown;
+    if (event) event.stopPropagation();
+    const wrapper = document.getElementById("wrapper-consecutivo-client-filter");
+    if (!wrapper) return;
+    const isOpen = wrapper.classList.contains("open");
+    document.querySelectorAll(".custom-select-wrapper").forEach(w => w.classList.remove("open"));
+    document.querySelectorAll(".st-custom-dropdown-wrap.open").forEach(w => w.classList.remove("open"));
+    if (!isOpen) {
+        wrapper.classList.add("open");
+    }
+};
+
+function selectConsecutivoClientOption(value, label, event) {
+    window.selectConsecutivoClientOption = selectConsecutivoClientOption;
+    if (event) event.stopPropagation();
+    const wrapper = document.getElementById("wrapper-consecutivo-client-filter");
+    const labelEl = document.getElementById("consecutivo-client-selected-label");
+    const nativeSelect = document.getElementById("consecutivo-client-filter");
+    
+    if (labelEl) labelEl.innerText = label;
+    if (nativeSelect) nativeSelect.value = value;
+    
+    const menu = document.getElementById("dropdown-menu-consecutivo-client");
+    if (menu) {
+        menu.querySelectorAll(".custom-dropdown-option").forEach(opt => {
+            if (opt.getAttribute("data-value") === value) {
+                opt.classList.add("selected");
+            } else {
+                opt.classList.remove("selected");
+            }
+        });
+    }
+    
+    if (wrapper) wrapper.classList.remove("open");
+    filterConsecutivoByClient(value);
+};
+
+function toggleStBadgeDropdown(index, event) {
+    window.toggleStBadgeDropdown = toggleStBadgeDropdown;
+    if (event) event.stopPropagation();
+    const wrap = document.getElementById(`st-wrap-${index}`);
+    const menu = document.getElementById(`st-menu-${index}`);
+    if (!wrap || !menu) return;
+    
+    const isOpen = wrap.classList.contains("open");
+    document.querySelectorAll(".st-custom-dropdown-wrap.open").forEach(w => w.classList.remove("open"));
+    document.querySelectorAll(".custom-select-wrapper.open").forEach(w => w.classList.remove("open"));
+    
+    if (!isOpen) {
+        const trigger = wrap.querySelector(".st-badge-trigger") || wrap;
+        const rect = trigger.getBoundingClientRect();
+        
+        menu.style.position = "fixed";
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.left = `${rect.left + (rect.width / 2)}px`;
+        menu.style.transform = "translateX(-50%)";
+        menu.style.zIndex = "99999";
+        
+        wrap.classList.add("open");
+    }
+};
+
+function selectStOption(index, value, event) {
+    window.selectStOption = selectStOption;
+    if (event) event.stopPropagation();
+    const wrap = document.getElementById(`st-wrap-${index}`);
+    if (wrap) wrap.classList.remove("open");
+    updateConsecutivoCell(index, 'st', value);
+
+    // Sincronizar cancelación o cambio de estatus al expediente en Operaciones
+    const row = appState.consecutivo ? appState.consecutivo[index] : null;
+    if (row && row.referenciaOp && Array.isArray(appState.operacionesProyectos)) {
+        const refId = String(row.referenciaOp).trim().toLowerCase();
+        const proj = appState.operacionesProyectos.find(p => 
+            String(p.numProyecto || p.consecutivo || p.numConsecutivo || p.id).trim().toLowerCase() === refId
+        );
+        if (proj) {
+            const isCancel = String(value || '').toLowerCase().includes('cancel');
+            if (isCancel) {
+                proj.estatus = 'CANCELADO';
+                proj.cancelado = true;
+            } else {
+                proj.cancelado = false;
+                proj.estatus = computeProjectStatus(proj);
+            }
+            try {
+                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+            } catch (e) {}
+            if (typeof window.renderOperaciones === 'function' && appState.currentAdminFicha === 'operaciones') {
+                window.renderOperaciones();
+            }
+        }
+    }
+
+    renderConsecutivo();
+}
 
 // ==============================================================================
 // TASK ASSIGNEE AUTOCOMPLETE & DROPDOWN LOGIC
@@ -3683,17 +4365,20 @@ function getAvailableAssignees() {
     return list;
 }
 
-window.openAssigneeDropdown = function() {
+function openAssigneeDropdown() {
+    window.openAssigneeDropdown = openAssigneeDropdown;
     const input = document.getElementById("task-assignee");
     window.filterAssigneeDropdown(input ? input.value : '');
 };
 
-window.closeAssigneeDropdown = function() {
+function closeAssigneeDropdown() {
+    window.closeAssigneeDropdown = closeAssigneeDropdown;
     const menu = document.getElementById("task-assignee-dropdown");
     if (menu) menu.classList.remove("open");
 };
 
-window.filterAssigneeDropdown = function(query) {
+function filterAssigneeDropdown(query) {
+    window.filterAssigneeDropdown = filterAssigneeDropdown;
     const menu = document.getElementById("task-assignee-dropdown");
     if (!menu) return;
 
@@ -3748,7 +4433,8 @@ window.filterAssigneeDropdown = function(query) {
     menu.classList.add("open");
 };
 
-window.selectTaskAssignee = function(name) {
+function selectTaskAssignee(name) {
+    window.selectTaskAssignee = selectTaskAssignee;
     const input = document.getElementById("task-assignee");
     if (input) {
         input.value = name;
@@ -3756,7 +4442,8 @@ window.selectTaskAssignee = function(name) {
     window.closeAssigneeDropdown();
 };
 
-window.setTaskPrioritySegment = function(priority) {
+function setTaskPrioritySegment(priority) {
+    window.setTaskPrioritySegment = setTaskPrioritySegment;
     const input = document.getElementById("task-priority");
     if (input) input.value = priority;
     
@@ -3769,7 +4456,8 @@ window.setTaskPrioritySegment = function(priority) {
     });
 };
 
-window.getActiveNominasList = function() {
+function getActiveNominasList() {
+    window.getActiveNominasList = getActiveNominasList;
     if (appState.viewingArchiveId) {
         const arch = (appState.archivosQuincenales || []).find(x => x.id === appState.viewingArchiveId);
         return arch ? arch.nominas : [];
@@ -3777,16 +4465,19 @@ window.getActiveNominasList = function() {
     return appState.nominas || [];
 };
 
-window.openModalArchivoDigital = function() {
+function openModalArchivoDigital() {
+    window.openModalArchivoDigital = openModalArchivoDigital;
     switchAdminFicha('archivo-digital');
 };
 
-window.closeModalArchivoDigital = function() {
+function closeModalArchivoDigital() {
+    window.closeModalArchivoDigital = closeModalArchivoDigital;
     // Deprecated, we use switchAdminFicha('quincenal') directly now
     switchAdminFicha('quincenal');
 };
 
-window.renderArchivoDigital = function() {
+function renderArchivoDigital() {
+    window.renderArchivoDigital = renderArchivoDigital;
     const tbody = document.getElementById("tbody-archivo-digital");
     if (!tbody) return;
     tbody.innerHTML = "";
@@ -3819,7 +4510,8 @@ window.renderArchivoDigital = function() {
     });
 };
 
-window.archivarQuincenaActual = function() {
+function archivarQuincenaActual() {
+    window.archivarQuincenaActual = archivarQuincenaActual;
     if (!appState.nominas || appState.nominas.length === 0) {
         alert("No hay registros en la quincena actual para archivar.");
         return;
@@ -3860,7 +4552,8 @@ window.archivarQuincenaActual = function() {
     }
 };
 
-window.loadArchiveForEdit = function(id) {
+function loadArchiveForEdit(id) {
+    window.loadArchiveForEdit = loadArchiveForEdit;
     appState.viewingArchiveId = id;
     closeModalArchivoDigital();
     
@@ -3874,7 +4567,8 @@ window.loadArchiveForEdit = function(id) {
     renderVisualizacion();
 };
 
-window.exitArchiveMode = function() {
+function exitArchiveMode() {
+    window.exitArchiveMode = exitArchiveMode;
     appState.viewingArchiveId = null;
     
     document.getElementById("btn-archivar-quincena").style.display = "inline-flex";
@@ -4452,7 +5146,8 @@ setInterval(() => {
 // GERENTE PROFILE & USER ADMINISTRATION CONTROLS
 // ---------------------------------------------------------------------------------
 
-window.openAuthModal = function() {
+function openAuthModal() {
+    window.openAuthModal = openAuthModal;
     if (!appState.currentUser) {
         const storedUser = localStorage.getItem("rp_logged_user");
         if (storedUser) {
@@ -4493,12 +5188,14 @@ window.openAuthModal = function() {
     loadProfilesList();
 };
 
-window.closeAuthModal = function() {
+function closeAuthModal() {
+    window.closeAuthModal = closeAuthModal;
     const modal = document.getElementById("auth-modal");
     if (modal) modal.style.display = "none";
 };
 
-window.switchAuthTab = function(tabName) {
+function switchAuthTab(tabName) {
+    window.switchAuthTab = switchAuthTab;
     document.querySelectorAll(".auth-tab-btn").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".auth-tab-pane").forEach(p => { p.style.display = "none"; p.classList.remove("active"); });
     
@@ -4524,7 +5221,8 @@ window.switchAuthTab = function(tabName) {
     }
 };
 
-window.forceAppRefresh = function() {
+function forceAppRefresh() {
+    window.forceAppRefresh = forceAppRefresh;
     try {
         if ('caches' in window) {
             caches.keys().then(names => {
@@ -4540,14 +5238,16 @@ window.forceAppRefresh = function() {
     window.location.replace(cleanUrl);
 };
 
-window.toggleNewUserForm = function() {
+function toggleNewUserForm() {
+    window.toggleNewUserForm = toggleNewUserForm;
     const formContainer = document.getElementById("new-user-form-container");
     if (formContainer) {
         formContainer.style.display = (formContainer.style.display === "none" || formContainer.style.display === "") ? "block" : "none";
     }
 };
 
-window.loadProfilesList = async function() {
+async function loadProfilesList() {
+    window.loadProfilesList = loadProfilesList;
     const container = document.getElementById("profiles-list-container");
     
     const defaultProfiles = [
@@ -4712,7 +5412,8 @@ window.loadProfilesList = async function() {
     }
 };
 
-window.handleSupabaseLogin = async function(event) {
+async function handleSupabaseLogin(event) {
+    window.handleSupabaseLogin = handleSupabaseLogin;
     event.preventDefault();
     const email = document.getElementById("login-email").value.trim();
     const password = document.getElementById("login-password").value;
@@ -4839,7 +5540,8 @@ window.handleSupabaseLogin = async function(event) {
     }
 };
 
-window.handleSupabaseRegister = async function(event) {
+async function handleSupabaseRegister(event) {
+    window.handleSupabaseRegister = handleSupabaseRegister;
     event.preventDefault();
     const nombre = document.getElementById("reg-nombre").value.trim();
     const email = document.getElementById("reg-email").value.trim();
@@ -4954,7 +5656,8 @@ window.handleSupabaseRegister = async function(event) {
     }
 };
 
-window.showGlobalLoginOverlay = function() {
+function showGlobalLoginOverlay() {
+
     const overlay = document.getElementById("global-login-overlay");
     const emailInput = document.getElementById("login-global-email");
     const passInput = document.getElementById("login-global-pass");
@@ -4963,12 +5666,14 @@ window.showGlobalLoginOverlay = function() {
     if (overlay) overlay.style.display = "flex";
 };
 
-window.hideGlobalLoginOverlay = function() {
+function hideGlobalLoginOverlay() {
+    window.hideGlobalLoginOverlay = hideGlobalLoginOverlay;
     const overlay = document.getElementById("global-login-overlay");
     if (overlay) overlay.style.display = "none";
 };
 
-window.handleDeleteProfile = async function(email, nombre) {
+async function handleDeleteProfile(email, nombre) {
+    window.handleDeleteProfile = handleDeleteProfile;
     if (!email) return;
     const targetName = nombre || email;
     const confirmDelete = confirm(`¿Estás seguro de que deseas eliminar el perfil de "${targetName}" del sistema?`);
@@ -4990,7 +5695,8 @@ window.handleDeleteProfile = async function(email, nombre) {
     loadProfilesList();
 };
 
-window.openEditProfileModal = function(email) {
+function openEditProfileModal(email) {
+    window.openEditProfileModal = openEditProfileModal;
     if (!email) return;
     const modal = document.getElementById("edit-profile-modal");
     if (!modal) return;
@@ -5025,12 +5731,14 @@ window.openEditProfileModal = function(email) {
     modal.style.display = "flex";
 };
 
-window.closeEditProfileModal = function() {
+function closeEditProfileModal() {
+    window.closeEditProfileModal = closeEditProfileModal;
     const modal = document.getElementById("edit-profile-modal");
     if (modal) modal.style.display = "none";
 };
 
-window.handleSaveProfileEdit = async function(event) {
+async function handleSaveProfileEdit(event) {
+    window.handleSaveProfileEdit = handleSaveProfileEdit;
     event.preventDefault();
     const emailInput = document.getElementById("edit-profile-email");
     const nameInput = document.getElementById("edit-profile-name");
@@ -5083,7 +5791,8 @@ window.handleSaveProfileEdit = async function(event) {
     loadProfilesList();
 };
 
-window.handleGlobalLoginSubmit = async function(event) {
+async function handleGlobalLoginSubmit(event) {
+    window.handleGlobalLoginSubmit = handleGlobalLoginSubmit;
     event.preventDefault();
     const roleSelect = document.getElementById("login-global-role").value;
     const email = document.getElementById("login-global-email").value.trim();
@@ -5313,7 +6022,8 @@ window.handleGlobalLoginSubmit = async function(event) {
     }
 };
 
-window.handleSupabaseLogout = async function() {
+async function handleSupabaseLogout() {
+    window.handleSupabaseLogout = handleSupabaseLogout;
     try {
         if (window.isSupabaseActive()) {
             await window.SUPABASE_CONFIG.client.auth.signOut();
@@ -5328,7 +6038,8 @@ window.handleSupabaseLogout = async function() {
     showGlobalLoginOverlay();
 };
 
-window.togglePasswordVisibility = function(inputId, btn) {
+function togglePasswordVisibility(inputId, btn) {
+    window.togglePasswordVisibility = togglePasswordVisibility;
     const input = document.getElementById(inputId);
     if (!input) return;
     const icon = btn ? btn.querySelector(".material-symbols-outlined") : null;
@@ -5348,7 +6059,8 @@ let resetCodeState = {
     smsCode: ''
 };
 
-window.openInteractiveResetModal = function() {
+function openInteractiveResetModal() {
+    window.openInteractiveResetModal = openInteractiveResetModal;
     const modal = document.getElementById("reset-password-modal");
     if (!modal) return;
     
@@ -5410,12 +6122,14 @@ window.openInteractiveResetModal = function() {
     modal.style.display = "flex";
 };
 
-window.closeResetPasswordModal = function() {
+function closeResetPasswordModal() {
+    window.closeResetPasswordModal = closeResetPasswordModal;
     const modal = document.getElementById("reset-password-modal");
     if (modal) modal.style.display = "none";
 };
 
-window.verifyEmailResetCode = function() {
+function verifyEmailResetCode() {
+    window.verifyEmailResetCode = verifyEmailResetCode;
     const enteredCode = document.getElementById("reset-code-email").value.trim();
     const errorEl = document.getElementById("reset-email-error");
     
@@ -5448,7 +6162,8 @@ window.verifyEmailResetCode = function() {
     }
 };
 
-window.verifySmsResetCode = function() {
+function verifySmsResetCode() {
+    window.verifySmsResetCode = verifySmsResetCode;
     const enteredCode = document.getElementById("reset-code-sms").value.trim();
     const errorEl = document.getElementById("reset-sms-error");
     
@@ -5466,7 +6181,8 @@ window.verifySmsResetCode = function() {
     }
 };
 
-window.saveNewVerifiedPassword = async function(event) {
+async function saveNewVerifiedPassword(event) {
+    window.saveNewVerifiedPassword = saveNewVerifiedPassword;
     if (event) event.preventDefault();
     const pass1 = document.getElementById("reset-pass-1").value;
     const pass2 = document.getElementById("reset-pass-2").value;
@@ -5545,11 +6261,13 @@ window.saveNewVerifiedPassword = async function(event) {
     }
 };
 
-window.handleRecoverPasswordByEmail = function() {
+function handleRecoverPasswordByEmail() {
+    window.handleRecoverPasswordByEmail = handleRecoverPasswordByEmail;
     openInteractiveResetModal();
 };
 
-window.handleSaveMyProfile = async function(event) {
+async function handleSaveMyProfile(event) {
+    window.handleSaveMyProfile = handleSaveMyProfile;
     event.preventDefault();
     const name = document.getElementById("myprofile-edit-name").value.trim();
     const phone = document.getElementById("myprofile-edit-phone").value.trim();
@@ -5590,7 +6308,8 @@ window.handleSaveMyProfile = async function(event) {
     }
 };
 
-window.updateUserSessionUI = function() {
+function updateUserSessionUI() {
+
     if (!appState.currentUser) {
         const storedUser = localStorage.getItem("rp_logged_user");
         if (storedUser) {
@@ -5845,7 +6564,8 @@ Roberto Miranda`,
     ];
 }
 
-window.loadEmailsData = async function() {
+async function loadEmailsData() {
+    window.loadEmailsData = loadEmailsData;
     let loadedEmails = null;
 
     // 1. Intentar cargar desde Supabase si el cliente está disponible
@@ -5900,7 +6620,8 @@ window.loadEmailsData = async function() {
     updateEmailStatsAndBadges();
 };
 
-window.setupSupabaseEmailsRealtime = function() {
+function setupSupabaseEmailsRealtime() {
+    window.setupSupabaseEmailsRealtime = setupSupabaseEmailsRealtime;
     if (typeof window.isSupabaseActive !== 'function' || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client || typeof client.channel !== 'function') return;
@@ -6024,7 +6745,8 @@ function updateEmailStatsAndBadges() {
     }
 }
 
-window.renderEmailCenter = function() {
+function renderEmailCenter() {
+    window.renderEmailCenter = renderEmailCenter;
     // Sincronizar datos de cuenta en el panel lateral del buzón
     const accountEmailEl = document.getElementById("email-account-address");
     if (accountEmailEl) {
@@ -6049,7 +6771,8 @@ window.renderEmailCenter = function() {
     showEmailReaderEmptyState();
 };
 
-window.selectEmailFolder = function(folderName) {
+function selectEmailFolder(folderName) {
+    window.selectEmailFolder = selectEmailFolder;
     appState.currentEmailFolder = folderName;
     appState.selectedEmailIds.clear();
 
@@ -6060,7 +6783,8 @@ window.selectEmailFolder = function(folderName) {
     renderEmailList();
 };
 
-window.setEmailQuickFilter = function(filter) {
+function setEmailQuickFilter(filter) {
+    window.setEmailQuickFilter = setEmailQuickFilter;
     appState.currentEmailFilter = filter;
     document.querySelectorAll(".email-quick-filter-chips .filter-chip").forEach(chip => {
         chip.classList.toggle("active", chip.id === `chip-filter-${filter}`);
@@ -6068,7 +6792,8 @@ window.setEmailQuickFilter = function(filter) {
     renderEmailList();
 };
 
-window.filterEmailByCategory = function(category) {
+function filterEmailByCategory(category) {
+    window.filterEmailByCategory = filterEmailByCategory;
     appState.currentEmailCategory = category;
     document.querySelectorAll(".email-tags-list .email-tag-chip").forEach(chip => {
         chip.classList.toggle("active", 
@@ -6078,7 +6803,8 @@ window.filterEmailByCategory = function(category) {
     renderEmailList();
 };
 
-window.handleEmailSearch = function(event) {
+function handleEmailSearch(event) {
+    window.handleEmailSearch = handleEmailSearch;
     const val = (event.target.value || '').trim().toLowerCase();
     appState.emailSearchQuery = val;
     const clearBtn = document.getElementById("email-search-clear");
@@ -6086,7 +6812,8 @@ window.handleEmailSearch = function(event) {
     renderEmailList();
 };
 
-window.clearEmailSearch = function() {
+function clearEmailSearch() {
+    window.clearEmailSearch = clearEmailSearch;
     appState.emailSearchQuery = '';
     const input = document.getElementById("email-search-input");
     if (input) input.value = '';
@@ -6135,7 +6862,8 @@ function getFilteredEmails() {
     return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
-window.renderEmailList = function() {
+function renderEmailList() {
+    window.renderEmailList = renderEmailList;
     const container = document.getElementById("email-list-content");
     if (!container) return;
 
@@ -6228,7 +6956,8 @@ function escapeHtml(text) {
         .replace(/'/g, '&#039;');
 }
 
-window.selectEmail = function(id) {
+function selectEmail(id) {
+    window.selectEmail = selectEmail;
     appState.selectedEmailId = id;
     const email = (appState.emails || []).find(e => e.id === id);
     if (!email) return;
@@ -6386,7 +7115,8 @@ function showEmailReaderEmptyState() {
     if (readerView) readerView.style.display = "none";
 }
 
-window.toggleEmailStar = function(id, event) {
+function toggleEmailStar(id, event) {
+    window.toggleEmailStar = toggleEmailStar;
     if (event) event.stopPropagation();
     const email = (appState.emails || []).find(e => e.id === id);
     if (!email) return;
@@ -6414,13 +7144,15 @@ window.toggleEmailStar = function(id, event) {
     }
 };
 
-window.toggleCurrentEmailStar = function() {
+function toggleCurrentEmailStar() {
+    window.toggleCurrentEmailStar = toggleCurrentEmailStar;
     if (appState.selectedEmailId) {
         window.toggleEmailStar(appState.selectedEmailId);
     }
 };
 
-window.toggleCurrentEmailUnread = function() {
+function toggleCurrentEmailUnread() {
+    window.toggleCurrentEmailUnread = toggleCurrentEmailUnread;
     if (!appState.selectedEmailId) return;
     const email = (appState.emails || []).find(e => e.id === appState.selectedEmailId);
     if (!email) return;
@@ -6446,7 +7178,8 @@ window.toggleCurrentEmailUnread = function() {
     }
 };
 
-window.deleteEmail = function(id) {
+function deleteEmail(id) {
+    window.deleteEmail = deleteEmail;
     const email = (appState.emails || []).find(e => e.id === id);
     if (!email) return;
 
@@ -6484,13 +7217,15 @@ window.deleteEmail = function(id) {
     renderEmailList();
 };
 
-window.deleteCurrentEmail = function() {
+function deleteCurrentEmail() {
+    window.deleteCurrentEmail = deleteCurrentEmail;
     if (appState.selectedEmailId) {
         window.deleteEmail(appState.selectedEmailId);
     }
 };
 
-window.printCurrentEmail = function() {
+function printCurrentEmail() {
+    window.printCurrentEmail = printCurrentEmail;
     if (!appState.selectedEmailId) return;
     const email = (appState.emails || []).find(e => e.id === appState.selectedEmailId);
     if (!email) return;
@@ -6526,7 +7261,8 @@ window.printCurrentEmail = function() {
 };
 
 // Acciones en lote (Batch Actions)
-window.toggleEmailCheckbox = function(id, isChecked) {
+function toggleEmailCheckbox(id, isChecked) {
+    window.toggleEmailCheckbox = toggleEmailCheckbox;
     if (isChecked) {
         appState.selectedEmailIds.add(id);
     } else {
@@ -6534,7 +7270,8 @@ window.toggleEmailCheckbox = function(id, isChecked) {
     }
 };
 
-window.toggleSelectAllEmails = function(checked) {
+function toggleSelectAllEmails(checked) {
+    window.toggleSelectAllEmails = toggleSelectAllEmails;
     const list = getFilteredEmails();
     if (checked) {
         list.forEach(e => appState.selectedEmailIds.add(e.id));
@@ -6544,7 +7281,8 @@ window.toggleSelectAllEmails = function(checked) {
     renderEmailList();
 };
 
-window.batchMarkEmailsRead = function(isRead) {
+function batchMarkEmailsRead(isRead) {
+    window.batchMarkEmailsRead = batchMarkEmailsRead;
     if (appState.selectedEmailIds.size === 0) return;
     appState.selectedEmailIds.forEach(id => {
         const e = (appState.emails || []).find(x => x.id === id);
@@ -6555,7 +7293,8 @@ window.batchMarkEmailsRead = function(isRead) {
     renderEmailList();
 };
 
-window.batchDeleteEmails = function() {
+function batchDeleteEmails() {
+    window.batchDeleteEmails = batchDeleteEmails;
     if (appState.selectedEmailIds.size === 0) return;
     const count = appState.selectedEmailIds.size;
     if (!confirm(`¿Mover ${count} correo(s) a la papelera?`)) return;
@@ -6582,7 +7321,8 @@ window.batchDeleteEmails = function() {
     renderEmailList();
 };
 
-window.refreshEmails = async function() {
+async function refreshEmails() {
+    window.refreshEmails = refreshEmails;
     await window.loadEmailsData();
     renderEmailCenter();
 };
@@ -6591,7 +7331,8 @@ window.refreshEmails = async function() {
 // MODAL DE REDACCIÓN DE CORREOS (COMPOSE MODAL)
 // ==============================================================================
 
-window.openComposeModal = function(options = {}) {
+function openComposeModal(options = {}) {
+    window.openComposeModal = openComposeModal;
     const modal = document.getElementById("modal-compose-email");
     if (!modal) return;
 
@@ -6636,19 +7377,22 @@ window.openComposeModal = function(options = {}) {
     }
 };
 
-window.closeComposeModal = function() {
+function closeComposeModal() {
+    window.closeComposeModal = closeComposeModal;
     const modal = document.getElementById("modal-compose-email");
     if (modal) modal.style.display = "none";
 };
 
-window.toggleComposeMinimize = function() {
+function toggleComposeMinimize() {
+    window.toggleComposeMinimize = toggleComposeMinimize;
     const modal = document.getElementById("modal-compose-email");
     if (!modal) return;
     const card = modal.querySelector(".compose-modal-card");
     if (card) card.classList.toggle("minimized");
 };
 
-window.toggleComposeCcRow = function() {
+function toggleComposeCcRow() {
+    window.toggleComposeCcRow = toggleComposeCcRow;
     const ccRow = document.getElementById("compose-cc-row");
     if (!ccRow) return;
     const isHidden = ccRow.style.display === "none";
@@ -6659,7 +7403,8 @@ window.toggleComposeCcRow = function() {
     }
 };
 
-window.handleComposeRecipientSearch = function(event) {
+function handleComposeRecipientSearch(event) {
+    window.handleComposeRecipientSearch = handleComposeRecipientSearch;
     const query = (event.target.value || '').trim().toLowerCase();
     const dropdown = document.getElementById("compose-recipient-dropdown");
     if (!dropdown) return;
@@ -6704,7 +7449,8 @@ window.handleComposeRecipientSearch = function(event) {
     dropdown.style.display = "block";
 };
 
-window.selectComposeRecipient = function(name, email) {
+function selectComposeRecipient(name, email) {
+    window.selectComposeRecipient = selectComposeRecipient;
     const input = document.getElementById("compose-to-input");
     if (input) {
         input.value = `${name} <${email}>`;
@@ -6725,18 +7471,21 @@ document.addEventListener("click", function(e) {
     }
 });
 
-window.applyComposeFormat = function(command) {
+function applyComposeFormat(command) {
+    window.applyComposeFormat = applyComposeFormat;
     document.execCommand(command, false, null);
     const editor = document.getElementById("compose-body-editor");
     if (editor) editor.focus();
 };
 
-window.triggerComposeFileUpload = function() {
+function triggerComposeFileUpload() {
+    window.triggerComposeFileUpload = triggerComposeFileUpload;
     const fileInput = document.getElementById("compose-file-input");
     if (fileInput) fileInput.click();
 };
 
-window.handleComposeFilesSelected = function(event) {
+function handleComposeFilesSelected(event) {
+    window.handleComposeFilesSelected = handleComposeFilesSelected;
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
@@ -6761,7 +7510,8 @@ window.handleComposeFilesSelected = function(event) {
     event.target.value = '';
 };
 
-window.removeComposeAttachment = function(index) {
+function removeComposeAttachment(index) {
+    window.removeComposeAttachment = removeComposeAttachment;
     appState.composeAttachments.splice(index, 1);
     renderComposeAttachmentsTray();
 };
@@ -6794,7 +7544,8 @@ function renderComposeAttachmentsTray() {
     list.innerHTML = html;
 }
 
-window.handleSendComposeEmail = async function(event) {
+async function handleSendComposeEmail(event) {
+    window.handleSendComposeEmail = handleSendComposeEmail;
     if (event) event.preventDefault();
 
     const toInput = document.getElementById("compose-to-input");
@@ -6901,7 +7652,8 @@ window.handleSendComposeEmail = async function(event) {
     selectEmail(newEmailId);
 };
 
-window.handleSaveDraftEmail = function() {
+function handleSaveDraftEmail() {
+    window.handleSaveDraftEmail = handleSaveDraftEmail;
     const toInput = document.getElementById("compose-to-input");
     const subjectInput = document.getElementById("compose-subject-input");
     const categorySelect = document.getElementById("compose-category-select");
@@ -6937,7 +7689,8 @@ window.handleSaveDraftEmail = function() {
     selectEmailFolder('drafts');
 };
 
-window.handleReplyCurrentEmail = function() {
+function handleReplyCurrentEmail() {
+    window.handleReplyCurrentEmail = handleReplyCurrentEmail;
     if (!appState.selectedEmailId) return;
     const email = (appState.emails || []).find(e => e.id === appState.selectedEmailId);
     if (!email) return;
@@ -6954,7 +7707,8 @@ window.handleReplyCurrentEmail = function() {
     });
 };
 
-window.handleForwardCurrentEmail = function() {
+function handleForwardCurrentEmail() {
+    window.handleForwardCurrentEmail = handleForwardCurrentEmail;
     if (!appState.selectedEmailId) return;
     const email = (appState.emails || []).find(e => e.id === appState.selectedEmailId);
     if (!email) return;
@@ -6969,7 +7723,8 @@ window.handleForwardCurrentEmail = function() {
     });
 };
 
-window.openFullReplyModal = function() {
+function openFullReplyModal() {
+    window.openFullReplyModal = openFullReplyModal;
     const quickInput = document.getElementById("quick-reply-input");
     const initialText = quickInput ? quickInput.value : '';
     window.handleReplyCurrentEmail();
@@ -6981,7 +7736,8 @@ window.openFullReplyModal = function() {
     }
 };
 
-window.sendQuickReply = async function() {
+async function sendQuickReply() {
+    window.sendQuickReply = sendQuickReply;
     if (!appState.selectedEmailId) return;
     const email = (appState.emails || []).find(e => e.id === appState.selectedEmailId);
     if (!email) return;
@@ -7037,7 +7793,8 @@ window.sendQuickReply = async function() {
 // Regla: RDP + últimos 2 dígitos del año actual (26) + mes en 2 dígitos (09) + número secuencial
 // - Servicio local y movimientos foráneos: sigue el 171 y el usuario define la letra
 // - Lavado de contenedores: sigue el 56 y el sistema agrega la letra 'L'
-window.generateProjectConsecutivo = function(tipoProyecto) {
+function generateProjectConsecutivo(tipoProyecto) {
+    window.generateProjectConsecutivo = generateProjectConsecutivo;
     const now = new Date();
     const year2 = String(now.getFullYear()).slice(-2);
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -7071,7 +7828,8 @@ window.generateProjectConsecutivo = function(tipoProyecto) {
     }
 };
 
-window.updateConsecutivoLetterForTipo = function(currentConsecutivo, tipoProyecto) {
+function updateConsecutivoLetterForTipo(currentConsecutivo, tipoProyecto) {
+    window.updateConsecutivoLetterForTipo = updateConsecutivoLetterForTipo;
     const isLavado = (tipoProyecto === 'lavado_contenedores');
     if (!currentConsecutivo) {
         return generateProjectConsecutivo(tipoProyecto);
@@ -7097,20 +7855,143 @@ window.updateConsecutivoLetterForTipo = function(currentConsecutivo, tipoProyect
 // ---------------------------------------------------------------------------------
 const defaultOperacionesProyectos = [];
 
-let _syncOperacionesTimer = null;
-window.saveOperacionesStorage = function() {
+
+function syncAllOperacionesToConsecutivo() {
+    window.syncAllOperacionesToConsecutivo = syncAllOperacionesToConsecutivo;
+    if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos) || appState.operacionesProyectos.length === 0) {
+        const stored = localStorage.getItem('rp_operaciones_proyectos');
+        if (stored) {
+            try {
+                const fakeOpIds = new Set(['RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F']);
+                let parsed = JSON.parse(stored);
+                if (Array.isArray(parsed)) {
+                    appState.operacionesProyectos = parsed.filter(p => p && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
+                }
+            } catch (e) {}
+        }
+    }
+    if (Array.isArray(appState.operacionesProyectos) && appState.operacionesProyectos.length > 0) {
+        appState.operacionesProyectos.forEach(p => {
+            if (p) {
+                syncProjectToConsecutivo(p, false);
+            }
+        });
+    }
+}
+
+function syncProjectToConsecutivo(p, shouldRender = false) {
+    window.syncProjectToConsecutivo = syncProjectToConsecutivo;
+    if (!p) return;
+    if (!appState.consecutivo || !Array.isArray(appState.consecutivo)) {
+        appState.consecutivo = [];
+    }
+
+    const projId = p.numConsecutivo || p.consecutivo || p.numProyecto || p.id;
+    if (!projId) return;
+
+    let row = appState.consecutivo.find(c => 
+        (c.referenciaOp && String(c.referenciaOp).trim().toLowerCase() === String(projId).trim().toLowerCase()) ||
+        (p.numFactura && p.numFactura !== '-' && c.factura && String(c.factura).trim().toLowerCase() === String(p.numFactura).trim().toLowerCase())
+    );
+
+    let sub = Number(p.subtotal) || 0;
+    let iva = (p.iva !== undefined && p.iva !== null && p.iva !== '') ? Number(p.iva) : 0;
+    let tot = (p.total !== undefined && p.total !== null && p.total !== '') ? Number(p.total) : 0;
+
+    if ((!sub || !iva || !tot) && p.partidasConceptos && Array.isArray(p.partidasConceptos)) {
+        let calcSub = 0, calcIva = 0, calcTot = 0;
+        p.partidasConceptos.forEach(item => {
+            const cant = parseFloat(item.cantidad) || 0;
+            const unit = parseFloat(item.unitario) || 0;
+            const itemSub = cant * unit;
+            const itemIva = itemSub > 0 ? (itemSub * 0.16) : 0;
+            const itemRet = parseFloat(item.retencion) || 0;
+            const itemTot = (itemSub > 0 || itemRet > 0) ? (itemSub + itemIva - itemRet) : 0;
+
+            calcSub += itemSub;
+            calcIva += itemIva;
+            calcTot += itemTot;
+        });
+        if (!sub) sub = calcSub;
+        if (!iva) iva = calcIva;
+        if (!tot) tot = calcTot;
+    }
+
+    if (!iva && sub > 0) iva = Math.round(sub * 0.16 * 100) / 100;
+    if (!tot && sub > 0) tot = Math.round((sub + iva) * 100) / 100;
+
+    const oc = (p.numOC || p.ordenCompra || p.infoViaje?.ordenCompra || '').trim();
+    const clienteName = (p.infoLavado?.clienteFacturar || p.clienteFacturar || p.cliente || p.infoViaje?.cliente || '').trim();
+    const rawFac = (p.numFactura || p.factura || '').trim();
+    const facNum = (rawFac && rawFac !== '-') ? rawFac : '';
+
+    if (!row) {
+        row = appState.consecutivo.find(c => 
+            !c.factura && !c.cliente && !c.folioCliente && (!c.subtotal || c.subtotal === 0 || c.subtotal === '') && !c.referenciaOp
+        );
+    }
+
+    if (!row) {
+        const nextNum = appState.consecutivo.length + 1;
+        row = { consecutivo: nextNum };
+        appState.consecutivo.push(row);
+    }
+
+    row.referenciaOp = projId;
+    if (facNum) row.factura = facNum;
+    if (p.fechaInicio || p.fechaEmision) row.fechaEmision = p.fechaInicio || p.fechaEmision;
+    if (clienteName) row.cliente = clienteName;
+    if (oc) row.folioCliente = oc;
+    if (sub > 0 || iva > 0 || tot > 0) {
+        row.subtotal = sub;
+        row.iva = iva;
+        row.total = tot;
+    }
+    if (p.archivado || p.estatus === 'CERRADO') {
+        row.st = 'C';
+    } else if (p.estatus === 'PRIORIDAD') {
+        row.st = 'P';
+    } else if (!row.st) {
+        row.st = 'P';
+    }
+    row.servicio = p.servicioName || (p.tipoProyecto === 'lavado_contenedores' ? 'Lavado de Contenedores' : (p.tipoProyecto === 'movimientos_foraneos' ? 'Movimientos Foráneos' : 'Servicio Local'));
+
+    try {
+        localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
+    } catch (e) {}
+
+    if (shouldRender && typeof window.renderConsecutivo === 'function' && appState.currentAdminFicha === 'consecutivo') {
+        window.renderConsecutivo();
+    }
+}
+
+function saveOperacionesStorage() {
+    window.saveOperacionesStorage = saveOperacionesStorage;
     const list = appState.operacionesProyectos || [];
     try {
         localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(list));
     } catch (e) {
         console.warn("Error saving operaciones locally:", e);
     }
+
+    if (Array.isArray(list)) {
+        list.forEach(p => {
+            if (p && typeof window.syncProjectToConsecutivo === 'function') {
+                window.syncProjectToConsecutivo(p);
+            }
+            if (p && typeof window.syncProjectToProveedores === 'function') {
+                window.syncProjectToProveedores(p);
+            }
+        });
+    }
+
     if (typeof window.syncOperacionesToCloud === 'function') {
         window.syncOperacionesToCloud();
     }
 };
 
-window.syncOperacionesToCloud = function() {
+function syncOperacionesToCloud() {
+    window.syncOperacionesToCloud = syncOperacionesToCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
@@ -7168,7 +8049,8 @@ window.syncOperacionesToCloud = function() {
     }, 600);
 };
 
-window.fetchOperacionesFromCloud = async function() {
+async function fetchOperacionesFromCloud() {
+    window.fetchOperacionesFromCloud = fetchOperacionesFromCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
@@ -7225,7 +8107,8 @@ window.fetchOperacionesFromCloud = async function() {
     }
 };
 
-window.mergeOperacionesProjects = function(cloudList) {
+function mergeOperacionesProjects(cloudList) {
+    window.mergeOperacionesProjects = mergeOperacionesProjects;
     if (!Array.isArray(cloudList) || cloudList.length === 0) return;
     if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
 
@@ -7247,7 +8130,8 @@ window.mergeOperacionesProjects = function(cloudList) {
 };
 
 // Helper: Validar requisitos para avanzar a Facturación (Paso 4)
-window.validateProjectForFacturacion = function(p) {
+function validateProjectForFacturacion(p) {
+    window.validateProjectForFacturacion = validateProjectForFacturacion;
     const errors = [];
     if (!p) return { valid: false, errors: ["No hay expediente activo seleccionado."] };
 
@@ -7290,14 +8174,13 @@ window.validateProjectForFacturacion = function(p) {
 };
 
 // Helper: Calcular estatus del expediente (CERRADO, ABIERTO, PENDIENTE o PRIORIDAD [Rojo])
-window.computeProjectStatus = function(p) {
-    if (p.estatus === 'CERRADO') {
-        return 'CERRADO';
+function computeProjectStatus(p) {
+    window.computeProjectStatus = computeProjectStatus;
+    if (p.cancelado || p.estatus === 'CANCELADO') {
+        return 'CANCELADO';
     }
-
-    const valResult = validateProjectForFacturacion(p);
-    if (valResult.valid) {
-        return p.estatus === 'ABIERTO' || p.estatus === 'CERRADO' ? p.estatus : 'ABIERTO';
+    if (p.archivado || p.estatus === 'CERRADO') {
+        return 'CERRADO';
     }
 
     // Incompleto -> Verificar antigüedad desde la fecha de apertura
@@ -7327,7 +8210,8 @@ window.computeProjectStatus = function(p) {
 };
 
 // Helper: Banner de Advertencia de Cierre de Mes (Días 20 al 30/31 del mes)
-window.renderMonthEndWarning = function(proyectos) {
+function renderMonthEndWarning(proyectos) {
+    window.renderMonthEndWarning = renderMonthEndWarning;
     const bannerWrap = document.getElementById("op-month-end-banner-wrap");
     if (!bannerWrap) return;
 
@@ -7341,7 +8225,7 @@ window.renderMonthEndWarning = function(proyectos) {
 
     // Detectar 10 días antes del fin de mes (a partir del día 20 o 21)
     if (daysRemaining <= 10 && daysRemaining >= 0) {
-        const pendingCount = (proyectos || []).filter(p => p.estatus === 'PENDIENTE' || p.estatus === 'PRIORIDAD' || p.estatus === 'ABIERTO').length;
+        const pendingCount = (proyectos || []).filter(p => p.estatus === 'PENDIENTE' || p.estatus === 'PRIORIDAD' || false).length;
         if (pendingCount > 0) {
             bannerWrap.innerHTML = `
                 <div class="month-end-warning-banner ${daysRemaining <= 5 ? 'critical' : ''}">
@@ -7349,7 +8233,7 @@ window.renderMonthEndWarning = function(proyectos) {
                     <div>
                         <strong style="font-size: 14px;">⚠️ ADVERTENCIA DE CIERRE DE MES (Fecha: ${day}/${month + 1}/${year}):</strong><br>
                         Faltan <strong>${daysRemaining} días</strong> para el día ${totalDaysInMonth} del mes.
-                        Tienes <strong>${pendingCount} expediente(s) pendientes o abiertos</strong> que el sistema requiere cerrar antes de fin de mes.
+                        Tienes <strong>${pendingCount} expediente(s) pendientes</strong> que el sistema requiere cerrar antes de fin de mes.
                     </div>
                 </div>
             `;
@@ -7434,17 +8318,102 @@ function cleanOperacionesLegacyData(proyectos) {
     });
 }
 
-window.renderOperaciones = function() {
+function clearGhostData() {
+    window.clearGhostData = clearGhostData;
+    appState.operacionesProyectos = [];
+    appState.proveedores = [];
+    appState.nominas = [];
+    appState.tasks = [];
+    appState.meetings = [];
+    appState.chats = { general: [] };
+    appState.consecutivo = [];
+
+    try {
+        localStorage.removeItem('rp_operaciones_proyectos');
+        localStorage.removeItem('rp_proveedores_data');
+        localStorage.removeItem('rp_nominas_data');
+        localStorage.removeItem('rp_tasks');
+        localStorage.removeItem('rp_meetings');
+        localStorage.removeItem('rp_chats');
+        localStorage.removeItem('rp_deleted_task_ids');
+        localStorage.setItem('rp_consecutivo_data', JSON.stringify([]));
+        localStorage.setItem('rp_ghost_purged_v2', 'true');
+    } catch (e) {}
+
+    if (typeof window.saveOperacionesStorage === 'function') {
+        window.saveOperacionesStorage();
+    }
+    if (typeof window.renderOperaciones === 'function') {
+        window.renderOperaciones();
+    }
+    if (typeof window.renderConsecutivo === 'function') {
+        window.renderConsecutivo();
+    }
+    if (typeof window.renderTasks === 'function') {
+        window.renderTasks();
+    }
+    if (typeof window.renderProveedores === 'function') {
+        window.renderProveedores();
+    }
+    if (typeof window.renderNominas === 'function') {
+        window.renderNominas();
+    }
+};
+
+function clearConsecutivoTable() {
+    window.clearConsecutivoTable = clearConsecutivoTable;
+    appState.consecutivo = (window.initialConsecutivoData && window.initialConsecutivoData.length > 0) 
+        ? JSON.parse(JSON.stringify(window.initialConsecutivoData))
+        : Array.from({ length: 18 }, (_, i) => ({
+            consecutivo: i + 1, factura: '', fechaEmision: '', cliente: '', folioCliente: '',
+            subtotal: '', iva: '', total: '', st: '', fechaPago: '', referenciaOp: '',
+            servicio: '', detalle: '', nota: '', porcRodipak: '', rodipak: '',
+            hugoComision: '', hugoTotal: '', porcHugo: ''
+        }));
+    try {
+        localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
+    } catch (e) {}
+    if (typeof window.renderConsecutivo === 'function') {
+        window.renderConsecutivo();
+    }
+};
+
+function confirmClearConsecutivo() {
+    window.confirmClearConsecutivo = confirmClearConsecutivo;
+    if (confirm("¿Estás seguro de eliminar toda la información de la tabla Consecutivo?")) {
+        window.clearConsecutivoTable();
+        alert("Se ha eliminado toda la información de la tabla Consecutivo.");
+    }
+};
+
+function confirmClearGhostData() {
+    window.confirmClearGhostData = confirmClearGhostData;
+    if (confirm("¿Estás seguro de limpiar toda la información fantasma e inventada de Localhost? Esto borrará los expedientes de prueba y restaurará el sistema a un estado totalmente limpio.")) {
+        window.clearGhostData();
+        alert("Se ha limpiado exitosamente toda la información fantasma de Localhost.");
+    }
+};
+
+function renderOperaciones() {
+    window.renderOperaciones = renderOperaciones;
     const listPane = document.getElementById("operaciones-view-list");
     if (!listPane) return;
 
-    const fakeOpIds = new Set(['RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F']);
+    // Purga automática inicial si existen datos fantasma guardados previamente en LocalStorage
+    if (!localStorage.getItem('rp_ghost_purged_v2')) {
+        window.clearGhostData();
+    }
+
+    const fakeOpIds = new Set([
+        'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
+        'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F'
+    ]);
     const stored = localStorage.getItem('rp_operaciones_proyectos');
     if (stored) {
         try {
             let parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
-                parsed = parsed.filter(p => p && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo));
+                parsed = parsed.filter(p => p && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
                 appState.operacionesProyectos = parsed;
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(parsed));
             }
@@ -7464,10 +8433,21 @@ window.renderOperaciones = function() {
         if (p.consecutivo || p.numConsecutivo) {
             p.numProyecto = p.consecutivo || p.numConsecutivo;
         }
-        if (p.archivado) {
+        if (p.cancelado || p.estatus === 'CANCELADO') {
+            p.estatus = 'CANCELADO';
+        } else if (p.archivado) {
             p.estatus = 'CERRADO';
         } else {
-            p.estatus = computeProjectStatus(p);
+            // Verificar si en Consecutivo se marcó como Cancelado
+            const rowInConsecutivo = (appState.consecutivo || []).find(c =>
+                c.referenciaOp && String(c.referenciaOp).trim().toLowerCase() === String(p.numProyecto || p.consecutivo || p.id).trim().toLowerCase()
+            );
+            if (rowInConsecutivo && String(rowInConsecutivo.st || '').toLowerCase().includes('cancel')) {
+                p.estatus = 'CANCELADO';
+                p.cancelado = true;
+            } else {
+                p.estatus = computeProjectStatus(p);
+            }
         }
     });
 
@@ -7557,9 +8537,6 @@ window.renderOperaciones = function() {
             <td>${p.factura || p.numFactura || '-'}</td>
             <td><span class="op-status-badge ${p.estatus}">${p.estatus}</span></td>
             <td style="white-space: nowrap;">
-                <button class="btn-op-eliminar" onclick="eliminarProyectoOperaciones('${pId}', event)" title="Eliminar expediente">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">delete</span> ELIMINAR
-                </button>
                 <button class="btn-op-abrir" onclick="openOperacionesDetail('${pId}')" title="Abrir y revisar expediente">
                     <span class="material-symbols-outlined" style="font-size: 16px;">folder_open</span> ABRIR
                 </button>
@@ -7569,12 +8546,14 @@ window.renderOperaciones = function() {
     }).join('');
 };
 
-window.toggleOperacionesExpedientesView = function() {
+function toggleOperacionesExpedientesView() {
+    window.toggleOperacionesExpedientesView = toggleOperacionesExpedientesView;
     appState.operacionesViewMode = appState.operacionesViewMode === 'expedientes' ? 'activos' : 'expedientes';
     renderOperaciones();
 };
 
-window.eliminarProyectoOperaciones = function(projectId, event) {
+function eliminarProyectoOperaciones(projectId, event) {
+    window.eliminarProyectoOperaciones = eliminarProyectoOperaciones;
     if (event) event.stopPropagation();
     const proyectos = appState.operacionesProyectos || [];
     const p = proyectos.find(x => x.id === projectId || x.numProyecto === projectId || x.consecutivo === projectId);
@@ -7601,7 +8580,8 @@ window.eliminarProyectoOperaciones = function(projectId, event) {
     renderOperaciones();
 };
 
-window.archivarExpedienteActivo = function() {
+function archivarExpedienteActivo() {
+    window.archivarExpedienteActivo = archivarExpedienteActivo;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) {
         alert("No se encontró ningún expediente activo para archivar.");
@@ -7671,22 +8651,26 @@ window.archivarExpedienteActivo = function() {
     alert(`✅ Expediente ${consecutivo} archivado con éxito.\nPuedes revisarlo en cualquier momento desde la sección "EXPEDIENTE".`);
 };
 
-window.handleOperacionesSearch = function(query) {
+function handleOperacionesSearch(query) {
+    window.handleOperacionesSearch = handleOperacionesSearch;
     appState.operacionesSearchQuery = query;
     renderOperaciones();
 };
 
-window.handleOperacionesStatusFilter = function(status) {
+function handleOperacionesStatusFilter(status) {
+    window.handleOperacionesStatusFilter = handleOperacionesStatusFilter;
     appState.operacionesStatusFilter = status;
     renderOperaciones();
 };
 
-window.handleOperacionesTipoFilter = function(tipo) {
+function handleOperacionesTipoFilter(tipo) {
+    window.handleOperacionesTipoFilter = handleOperacionesTipoFilter;
     appState.operacionesTipoFilter = tipo;
     renderOperaciones();
 };
 
-window.toggleOpCustomDropdown = function(filterType, event) {
+function toggleOpCustomDropdown(filterType, event) {
+    window.toggleOpCustomDropdown = toggleOpCustomDropdown;
     if (event) event.stopPropagation();
     const wrap = document.getElementById(`wrap-op-${filterType}-filter`);
     if (!wrap) return;
@@ -7699,7 +8683,8 @@ window.toggleOpCustomDropdown = function(filterType, event) {
     }
 };
 
-window.selectOpFilterOption = function(filterType, value, title, iconOrDotClass, event) {
+function selectOpFilterOption(filterType, value, title, iconOrDotClass, event) {
+    window.selectOpFilterOption = selectOpFilterOption;
     if (event) event.stopPropagation();
     const wrap = document.getElementById(`wrap-op-${filterType}-filter`);
     const menu = document.getElementById(`op-${filterType}-dropdown-menu`);
@@ -7750,7 +8735,8 @@ if (typeof window !== 'undefined' && !window._opCustomSelectListenersAdded) {
     });
 }
 
-window.openOperacionesDetail = function(projectId) {
+function openOperacionesDetail(projectId) {
+    window.openOperacionesDetail = openOperacionesDetail;
     const proyectos = appState.operacionesProyectos || defaultOperacionesProyectos;
     let p = proyectos.find(x => x.id === projectId || x.numProyecto === projectId || x.consecutivo === projectId);
     if (!p) {
@@ -7790,7 +8776,8 @@ window.openOperacionesDetail = function(projectId) {
     goToOperacionesStep(p.currentStep || 1);
 };
 
-window.selectProjectTipo = function(tipo) {
+function selectProjectTipo(tipo) {
+    window.selectProjectTipo = selectProjectTipo;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     p.tipoProyecto = tipo;
@@ -7825,7 +8812,8 @@ window.selectProjectTipo = function(tipo) {
     saveOperacionesStorage();
 };
 
-window.toggleStep1GeneralInfo = function(section) {
+function toggleStep1GeneralInfo(section) {
+    window.toggleStep1GeneralInfo = toggleStep1GeneralInfo;
     const body = document.getElementById(`op-info-body-${section}`);
     const icon = document.getElementById(`op-toggle-icon-${section}`);
     if (!body) return;
@@ -7838,23 +8826,36 @@ window.toggleStep1GeneralInfo = function(section) {
     }
 };
 
-window.updateProjectInfoViajeField = function(key, val) {
+function updateProjectInfoViajeField(key, val) {
+    window.updateProjectInfoViajeField = updateProjectInfoViajeField;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.infoViaje) p.infoViaje = {};
     p.infoViaje[key] = val;
     saveOperacionesStorage();
+    if (typeof window.syncProjectToConsecutivo === 'function') {
+        window.syncProjectToConsecutivo(p);
+    }
 };
 
-window.updateProjectInfoLavadoField = function(key, val) {
+function updateProjectInfoLavadoField(key, val) {
+    window.updateProjectInfoLavadoField = updateProjectInfoLavadoField;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.infoLavado) p.infoLavado = {};
     p.infoLavado[key] = val;
+    if (key === 'clienteFacturar') {
+        p.cliente = val;
+        p.clienteFacturar = val;
+    }
     saveOperacionesStorage();
+    if (typeof window.syncProjectToConsecutivo === 'function') {
+        window.syncProjectToConsecutivo(p);
+    }
 };
 
-window.renderStep1View = function(p) {
+function renderStep1View(p) {
+    window.renderStep1View = renderStep1View;
     if (!p) return;
     if (!p.tipoProyecto) p.tipoProyecto = 'servicio_local';
 
@@ -7933,7 +8934,8 @@ window.renderStep1View = function(p) {
     renderContenedoresCards(p);
 };
 
-window.closeOperacionesDetail = function() {
+function closeOperacionesDetail() {
+    window.closeOperacionesDetail = closeOperacionesDetail;
     const listPane = document.getElementById("operaciones-view-list");
     const detailPane = document.getElementById("operaciones-view-detail");
     const topbarBack = document.getElementById("op-detail-topbar");
@@ -7945,7 +8947,8 @@ window.closeOperacionesDetail = function() {
     renderOperaciones();
 };
 
-window.goToOperacionesStep = function(stepNum) {
+function goToOperacionesStep(stepNum) {
+    window.goToOperacionesStep = goToOperacionesStep;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
 
     if (stepNum > 4) return;
@@ -7981,7 +8984,8 @@ window.goToOperacionesStep = function(stepNum) {
     }
 };
 
-window.changeContenedoresPage = function(delta) {
+function changeContenedoresPage(delta) {
+    window.changeContenedoresPage = changeContenedoresPage;
     if (appState.contenedoresPage === undefined) appState.contenedoresPage = 0;
     appState.contenedoresPage += delta;
     if (appState.contenedoresPage < 0) appState.contenedoresPage = 0;
@@ -7992,12 +8996,14 @@ window.changeContenedoresPage = function(delta) {
     }
 };
 
-window.updateProjectHeaderField = function(key, val) {
+function updateProjectHeaderField(key, val) {
+    window.updateProjectHeaderField = updateProjectHeaderField;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     p[key] = val;
 
     if (key === 'numFactura') {
+        p.factura = val;
         document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = val || "-");
     }
     if (key === 'numOC') {
@@ -8010,6 +9016,12 @@ window.updateProjectHeaderField = function(key, val) {
     }
 
     saveOperacionesStorage();
+    if (typeof window.syncProjectToConsecutivo === 'function') {
+        window.syncProjectToConsecutivo(p);
+    }
+    if (typeof window.syncProjectToProveedores === 'function') {
+        window.syncProjectToProveedores(p);
+    }
 };
 
 function renderContenedoresCards(p) {
@@ -8125,7 +9137,8 @@ function renderContenedoresCards(p) {
     }
 }
 
-window.deleteContenedor = function(cId) {
+function deleteContenedor(cId) {
+    window.deleteContenedor = deleteContenedor;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p || !p.contenedores) return;
 
@@ -8146,7 +9159,8 @@ window.deleteContenedor = function(cId) {
 };
 
 /* Prefactura Lateral Slider (Step 2 - Imagen 2 y 3) */
-window.changePrefacturaPage = function(delta) {
+function changePrefacturaPage(delta) {
+    window.changePrefacturaPage = changePrefacturaPage;
     if (appState.prefacturaPage === undefined) appState.prefacturaPage = 0;
     appState.prefacturaPage += delta;
     if (appState.prefacturaPage < 0) appState.prefacturaPage = 0;
@@ -8154,7 +9168,8 @@ window.changePrefacturaPage = function(delta) {
     renderPrefacturaSlider();
 };
 
-window.renderPrefacturaSlider = function() {
+function renderPrefacturaSlider() {
+    window.renderPrefacturaSlider = renderPrefacturaSlider;
     if (appState.prefacturaPage === undefined) appState.prefacturaPage = 0;
     const page1 = document.getElementById("prefactura-page-1");
     const page2 = document.getElementById("prefactura-page-2");
@@ -8177,7 +9192,8 @@ window.renderPrefacturaSlider = function() {
     }
 };
 
-window.handlePrefacturaFooterNext = function() {
+function handlePrefacturaFooterNext() {
+    window.handlePrefacturaFooterNext = handlePrefacturaFooterNext;
     if (appState.prefacturaPage === undefined) appState.prefacturaPage = 0;
     if (appState.prefacturaPage === 0) {
         changePrefacturaPage(1);
@@ -8186,7 +9202,8 @@ window.handlePrefacturaFooterNext = function() {
     }
 };
 
-window.handlePrefacturaFooterPrev = function() {
+function handlePrefacturaFooterPrev() {
+    window.handlePrefacturaFooterPrev = handlePrefacturaFooterPrev;
     if (appState.prefacturaPage === undefined) appState.prefacturaPage = 0;
     if (appState.prefacturaPage === 1) {
         changePrefacturaPage(-1);
@@ -8195,7 +9212,8 @@ window.handlePrefacturaFooterPrev = function() {
     }
 };
 
-window.updateContenedorField = function(cId, key, val) {
+function updateContenedorField(cId, key, val) {
+    window.updateContenedorField = updateContenedorField;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.contenedores) p.contenedores = [];
@@ -8208,7 +9226,8 @@ window.updateContenedorField = function(cId, key, val) {
     saveOperacionesStorage();
 };
 
-window.addContenedorToActiveProject = function() {
+function addContenedorToActiveProject() {
+    window.addContenedorToActiveProject = addContenedorToActiveProject;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.contenedores) p.contenedores = [];
@@ -8225,7 +9244,8 @@ window.addContenedorToActiveProject = function() {
     saveOperacionesStorage();
 };
 
-window.convertirCaratulaPDF = function() {
+function convertirCaratulaPDF() {
+    window.convertirCaratulaPDF = convertirCaratulaPDF;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) {
         alert("No se encontró ningún proyecto activo para exportar.");
@@ -8707,7 +9727,8 @@ window.convertirCaratulaPDF = function() {
     }
 };
 
-window.convertirPrefacturaPDF = function() {
+function convertirPrefacturaPDF() {
+    window.convertirPrefacturaPDF = convertirPrefacturaPDF;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) {
         alert("No se encontró ningún proyecto activo para exportar.");
@@ -9205,7 +10226,8 @@ const CODIGOS_SERVICIOS_OPERACIONES = {
     'E': 'Estadias'
 };
 
-window.handlePartidaServicioInput = function(idx, inputEl, event) {
+function handlePartidaServicioInput(idx, inputEl, event) {
+    window.handlePartidaServicioInput = handlePartidaServicioInput;
     if (!inputEl) return;
     const prevLen = inputEl._prevLen !== undefined ? inputEl._prevLen : (inputEl.value.length + 1);
     const currLen = inputEl.value.length;
@@ -9269,7 +10291,8 @@ window.handlePartidaServicioInput = function(idx, inputEl, event) {
     }
 };
 
-window.handlePartidaServicioSelect = function(idx, val) {
+function handlePartidaServicioSelect(idx, val) {
+    window.handlePartidaServicioSelect = handlePartidaServicioSelect;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p || !p.partidasConceptos || !p.partidasConceptos[idx]) return;
 
@@ -9294,7 +10317,8 @@ window.handlePartidaServicioSelect = function(idx, val) {
     saveOperacionesStorage();
 };
 
-window.handlePartidaConceptoInput = function(idx, inputEl, event) {
+function handlePartidaConceptoInput(idx, inputEl, event) {
+    window.handlePartidaConceptoInput = handlePartidaConceptoInput;
     if (!inputEl) return;
     const prevLen = inputEl._prevLen !== undefined ? inputEl._prevLen : (inputEl.value.length + 1);
     const currLen = inputEl.value.length;
@@ -9320,7 +10344,8 @@ window.handlePartidaConceptoInput = function(idx, inputEl, event) {
     }
 };
 
-window.updatePartidaFieldFast = function(idx, key, val) {
+function updatePartidaFieldFast(idx, key, val) {
+    window.updatePartidaFieldFast = updatePartidaFieldFast;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p || !p.partidasConceptos || !p.partidasConceptos[idx]) return;
 
@@ -9369,15 +10394,18 @@ function recalcPartidasTotals(p) {
         if (totCell) totCell.innerText = `$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     });
 
-    const subEl = document.getElementById("op-partidas-tot-sub");
-    const ivaEl = document.getElementById("op-partidas-tot-iva");
-    const retEl = document.getElementById("op-partidas-tot-ret");
-    const finEl = document.getElementById("op-partidas-tot-final");
+    p.subtotal = totSub;
+    p.iva = totIva;
+    p.total = totFinal;
 
     if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+    if (typeof window.syncProjectToConsecutivo === 'function') {
+        window.syncProjectToConsecutivo(p);
+    }
 }
 
 function renderPartidasTable(p) {
@@ -9493,7 +10521,8 @@ function renderPartidasTable(p) {
     if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 }
 
-window.addPartidaConceptoRow = function() {
+function addPartidaConceptoRow() {
+    window.addPartidaConceptoRow = addPartidaConceptoRow;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.partidasConceptos) p.partidasConceptos = [];
@@ -9502,17 +10531,27 @@ window.addPartidaConceptoRow = function() {
     saveOperacionesStorage();
 };
 
-window.updateProveedorClavesFieldFast = function(idx, key, val) {
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
-    if (!p || !p.proveedoresClaves || !p.proveedoresClaves[idx]) return;
+function updateProveedorClavesFieldFast(idx, key, val) {
+    window.updateProveedorClavesFieldFast = updateProveedorClavesFieldFast;
+    const p = (typeof getActiveOperacionesProject === 'function') 
+        ? getActiveOperacionesProject() 
+        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) return;
+    if (!p.proveedoresClaves || !Array.isArray(p.proveedoresClaves)) p.proveedoresClaves = [];
+    while (p.proveedoresClaves.length <= idx) {
+        p.proveedoresClaves.push({ proveedor: '', facturaNum: '', num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 });
+    }
 
     if (key === 'cantidad' || key === 'unitario' || key === 'retencion') {
         p.proveedoresClaves[idx][key] = val === '' ? '' : (parseFloat(val) || 0);
-        recalcProveedorClavesTotals(p);
     } else {
         p.proveedoresClaves[idx][key] = val;
     }
+    recalcProveedorClavesTotals(p);
     saveOperacionesStorage();
+    if (typeof window.syncAllOperacionesToProveedores === 'function') {
+        window.syncAllOperacionesToProveedores();
+    }
 };
 window.updateProveedorClavesField = window.updateProveedorClavesFieldFast;
 
@@ -9523,7 +10562,7 @@ function recalcProveedorClavesTotals(p) {
     items.forEach((item, idx) => {
         const cant = parseFloat(item.cantidad) || 0;
         const unit = parseFloat(item.unitario) || 0;
-        const sub = cant * unit;
+        const sub = (cant > 0 && unit > 0) ? (cant * unit) : (cant > 0 ? cant : (unit > 0 ? unit : (parseFloat(item.subtotal) || 0)));
         const iva = sub > 0 ? (sub * 0.16) : 0;
         const ret = parseFloat(item.retencion) || 0;
         const tot = (sub > 0 || ret > 0) ? (sub + iva - ret) : 0;
@@ -9561,6 +10600,7 @@ function recalcProveedorClavesTotals(p) {
     if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 }
+
 
 function renderProveedorClavesTable(p) {
     const tbody = document.getElementById("tbody-proveedor-claves");
@@ -9609,11 +10649,8 @@ function renderProveedorClavesTable(p) {
         return `
             <tr>
                 <td style="background-color: #FEF9C3;">
-                    <select class="proveedor-select" onchange="updateProveedorClavesFieldFast(${idx}, 'proveedor', this.value)">
-                        <option value="" ${!item.proveedor ? 'selected' : ''}>-- Seleccionar proveedor --</option>
-                        <option value="RAMA MULTIMODAL S DE RL DE CV" ${item.proveedor === 'RAMA MULTIMODAL S DE RL DE CV' ? 'selected' : ''}>RAMA MULTIMODAL S DE RL DE CV</option>
-                        <option value="Jennufer Marylin Gonzales Franco" ${item.proveedor === 'Jennufer Marylin Gonzales Franco' ? 'selected' : ''}>Jennufer Marylin Gonzales Franco</option>
-                        ${item.proveedor && item.proveedor !== 'RAMA MULTIMODAL S DE RL DE CV' && item.proveedor !== 'Jennufer Marylin Gonzales Franco' ? `<option value="${item.proveedor}" selected>${item.proveedor}</option>` : ''}
+                    <select class="proveedor-select" onchange="handleProveedorSelectChange('operaciones', ${idx}, this.value)">
+                        ${getProveedorOptionsHTML(item.proveedor)}
                     </select>
                 </td>
                 <td style="font-size: 11px; background-color: #FEF9C3;">
@@ -9676,13 +10713,19 @@ function renderProveedorClavesTable(p) {
     if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 }
 
-window.addProveedorClavesRow = function() {
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+function addProveedorClavesRow() {
+    window.addProveedorClavesRow = addProveedorClavesRow;
+    const p = (typeof getActiveOperacionesProject === 'function') 
+        ? getActiveOperacionesProject() 
+        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.proveedoresClaves) p.proveedoresClaves = [];
-    p.proveedoresClaves.push({ proveedor: '', facturaNum: '', num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 });
+    p.proveedoresClaves.push({ proveedor: '', facturaNum: (p.numFactura && p.numFactura !== '-' ? p.numFactura : ''), num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 });
     renderProveedorClavesTable(p);
     saveOperacionesStorage();
+    if (typeof window.syncAllOperacionesToProveedores === 'function') {
+        window.syncAllOperacionesToProveedores();
+    }
 };
 
 function renderDocumentosStatus(p) {
@@ -9725,7 +10768,8 @@ function renderDocumentosStatus(p) {
     if (progressFill) progressFill.style.width = `${(uploadedCount / 5) * 100}%`;
 }
 
-window.uploadDocItem = function(docKey) {
+function uploadDocItem(docKey) {
+    window.uploadDocItem = uploadDocItem;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.documentos) p.documentos = {};
@@ -9758,7 +10802,8 @@ window.uploadDocItem = function(docKey) {
     }, 1000);
 };
 
-window.finishOperacionesWizard = function() {
+function finishOperacionesWizard() {
+    window.finishOperacionesWizard = finishOperacionesWizard;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (p) {
         const valResult = validateProjectForFacturacion(p);
@@ -9773,7 +10818,8 @@ window.finishOperacionesWizard = function() {
     closeOperacionesDetail();
 };
 
-window.generarProyectoOperaciones = function() {
+function generarProyectoOperaciones() {
+    window.generarProyectoOperaciones = generarProyectoOperaciones;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (p) {
         // Asegurar que los datos del encabezado queden persistidos
@@ -9790,7 +10836,8 @@ window.generarProyectoOperaciones = function() {
     closeOperacionesDetail();
 };
 
-window.openNuevoProyectoModal = function() {
+function openNuevoProyectoModal() {
+    window.openNuevoProyectoModal = openNuevoProyectoModal;
     const todayStr = new Date().toISOString().split('T')[0];
     const todayDisplay = new Date().toLocaleDateString('es-MX');
 
