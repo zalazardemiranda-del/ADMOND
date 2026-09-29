@@ -8804,6 +8804,28 @@ if (typeof window !== 'undefined' && !window._opCustomSelectListenersAdded) {
     });
 }
 
+function isProjectGenerado(p) {
+    if (!p) return false;
+    if (p.generado === false || p.isNewProject === true) return false;
+    return true;
+}
+window.isProjectGenerado = isProjectGenerado;
+
+function updateGenerarProyectoButton(p) {
+    const btnGen = document.getElementById("op-btn-generar-proyecto");
+    if (!btnGen) return;
+    if (isProjectGenerado(p)) {
+        btnGen.innerHTML = 'REGRESAR A OPERACIONES <span class="material-symbols-outlined">arrow_forward</span>';
+        btnGen.className = "btn btn-primary btn-next-step op-btn-nav";
+        btnGen.onclick = () => closeOperacionesDetail();
+    } else {
+        btnGen.innerHTML = 'GENERAR PROYECTO <span class="material-symbols-outlined">check_circle</span>';
+        btnGen.className = "btn btn-primary btn-next-step op-btn-nav";
+        btnGen.onclick = () => generarProyectoOperaciones();
+    }
+}
+window.updateGenerarProyectoButton = updateGenerarProyectoButton;
+
 function openOperacionesDetail(projectId) {
     window.openOperacionesDetail = openOperacionesDetail;
     const proyectos = appState.operacionesProyectos || defaultOperacionesProyectos;
@@ -8825,19 +8847,8 @@ function openOperacionesDetail(projectId) {
     if (detailPane) detailPane.style.display = "block";
     if (topbarBack) topbarBack.style.display = "none"; // Eliminado de la parte superior
 
-    // Configuración del botón inferior en Paso 4: GENERAR PROYECTO (si es nuevo) o VOLVER A OPERACIONES (si ya fue generado)
-    const btnGen = document.getElementById("op-btn-generar-proyecto");
-    if (btnGen) {
-        if (p.generado === true) {
-            btnGen.innerHTML = 'VOLVER A OPERACIONES <span class="material-symbols-outlined">arrow_forward</span>';
-            btnGen.className = "btn btn-primary btn-next-step op-btn-nav";
-            btnGen.onclick = () => closeOperacionesDetail();
-        } else {
-            btnGen.innerHTML = 'GENERAR PROYECTO <span class="material-symbols-outlined">check_circle</span>';
-            btnGen.className = "btn btn-primary btn-next-step op-btn-nav";
-            btnGen.onclick = () => generarProyectoOperaciones();
-        }
-    }
+    // Configuración del botón inferior en Paso 4: GENERAR PROYECTO (si es nuevo) o REGRESAR A OPERACIONES (si ya fue generado)
+    updateGenerarProyectoButton(p);
 
     // Populate Step 1 (Datos de proyecto - Factura, OC, Tipo de Proyecto y Formularios)
     renderStep1View(p);
@@ -9069,6 +9080,7 @@ function goToOperacionesStep(stepNum) {
 
     if (p) {
         p.currentStep = stepNum;
+        updateGenerarProyectoButton(p);
         saveOperacionesStorage();
     }
 };
@@ -11085,8 +11097,10 @@ function generarProyectoOperaciones() {
         if (consecutivoVal) { p.numConsecutivo = consecutivoVal; p.consecutivo = consecutivoVal; p.numProyecto = consecutivoVal; }
         if (clienteVal) { p.cliente = clienteVal; p.nombreCliente = clienteVal; }
         p.generado = true;
+        p.isNewProject = false;
         p.currentStep = 4;
         p.estatus = 'PENDIENTE';
+        updateGenerarProyectoButton(p);
         saveOperacionesStorage();
     }
     alert("¡Proyecto generado y guardado en Operaciones con éxito!");
@@ -11115,6 +11129,7 @@ function openNuevoProyectoModal() {
         consecutivo: initConsecutivo,
         estatus: 'PENDIENTE',
         generado: false,
+        isNewProject: true,
         currentStep: 1,
         tipoProyecto: initTipo,
         servicioName: 'Servicio local',
