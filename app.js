@@ -8178,8 +8178,28 @@ function mergeOperacionesProjects(cloudList) {
         if (idx === -1) {
             appState.operacionesProyectos.push(cp);
         } else {
-            // Combinar los datos del proyecto
-            appState.operacionesProyectos[idx] = Object.assign({}, appState.operacionesProyectos[idx], cp);
+            const local = appState.operacionesProyectos[idx];
+            // Preservar datos locales que ya tengan información ingresada
+            const merged = Object.assign({}, cp, local);
+            
+            // Para partidasConceptos y proveedoresClaves, preferir las que contengan datos reales
+            const hasLocalPartidas = local.partidasConceptos && local.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+            const hasCloudPartidas = cp.partidasConceptos && cp.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+            if (hasLocalPartidas) {
+                merged.partidasConceptos = local.partidasConceptos;
+            } else if (hasCloudPartidas) {
+                merged.partidasConceptos = cp.partidasConceptos;
+            }
+
+            const hasLocalProv = local.proveedoresClaves && local.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+            const hasCloudProv = cp.proveedoresClaves && cp.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+            if (hasLocalProv) {
+                merged.proveedoresClaves = local.proveedoresClaves;
+            } else if (hasCloudProv) {
+                merged.proveedoresClaves = cp.proveedoresClaves;
+            }
+
+            appState.operacionesProyectos[idx] = merged;
         }
     });
 
@@ -8308,40 +8328,7 @@ function renderMonthEndWarning(proyectos) {
 function cleanOperacionesLegacyData(proyectos) {
     if (!Array.isArray(proyectos)) return;
     proyectos.forEach(p => {
-        if (p.partidasConceptos && Array.isArray(p.partidasConceptos)) {
-            p.partidasConceptos.forEach(item => {
-                if (item.servicio && item.servicio.includes("claves de venta") && (item.unitario === 50000 || item.total === 58000)) {
-                    item.servicio = '';
-                    item.concepto = '';
-                    item.cantidad = '';
-                    item.unitario = '';
-                    item.subtotal = 0;
-                    item.iva = 0;
-                    item.retencion = 0;
-                    item.total = 0;
-                }
-                if (item.cantidad === 0) item.cantidad = '';
-                if (item.unitario === 0) item.unitario = '';
-            });
-        }
-        if (p.proveedoresClaves && Array.isArray(p.proveedoresClaves)) {
-            p.proveedoresClaves.forEach(item => {
-                if (item.proveedor && (item.proveedor.includes("EN ESTA SECCION") || item.proveedor.includes("Transportes Express"))) item.proveedor = '';
-                if (item.facturaNum && (item.facturaNum.includes("UN EXPEDIENTE") || item.facturaNum.includes("FAC-9921"))) item.facturaNum = '';
-                if (item.concepto && (item.concepto.includes("SECCION PARA SELECCIONAR") || item.concepto.includes("Flete terrestre"))) item.concepto = '';
-                if (item.unitario === 25000) {
-                    item.cantidad = '';
-                    item.unitario = '';
-                    item.subtotal = 0;
-                    item.iva = 0;
-                    item.retencion = 0;
-                    item.retencionIva = 0;
-                    item.total = 0;
-                }
-                if (item.cantidad === 0) item.cantidad = '';
-                if (item.unitario === 0) item.unitario = '';
-            });
-        }
+        if (!p) return;
         if (!p.tipoProyecto) {
             const sName = (p.servicioName || '').toLowerCase();
             if (sName.includes('lavado')) {
@@ -8358,6 +8345,7 @@ function cleanOperacionesLegacyData(proyectos) {
         if (!p.infoLavado) {
             p.infoLavado = { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: (p.contenedores || []).length, observaciones: '' };
         }
+
         // Limpiar facturas y órdenes de compra predeterminadas o ficticias
         if (p.numFactura === 'F92493' || p.numFactura === 'F20059' || p.numFactura === 'F84084' || p.numFactura === 'F60944' || (p.numFactura && p.numFactura.startsWith('FAC'))) {
             p.numFactura = '';
@@ -8828,14 +8816,30 @@ window.updateGenerarProyectoButton = updateGenerarProyectoButton;
 
 function openOperacionesDetail(projectId) {
     window.openOperacionesDetail = openOperacionesDetail;
-    const proyectos = appState.operacionesProyectos || defaultOperacionesProyectos;
-    let p = proyectos.find(x => x.id === projectId || x.numProyecto === projectId || x.consecutivo === projectId);
+    if (!appState.operacionesProyectos || appState.operacionesProyectos.length === 0) {
+        try {
+            const stored = localStorage.getItem('rp_operaciones_proyectos');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    appState.operacionesProyectos = parsed;
+                }
+            }
+        } catch(e) {}
+    }
+    const proyectos = (appState.operacionesProyectos && appState.operacionesProyectos.length > 0)
+        ? appState.operacionesProyectos
+        : defaultOperacionesProyectos;
+    let p = proyectos.find(x => x && (x.id === projectId || x.numProyecto === projectId || x.consecutivo === projectId));
     if (!p) {
         p = proyectos[0];
     }
     if (!p) return;
 
     appState.activeOperacionesProjectId = p.id;
+    try {
+        localStorage.setItem('rp_active_operaciones_project_id', p.id);
+    } catch(e) {}
     appState.contenedoresPage = 0;
     appState.prefacturaPage = 0;
 
