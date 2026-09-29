@@ -202,18 +202,11 @@ const runInitialAppSetup = async () => {
     // Load Administration Data
     let storedProv = [];
     try {
-        storedProv = JSON.parse(localStorage.getItem('rp_proveedores_data')) || defaultProveedores;
+        storedProv = JSON.parse(localStorage.getItem('rp_proveedores_data')) || [];
     } catch(e) {
-        storedProv = defaultProveedores;
+        storedProv = [];
     }
-    // Purga estricta: Solo filas enlazadas con Operaciones (con OP válido)
-    appState.proveedores = (Array.isArray(storedProv) ? storedProv : []).filter(r => r && r.op && String(r.op).trim() !== '');
-    appState.proveedores.forEach((r, i) => {
-        r.folioFF = `FF-${String(i + 1).padStart(2, '0')}`;
-    });
-    try {
-        localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
-    } catch(e) {}
+    appState.proveedores = Array.isArray(storedProv) ? storedProv : [];
     appState.nominas = JSON.parse(localStorage.getItem('rp_nominas_data')) || defaultNominas;
     appState.archivosQuincenales = JSON.parse(localStorage.getItem('rp_archivos_quincenales')) || [];
     appState.viewingArchiveId = null;
@@ -1176,7 +1169,15 @@ function renderProveedorChips() {
         appState.selectedProveedorFilter = 'all';
     }
 
-    const validLinked = (appState.proveedores || []).filter(p => p && p.op && String(p.op).trim() !== '');
+    const validLinked = (appState.proveedores || []).filter(p => p && (
+        (p.op && String(p.op).trim() !== '') ||
+        (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
+        (p.facturaProveedor && String(p.facturaProveedor).trim() !== '') ||
+        (p.folioFF && String(p.folioFF).trim() !== '') ||
+        (p.subtotal && p.subtotal > 0) ||
+        (p.total && p.total > 0) ||
+        (p.servicio && String(p.servicio).trim() !== '')
+    ));
 
     // "Todos" Chip
     const allChip = document.createElement("button");
@@ -1331,7 +1332,15 @@ window.filterProveedoresByStatus = filterProveedoresByStatus;
 
 function updateProveedorStatusCounts() {
     window.updateProveedorStatusCounts = updateProveedorStatusCounts;
-    let list = (appState.proveedores || []).filter(p => p && p.op && String(p.op).trim() !== '');
+    let list = (appState.proveedores || []).filter(p => p && (
+        (p.op && String(p.op).trim() !== '') ||
+        (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
+        (p.facturaProveedor && String(p.facturaProveedor).trim() !== '') ||
+        (p.folioFF && String(p.folioFF).trim() !== '') ||
+        (p.subtotal && p.subtotal > 0) ||
+        (p.total && p.total > 0) ||
+        (p.servicio && String(p.servicio).trim() !== '')
+    ));
     if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
         list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
     }
@@ -1428,34 +1437,50 @@ function syncAllOperacionesToProveedores() {
 
                 const cant = parseFloat(item.cantidad) || 0;
                 const unit = parseFloat(item.unitario) || 0;
-                const sub = (cant > 0 && unit > 0) ? (cant * unit) : (cant > 0 ? cant : (unit > 0 ? unit : (parseFloat(item.subtotal) || 0)));
-                const ret = parseFloat(item.retencion) || (parseFloat(item.ret4) || 0);
-                const iva = (item.iva !== undefined && item.iva !== null && item.iva !== '' && Number(item.iva) > 0) ? Number(item.iva) : (sub > 0 ? (sub * 0.16) : 0);
-                const tot = (sub > 0 || ret > 0) ? (sub + iva - ret) : (parseFloat(item.total) || 0);
+                const sub = cant * unit;
+                const rawRetIva = item.retencionIvaPct !== undefined && item.retencionIvaPct !== '' ? item.retencionIvaPct : (item.retencionIva !== undefined && item.retencionIva !== '' ? item.retencionIva : (item.retencion !== undefined && item.retencion !== '' ? item.retencion : ''));
+                const retIvaPct = (rawRetIva === '' || rawRetIva === null || rawRetIva === undefined) ? 0 : (parseFloat(rawRetIva) || 0);
+                const retIvaAmount = sub > 0 ? (sub * (retIvaPct / 100)) : 0;
+
+                const rawRetIsr = item.retencionIsrPct !== undefined && item.retencionIsrPct !== '' ? item.retencionIsrPct : (item.retencionIsr !== undefined && item.retencionIsr !== '' ? item.retencionIsr : (item.retIsr !== undefined && item.retIsr !== '' ? item.retIsr : ''));
+                const retIsrPct = (rawRetIsr === '' || rawRetIsr === null || rawRetIsr === undefined) ? 0 : (parseFloat(rawRetIsr) || 0);
+                const retIsrAmount = sub > 0 ? (sub * (retIsrPct / 100)) : 0;
+
+                const iva = sub > 0 ? (sub * 0.16) : 0;
+                const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
 
                 const provName = (item.proveedor && !item.proveedor.includes('-- Seleccionar')) ? item.proveedor.trim() : '';
                 const concepto = (item.concepto && !item.concepto.includes('-- Seleccionar')) ? item.concepto.trim() : '';
 
-                // Factura: Prioridad 1 Factura de la fila (FE5556, FE 152), Prioridad 2 Factura del proyecto
-                let facturaNum = '';
+                // Factura Proveedor: Proviene de la columna 'Factura #' de la fila en Operaciones (Imagen 2)
+                let facturaProveedor = '';
                 if (item.facturaNum && String(item.facturaNum).trim() !== '' && String(item.facturaNum).trim() !== '-') {
-                    facturaNum = String(item.facturaNum).trim();
-                } else if (p.numFactura && String(p.numFactura).trim() !== '' && String(p.numFactura).trim() !== '-') {
-                    facturaNum = String(p.numFactura).trim();
+                    facturaProveedor = String(item.facturaNum).trim();
+                } else if (item.facturaProveedor && String(item.facturaProveedor).trim() !== '' && String(item.facturaProveedor).trim() !== '-') {
+                    facturaProveedor = String(item.facturaProveedor).trim();
+                }
+
+                // Factura de Proyecto/Cliente (Columna Factura al final de la tabla)
+                let facturaProyecto = '';
+                if (p.numFactura && String(p.numFactura).trim() !== '' && String(p.numFactura).trim() !== '-') {
+                    facturaProyecto = String(p.numFactura).trim();
                 } else if (p.factura && String(p.factura).trim() !== '' && String(p.factura).trim() !== '-') {
-                    facturaNum = String(p.factura).trim();
+                    facturaProyecto = String(p.factura).trim();
                 }
 
                 // La fila es válida si tiene proveedor, factura, concepto, o cantidades/importes
                 const hasData = Boolean(
                     provName ||
-                    facturaNum ||
+                    facturaProveedor ||
                     concepto ||
                     sub > 0 ||
                     tot > 0 ||
                     cant > 0 ||
                     unit > 0 ||
-                    ret > 0
+                    retIvaPct > 0 ||
+                    retIsrPct > 0 ||
+                    retIvaAmount > 0 ||
+                    retIsrAmount > 0
                 );
 
                 if (!hasData) return;
@@ -1469,25 +1494,27 @@ function syncAllOperacionesToProveedores() {
                 // Mantener sincronizado el objeto del proyecto en memoria
                 item.subtotal = sub;
                 item.iva = iva;
-                item.retencion = ret;
                 item.total = tot;
                 item.p = savedStatus;
                 item.estatus = savedStatus;
 
-                const nextNum = newProveedoresList.length + 1;
                 newProveedoresList.push({
-                    folioFF: `FF-${String(nextNum).padStart(2, '0')}`,
+                    folioFF: facturaProveedor,
+                    facturaProveedor: facturaProveedor,
+                    facturaNum: facturaProveedor,
                     proveedor: provName || (p.proveedor || '-'),
                     fecha: p.fecha || (p.infoViaje && p.infoViaje.fecha) || new Date().toISOString().split('T')[0],
                     servicio: concepto || "Logistic",
                     subtotal: sub,
                     iva: iva,
-                    ret4: ret,
-                    retIsr: 0,
+                    ret4: retIvaAmount,
+                    retIsr: retIsrAmount,
+                    retIvaPct: retIvaPct,
+                    retIsrPct: retIsrPct,
                     total: tot,
                     p: savedStatus,
                     estatus: savedStatus,
-                    folioFE: facturaNum,
+                    folioFE: facturaProyecto,
                     op: projOp,
                     opRefId: opRefId,
                     opRowIndex: idx,
@@ -1501,7 +1528,9 @@ function syncAllOperacionesToProveedores() {
         });
     }
 
-    appState.proveedores = newProveedoresList;
+    // Preservar filas manuales que hayan sido creadas en Control de Proveedores (sin opRefId de Operaciones)
+    const existingManualRows = (appState.proveedores || []).filter(r => r && !r.opRefId && !r.projectId);
+    appState.proveedores = [...newProveedoresList, ...existingManualRows];
     saveToStorage();
     if (typeof updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
     if (typeof renderProveedorChips === 'function') renderProveedorChips();
@@ -1529,12 +1558,17 @@ function syncProveedorRowBackToOperaciones(row) {
     if (!p.proveedoresClaves) p.proveedoresClaves = [];
     const rIdx = (row.opRowIndex !== undefined && row.opRowIndex !== null) ? row.opRowIndex : 0;
 
-    // Solo sincronizar el estatus hacia Operaciones, sin sobreescribir las cantidades financieras
+    // Sincronizar estatus y factura de proveedor hacia Operaciones
     if (p.proveedoresClaves[rIdx]) {
         const item = p.proveedoresClaves[rIdx];
         if (row.p) {
             item.p = row.p;
             item.estatus = row.p;
+        }
+        if (row.facturaProveedor !== undefined) {
+            item.facturaNum = row.facturaProveedor;
+        } else if (row.folioFF !== undefined) {
+            item.facturaNum = row.folioFF;
         }
     }
 
@@ -1671,8 +1705,16 @@ function renderProveedores() {
     if (!tbody) return;
     tbody.innerHTML = "";
     
-    // Filtrar estrictamente solo filas enlazadas con Operaciones (con OP válido)
-    let list = (appState.proveedores || []).filter(p => p && p.op && String(p.op).trim() !== '');
+    // Filtrar filas válidas para mostrar en Control de Proveedores (sin borrar ninguna tabla)
+    let list = (appState.proveedores || []).filter(p => p && (
+        (p.op && String(p.op).trim() !== '') ||
+        (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
+        (p.facturaProveedor && String(p.facturaProveedor).trim() !== '') ||
+        (p.folioFF && String(p.folioFF).trim() !== '') ||
+        (p.subtotal && p.subtotal > 0) ||
+        (p.total && p.total > 0) ||
+        (p.servicio && String(p.servicio).trim() !== '')
+    ));
     
     // Filter by active chip
     if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
@@ -1717,10 +1759,12 @@ function renderProveedores() {
             estatusClass = 'estatus-p';
         }
 
+        const factProv = item.facturaProveedor || item.folioFF || item.facturaNum || "";
+
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td style="text-align: center;">
-                <input type="text" class="excel-input" value="${item.folioFF || ""}" oninput="updateProveedorCell(${realIndex}, 'folioFF', this.value)" style="text-align: center;">
+                <input type="text" class="excel-input" value="${factProv}" placeholder="-" oninput="updateProveedorCell(${realIndex}, 'facturaProveedor', this.value)" style="text-align: center; font-weight: 600;">
             </td>
             <td style="padding-left: 8px;">
                 <span class="prov-name-locked" title="${item.proveedor || ''}">${item.proveedor || '-'}</span>
@@ -1776,6 +1820,11 @@ function updateProveedorCell(index, key, val) {
     window.updateProveedorCell = updateProveedorCell;
     if (appState.proveedores && appState.proveedores[index]) {
         appState.proveedores[index][key] = val;
+        if (key === 'facturaProveedor' || key === 'folioFF' || key === 'facturaNum') {
+            appState.proveedores[index].facturaProveedor = val;
+            appState.proveedores[index].folioFF = val;
+            appState.proveedores[index].facturaNum = val;
+        }
         if (key === 'p') {
             appState.proveedores[index].estatus = val;
         }
@@ -1845,7 +1894,15 @@ function recalculateProveedoresTableTotals() {
     let sumRetIsr = 0;
     let sumTotal = 0;
     
-    let list = (appState.proveedores || []).filter(p => p && p.op && String(p.op).trim() !== '');
+    let list = (appState.proveedores || []).filter(p => p && (
+        (p.op && String(p.op).trim() !== '') ||
+        (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
+        (p.facturaProveedor && String(p.facturaProveedor).trim() !== '') ||
+        (p.folioFF && String(p.folioFF).trim() !== '') ||
+        (p.subtotal && p.subtotal > 0) ||
+        (p.total && p.total > 0) ||
+        (p.servicio && String(p.servicio).trim() !== '')
+    ));
     if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
         list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
     }
@@ -8137,12 +8194,16 @@ function validateProjectForFacturacion(p) {
 
     const numFactura = (p.numFactura || '').trim();
     const numOC = (p.numOC || '').trim();
+    const cliente = (p.cliente || p.nombreCliente || (p.infoLavado && p.infoLavado.clienteFacturar) || '').trim();
 
     if (!numFactura) {
         errors.push("El campo 'Número de factura' (Paso 1) debe estar lleno.");
     }
     if (!numOC) {
         errors.push("El campo 'Número de OC' (Paso 1) debe estar lleno.");
+    }
+    if (!cliente) {
+        errors.push("El campo 'Nombre del cliente' (Paso 3) debe estar lleno.");
     }
 
     // Validar tabla de proveedores y claves de compra (Paso 2, Página 2)
@@ -8274,6 +8335,7 @@ function cleanOperacionesLegacyData(proyectos) {
                     item.subtotal = 0;
                     item.iva = 0;
                     item.retencion = 0;
+                    item.retencionIva = 0;
                     item.total = 0;
                 }
                 if (item.cantidad === 0) item.cantidad = '';
@@ -8588,6 +8650,13 @@ function archivarExpedienteActivo() {
         return;
     }
 
+    // 0. REQUISITO: Nombre del cliente escrito en Prefactura (Paso 3)
+    const clienteVal = (p.cliente || p.nombreCliente || (p.infoLavado && p.infoLavado.clienteFacturar) || (document.getElementById("op-cliente-input") ? document.getElementById("op-cliente-input").value : "") || "").trim();
+    if (!clienteVal) {
+        alert("⚠️ No se puede archivar el expediente:\n\nDebe ingresar el Nombre del Cliente en la sección de Prefactura (Paso 3).");
+        return;
+    }
+
     // 1. REQUISITO IMAGEN 4: Número de factura escrita en Datos de proyecto (Paso 2)
     const facturaInput = document.getElementById("op-step1-factura-num");
     const numFacturaVal = ((facturaInput ? facturaInput.value : p.numFactura) || "").trim();
@@ -8754,7 +8823,21 @@ function openOperacionesDetail(projectId) {
 
     if (listPane) listPane.style.display = "none";
     if (detailPane) detailPane.style.display = "block";
-    if (topbarBack) topbarBack.style.display = "block";
+    if (topbarBack) topbarBack.style.display = "none"; // Eliminado de la parte superior
+
+    // Configuración del botón inferior en Paso 4: GENERAR PROYECTO (si es nuevo) o VOLVER A OPERACIONES (si ya fue generado)
+    const btnGen = document.getElementById("op-btn-generar-proyecto");
+    if (btnGen) {
+        if (p.generado === true) {
+            btnGen.innerHTML = 'VOLVER A OPERACIONES <span class="material-symbols-outlined">arrow_forward</span>';
+            btnGen.className = "btn btn-primary btn-next-step op-btn-nav";
+            btnGen.onclick = () => closeOperacionesDetail();
+        } else {
+            btnGen.innerHTML = 'GENERAR PROYECTO <span class="material-symbols-outlined">check_circle</span>';
+            btnGen.className = "btn btn-primary btn-next-step op-btn-nav";
+            btnGen.onclick = () => generarProyectoOperaciones();
+        }
+    }
 
     // Populate Step 1 (Datos de proyecto - Factura, OC, Tipo de Proyecto y Formularios)
     renderStep1View(p);
@@ -8765,6 +8848,12 @@ function openOperacionesDetail(projectId) {
     document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = p.numFactura || "-");
     document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = p.numOC || "-");
     document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = consecutivoDisplay);
+
+    // Populate Nombre del Cliente en Prefactura
+    const clienteInput = document.getElementById("op-cliente-input");
+    if (clienteInput) {
+        clienteInput.value = p.cliente || p.nombreCliente || (p.infoLavado && p.infoLavado.clienteFacturar) || '';
+    }
 
     renderPartidasTable(p);
     renderProveedorClavesTable(p);
@@ -9765,13 +9854,14 @@ function convertirPrefacturaPDF() {
         const unit = parseFloat(item.unitario) || 0;
         const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
-        const ret = parseFloat(item.retencion) || 0;
-        const tot = (sub > 0 || ret > 0) ? (sub + iva - ret) : 0;
+        const retPct = parseFloat(item.retencionPct !== undefined ? item.retencionPct : item.retencion) || 0;
+        const retAmount = sub > 0 ? (sub * (retPct / 100)) : 0;
+        const tot = (sub > 0 || iva > 0 || retAmount > 0) ? (sub + iva - retAmount) : 0;
 
-        if (item.servicio || item.concepto || unit > 0 || cant > 0 || ret > 0) {
+        if (item.servicio || item.concepto || unit > 0 || cant > 0 || retPct > 0) {
             totSub1 += sub;
             totIva1 += iva;
-            totRet1 += ret;
+            totRet1 += retAmount;
             totFinal1 += tot;
         }
 
@@ -9779,7 +9869,7 @@ function convertirPrefacturaPDF() {
         const unitDisplay = unit > 0 ? `$${unit.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : '$0.00';
         const subDisplay = `$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
         const ivaDisplay = `$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-        const retDisplay = `$${ret.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const retDisplay = retPct > 0 ? `${retPct}%` : '0%';
         const totDisplay = `$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 
         return `
@@ -9801,27 +9891,31 @@ function convertirPrefacturaPDF() {
     let proveedores = p.proveedoresClaves;
     if (!proveedores || proveedores.length === 0) {
         proveedores = [
-            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
+            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 }
         ];
     }
 
-    let totSub2 = 0, totIva2 = 0, totRet2 = 0, totFinal2 = 0;
+    let totSub2 = 0, totIva2 = 0, totRetIva2 = 0, totRetIsr2 = 0, totFinal2 = 0;
     const proveedoresRowsHTML = proveedores.map((item, idx) => {
         const cant = parseFloat(item.cantidad) || 0;
         const unit = parseFloat(item.unitario) || 0;
         const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
-        const ret = parseFloat(item.retencion) || 0;
-        const tot = (sub > 0 || ret > 0) ? (sub + iva - ret) : 0;
+        const retIvaPct = parseFloat(item.retencionIvaPct !== undefined ? item.retencionIvaPct : (item.retencionIva !== undefined ? item.retencionIva : (item.retencion !== undefined ? item.retencion : item.ret4))) || 0;
+        const retIsrPct = parseFloat(item.retencionIsrPct !== undefined ? item.retencionIsrPct : (item.retencionIsr !== undefined ? item.retencionIsr : item.retIsr)) || 0;
+        const retIvaAmount = sub > 0 ? (sub * (retIvaPct / 100)) : 0;
+        const retIsrAmount = sub > 0 ? (sub * (retIsrPct / 100)) : 0;
+        const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
 
-        if (item.proveedor || item.facturaNum || item.concepto || unit > 0 || cant > 0 || ret > 0) {
+        if (item.proveedor || item.facturaNum || item.concepto || unit > 0 || cant > 0 || retIvaPct > 0 || retIsrPct > 0) {
             totSub2 += sub;
             totIva2 += iva;
-            totRet2 += ret;
+            totRetIva2 += retIvaAmount;
+            totRetIsr2 += retIsrAmount;
             totFinal2 += tot;
         }
 
@@ -9829,7 +9923,8 @@ function convertirPrefacturaPDF() {
         const unitDisplay = unit > 0 ? `$${unit.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : '$0.00';
         const subDisplay = `$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
         const ivaDisplay = `$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-        const retDisplay = `$${ret.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const retIvaDisplay = retIvaPct > 0 ? `${retIvaPct}%` : '0%';
+        const retIsrDisplay = retIsrPct > 0 ? `${retIsrPct}%` : '0%';
         const totDisplay = `$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 
         return `
@@ -9842,7 +9937,8 @@ function convertirPrefacturaPDF() {
                 <td class="text-right">${unitDisplay}</td>
                 <td class="text-right">${subDisplay}</td>
                 <td class="text-right">${ivaDisplay}</td>
-                <td class="text-right">${retDisplay}</td>
+                <td class="text-right">${retIvaDisplay}</td>
+                <td class="text-right">${retIsrDisplay}</td>
                 <td class="text-right font-bold">${totDisplay}</td>
             </tr>
         `;
@@ -10140,16 +10236,17 @@ function convertirPrefacturaPDF() {
             <table class="pdf-table">
                 <thead>
                     <tr>
-                        <th style="width: 18%;">Proveedor</th>
+                        <th style="width: 17%;">Proveedor</th>
                         <th style="width: 10%;">Factura #</th>
-                        <th style="width: 4%;" class="text-center">#</th>
-                        <th style="width: 20%;">Concepto</th>
-                        <th style="width: 7%;" class="text-right">Cantidad</th>
-                        <th style="width: 11%;" class="text-right">Unitario</th>
-                        <th style="width: 11%;" class="text-right">Sub total</th>
+                        <th style="width: 3%;" class="text-center">#</th>
+                        <th style="width: 18%;">Concepto</th>
+                        <th style="width: 6%;" class="text-right">Cantidad</th>
+                        <th style="width: 10%;" class="text-right">Unitario</th>
+                        <th style="width: 10%;" class="text-right">Sub total</th>
                         <th style="width: 7%;" class="text-right">IVA</th>
-                        <th style="width: 7%;" class="text-right">Retención</th>
-                        <th style="width: 11%;" class="text-right">Total</th>
+                        <th style="width: 7%;" class="text-right">Retención IVA</th>
+                        <th style="width: 7%;" class="text-right">Retención ISR</th>
+                        <th style="width: 10%;" class="text-right">Total</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -10160,7 +10257,8 @@ function convertirPrefacturaPDF() {
                         <td colspan="6"><strong>Totales</strong></td>
                         <td class="text-right font-bold">$${totSub2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                         <td class="text-right font-bold">$${totIva2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
-                        <td class="text-right font-bold">$${totRet2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                        <td class="text-right font-bold">$${totRetIva2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                        <td class="text-right font-bold">$${totRetIsr2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                         <td class="text-right final-tot">$${totFinal2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                     </tr>
                 </tfoot>
@@ -10293,8 +10391,14 @@ function handlePartidaServicioInput(idx, inputEl, event) {
 
 function handlePartidaServicioSelect(idx, val) {
     window.handlePartidaServicioSelect = handlePartidaServicioSelect;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
-    if (!p || !p.partidasConceptos || !p.partidasConceptos[idx]) return;
+    const p = (typeof getActiveOperacionesProject === 'function') 
+        ? getActiveOperacionesProject() 
+        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) return;
+    if (!p.partidasConceptos || !Array.isArray(p.partidasConceptos)) p.partidasConceptos = [];
+    while (p.partidasConceptos.length <= idx) {
+        p.partidasConceptos.push({ servicio: '', num: p.partidasConceptos.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 });
+    }
 
     p.partidasConceptos[idx].servicio = val;
 
@@ -10346,56 +10450,92 @@ function handlePartidaConceptoInput(idx, inputEl, event) {
 
 function updatePartidaFieldFast(idx, key, val) {
     window.updatePartidaFieldFast = updatePartidaFieldFast;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
-    if (!p || !p.partidasConceptos || !p.partidasConceptos[idx]) return;
+    const p = (typeof getActiveOperacionesProject === 'function') 
+        ? getActiveOperacionesProject() 
+        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) return;
+    if (!p.partidasConceptos || !Array.isArray(p.partidasConceptos)) p.partidasConceptos = [];
+    while (p.partidasConceptos.length <= idx) {
+        p.partidasConceptos.push({ servicio: '', num: p.partidasConceptos.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 });
+    }
 
     if (key === 'cantidad' || key === 'unitario' || key === 'retencion') {
         p.partidasConceptos[idx][key] = val === '' ? '' : (parseFloat(val) || 0);
-        recalcPartidasTotals(p);
     } else {
         p.partidasConceptos[idx][key] = val;
     }
+    recalcPartidasTotals(p);
     saveOperacionesStorage();
 };
 window.updatePartidaField = window.updatePartidaFieldFast;
 
 function recalcPartidasTotals(p) {
+    if (!p) {
+        p = (typeof getActiveOperacionesProject === 'function') 
+            ? getActiveOperacionesProject() 
+            : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    }
+    if (!p) return;
+
+    const subEl = document.getElementById("op-partidas-tot-sub");
+    const ivaEl = document.getElementById("op-partidas-tot-iva");
+    const retEl = document.getElementById("op-partidas-tot-ret");
+    const finEl = document.getElementById("op-partidas-tot-final");
+    const tbody = document.getElementById("tbody-partidas-conceptos");
+
     const items = p.partidasConceptos || [];
     let totSub = 0, totIva = 0, totRet = 0, totFinal = 0;
 
     items.forEach((item, idx) => {
-        const cant = parseFloat(item.cantidad) || 0;
-        const unit = parseFloat(item.unitario) || 0;
+        let cant = (item.cantidad === '' || item.cantidad === undefined || item.cantidad === null) ? 0 : (parseFloat(item.cantidad) || 0);
+        let unit = (item.unitario === '' || item.unitario === undefined || item.unitario === null) ? 0 : (parseFloat(item.unitario) || 0);
+        let rawRet = (item.retencion === '' || item.retencion === undefined || item.retencion === null) ? '' : item.retencion;
+
+        if (tbody && tbody.children[idx]) {
+            const tr = tbody.children[idx];
+            const inputs = tr.querySelectorAll('input');
+            // inputs[0] = concepto, inputs[1] = cantidad, inputs[2] = unitario, inputs[3] = retencion
+            if (inputs.length >= 4) {
+                if (inputs[1].value !== '') cant = parseFloat(inputs[1].value) || 0;
+                else if (item.cantidad === '') cant = 0;
+                if (inputs[2].value !== '') unit = parseFloat(inputs[2].value) || 0;
+                else if (item.unitario === '') unit = 0;
+                if (inputs[3].value !== '') rawRet = inputs[3].value;
+                else if (item.retencion === '') rawRet = '';
+            }
+        }
+
         const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
-        const ret = parseFloat(item.retencion) || 0;
-        const tot = (sub > 0 || ret > 0) ? (sub + iva - ret) : 0;
+        const retPct = (rawRet === '' || rawRet === null || rawRet === undefined) ? 0 : (parseFloat(rawRet) || 0);
+        const retAmount = sub > 0 ? (sub * (retPct / 100)) : 0;
+        const tot = (sub > 0 || iva > 0 || retAmount > 0) ? (sub + iva - retAmount) : 0;
 
         item.subtotal = sub;
         item.iva = iva;
-        item.retencion = ret;
+        item.retencionPct = retPct;
+        item.retencionMonto = retAmount;
         item.total = tot;
 
-        if (item.servicio || item.concepto || unit > 0 || cant > 0 || ret > 0) {
+        if (sub > 0 || tot !== 0 || cant > 0 || unit > 0 || retPct > 0 || item.servicio || item.concepto) {
             totSub += sub;
             totIva += iva;
-            totRet += ret;
+            totRet += retAmount;
             totFinal += tot;
         }
 
         const subCell = document.getElementById(`partida-sub-${idx}`);
         const ivaCell = document.getElementById(`partida-iva-${idx}`);
-        const retCell = document.getElementById(`partida-ret-${idx}`);
         const totCell = document.getElementById(`partida-tot-${idx}`);
 
         if (subCell) subCell.innerText = `$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
         if (ivaCell) ivaCell.innerText = `$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-        if (retCell) retCell.innerText = `$${ret.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
         if (totCell) totCell.innerText = `$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     });
 
     p.subtotal = totSub;
     p.iva = totIva;
+    p.retencion = totRet;
     p.total = totFinal;
 
     if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
@@ -10409,53 +10549,55 @@ function recalcPartidasTotals(p) {
 }
 
 function renderPartidasTable(p) {
+    if (!p) {
+        p = (typeof getActiveOperacionesProject === 'function') 
+            ? getActiveOperacionesProject() 
+            : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    }
+    if (!p) return;
     const tbody = document.getElementById("tbody-partidas-conceptos");
     if (!tbody) return;
 
-    // Limpiar textos por defecto antiguos si existieran
-    if (p.partidasConceptos && p.partidasConceptos.length > 0) {
-        p.partidasConceptos.forEach(item => {
-            if (item.servicio && item.servicio.includes("claves de venta") && (item.unitario === 50000 || item.total === 58000)) {
-                item.servicio = '';
-                item.concepto = '';
-                item.cantidad = '';
-                item.unitario = '';
-                item.subtotal = 0;
-                item.iva = 0;
-                item.retencion = 0;
-                item.total = 0;
-            }
-        });
+    if (!p.partidasConceptos || !Array.isArray(p.partidasConceptos) || p.partidasConceptos.length === 0) {
+        p.partidasConceptos = [
+            { servicio: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 },
+            { servicio: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 },
+            { servicio: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 },
+            { servicio: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 },
+            { servicio: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 }
+        ];
+    }
+    while (p.partidasConceptos.length < 5) {
+        p.partidasConceptos.push({ servicio: '', num: p.partidasConceptos.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 });
     }
 
     let items = p.partidasConceptos;
-    if (!items || items.length === 0) {
-        items = [
-            { servicio: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { servicio: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
-        ];
-        p.partidasConceptos = items;
-    }
-
     let totSub = 0, totIva = 0, totRet = 0, totFinal = 0;
 
     tbody.innerHTML = items.map((item, idx) => {
-        const cant = parseFloat(item.cantidad) || 0;
-        const unit = parseFloat(item.unitario) || 0;
+        const cant = (item.cantidad === '' || item.cantidad === undefined || item.cantidad === null) ? 0 : (parseFloat(item.cantidad) || 0);
+        const unit = (item.unitario === '' || item.unitario === undefined || item.unitario === null) ? 0 : (parseFloat(item.unitario) || 0);
         const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
-        const ret = parseFloat(item.retencion) || 0;
-        const tot = (sub > 0 || ret > 0) ? (sub + iva - ret) : 0;
+        const rawRet = (item.retencion === '' || item.retencion === undefined || item.retencion === null) ? '' : item.retencion;
+        const retPct = (rawRet === '' || rawRet === null || rawRet === undefined) ? 0 : (parseFloat(rawRet) || 0);
+        const retAmount = sub > 0 ? (sub * (retPct / 100)) : 0;
+        const tot = (sub > 0 || iva > 0 || retAmount > 0) ? (sub + iva - retAmount) : 0;
 
-        if (item.servicio || item.concepto || unit > 0 || cant > 0 || ret > 0) {
+        item.subtotal = sub;
+        item.iva = iva;
+        item.retencionPct = retPct;
+        item.retencionMonto = retAmount;
+        item.total = tot;
+
+        if (sub > 0 || tot !== 0 || cant > 0 || unit > 0 || retPct > 0 || item.servicio || item.concepto) {
             totSub += sub;
             totIva += iva;
-            totRet += ret;
+            totRet += retAmount;
             totFinal += tot;
         }
+
+        const retVal = (item.retencion !== undefined && item.retencion !== '' && item.retencion !== 0) ? item.retencion : '';
 
         return `
             <tr>
@@ -10498,12 +10640,15 @@ function renderPartidasTable(p) {
                 <td style="text-align:right;" id="partida-sub-${idx}">$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                 <td style="text-align:right;" id="partida-iva-${idx}">$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                 <td style="text-align:right;">
-                    <input type="number" 
-                           step="any"
-                           value="${item.retencion !== undefined && item.retencion !== '' && item.retencion !== 0 ? item.retencion : ''}" 
-                           placeholder="$0.00" 
-                           oninput="updatePartidaFieldFast(${idx}, 'retencion', this.value)" 
-                           style="width:75px; text-align:right; border:none; background:transparent;" />
+                    <div style="display:inline-flex; align-items:center; justify-content:flex-end; gap:2px;">
+                        <input type="number" 
+                               step="any"
+                               value="${retVal}" 
+                               placeholder="0" 
+                               oninput="updatePartidaFieldFast(${idx}, 'retencion', this.value)" 
+                               style="width:50px; text-align:right; border:none; background:transparent; outline:none;" />
+                        <span style="font-size:12px; font-weight:700; color:#475569;">%</span>
+                    </div>
                 </td>
                 <td style="text-align:right; font-weight:700;" id="partida-tot-${idx}">$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
             </tr>
@@ -10519,14 +10664,34 @@ function renderPartidasTable(p) {
     if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+    recalcPartidasTotals(p);
 }
+
+function handleClienteInput(val) {
+    window.handleClienteInput = handleClienteInput;
+    const p = (typeof getActiveOperacionesProject === 'function') 
+        ? getActiveOperacionesProject() 
+        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p) return;
+    p.cliente = val;
+    p.nombreCliente = val;
+    if (p.infoLavado) p.infoLavado.clienteFacturar = val;
+    saveOperacionesStorage();
+    if (typeof window.syncProjectToConsecutivo === 'function') {
+        window.syncProjectToConsecutivo(p);
+    }
+}
+window.handleClienteInput = handleClienteInput;
 
 function addPartidaConceptoRow() {
     window.addPartidaConceptoRow = addPartidaConceptoRow;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (typeof getActiveOperacionesProject === 'function') 
+        ? getActiveOperacionesProject() 
+        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.partidasConceptos) p.partidasConceptos = [];
-    p.partidasConceptos.push({ servicio: '', num: p.partidasConceptos.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 });
+    p.partidasConceptos.push({ servicio: '', num: p.partidasConceptos.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 });
     renderPartidasTable(p);
     saveOperacionesStorage();
 };
@@ -10539,11 +10704,21 @@ function updateProveedorClavesFieldFast(idx, key, val) {
     if (!p) return;
     if (!p.proveedoresClaves || !Array.isArray(p.proveedoresClaves)) p.proveedoresClaves = [];
     while (p.proveedoresClaves.length <= idx) {
-        p.proveedoresClaves.push({ proveedor: '', facturaNum: '', num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 });
+        p.proveedoresClaves.push({ proveedor: '', facturaNum: '', num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 });
     }
 
-    if (key === 'cantidad' || key === 'unitario' || key === 'retencion') {
+    if (key === 'cantidad' || key === 'unitario') {
         p.proveedoresClaves[idx][key] = val === '' ? '' : (parseFloat(val) || 0);
+    } else if (key === 'retencionIva' || key === 'retencion') {
+        const valClean = val === '' ? '' : (parseFloat(val) || 0);
+        p.proveedoresClaves[idx].retencionIva = valClean;
+        p.proveedoresClaves[idx].retencionIvaPct = valClean;
+        p.proveedoresClaves[idx].retencion = valClean;
+    } else if (key === 'retencionIsr') {
+        const valClean = val === '' ? '' : (parseFloat(val) || 0);
+        p.proveedoresClaves[idx].retencionIsr = valClean;
+        p.proveedoresClaves[idx].retIsr = valClean;
+        p.proveedoresClaves[idx].retencionIsrPct = valClean;
     } else {
         p.proveedoresClaves[idx][key] = val;
     }
@@ -10556,94 +10731,154 @@ function updateProveedorClavesFieldFast(idx, key, val) {
 window.updateProveedorClavesField = window.updateProveedorClavesFieldFast;
 
 function recalcProveedorClavesTotals(p) {
+    if (!p) {
+        p = (typeof getActiveOperacionesProject === 'function') 
+            ? getActiveOperacionesProject() 
+            : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    }
+    if (!p) return;
     const items = p.proveedoresClaves || [];
-    let totSub = 0, totIva = 0, totRet = 0, totFinal = 0;
+    const tbody = document.getElementById("tbody-proveedor-claves");
+    let totSub = 0, totIva = 0, totRetIva = 0, totRetIsr = 0, totFinal = 0;
 
     items.forEach((item, idx) => {
-        const cant = parseFloat(item.cantidad) || 0;
-        const unit = parseFloat(item.unitario) || 0;
-        const sub = (cant > 0 && unit > 0) ? (cant * unit) : (cant > 0 ? cant : (unit > 0 ? unit : (parseFloat(item.subtotal) || 0)));
+        let cant = (item.cantidad === '' || item.cantidad === undefined || item.cantidad === null) ? 0 : (parseFloat(item.cantidad) || 0);
+        let unit = (item.unitario === '' || item.unitario === undefined || item.unitario === null) ? 0 : (parseFloat(item.unitario) || 0);
+        let rawRetIva = item.retencionIva !== undefined && item.retencionIva !== '' ? item.retencionIva : (item.retencion !== undefined && item.retencion !== '' ? item.retencion : '');
+        let rawRetIsr = item.retencionIsr !== undefined && item.retencionIsr !== '' ? item.retencionIsr : (item.retIsr !== undefined && item.retIsr !== '' ? item.retIsr : '');
+
+        if (tbody && tbody.children[idx]) {
+            const tr = tbody.children[idx];
+            const inputs = tr.querySelectorAll('input');
+            // inputs[0] = facturaNum, inputs[1] = cantidad, inputs[2] = unitario, inputs[3] = retencionIva, inputs[4] = retencionIsr
+            if (inputs.length >= 5) {
+                if (inputs[1].value !== '') cant = parseFloat(inputs[1].value) || 0;
+                else if (item.cantidad === '') cant = 0;
+                if (inputs[2].value !== '') unit = parseFloat(inputs[2].value) || 0;
+                else if (item.unitario === '') unit = 0;
+                if (inputs[3].value !== '') rawRetIva = inputs[3].value;
+                else if (item.retencionIva === '') rawRetIva = '';
+                if (inputs[4].value !== '') rawRetIsr = inputs[4].value;
+                else if (item.retencionIsr === '') rawRetIsr = '';
+            }
+        }
+
+        const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
-        const ret = parseFloat(item.retencion) || 0;
-        const tot = (sub > 0 || ret > 0) ? (sub + iva - ret) : 0;
+        const retIvaPct = (rawRetIva === '' || rawRetIva === null || rawRetIva === undefined) ? 0 : (parseFloat(rawRetIva) || 0);
+        const retIsrPct = (rawRetIsr === '' || rawRetIsr === null || rawRetIsr === undefined) ? 0 : (parseFloat(rawRetIsr) || 0);
+        const retIvaAmount = sub > 0 ? (sub * (retIvaPct / 100)) : 0;
+        const retIsrAmount = sub > 0 ? (sub * (retIsrPct / 100)) : 0;
+        const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
 
         item.subtotal = sub;
         item.iva = iva;
-        item.retencion = ret;
+        item.retencionIva = rawRetIva === '' ? '' : retIvaPct;
+        item.retencionIvaPct = retIvaPct;
+        item.retencionIvaMonto = retIvaAmount;
+        item.ret4 = retIvaAmount;
+        item.retencion = retIvaAmount;
+        item.retencionIsr = rawRetIsr === '' ? '' : retIsrPct;
+        item.retencionIsrPct = retIsrPct;
+        item.retencionIsrMonto = retIsrAmount;
+        item.retIsr = retIsrAmount;
         item.total = tot;
 
-        if (item.proveedor || item.facturaNum || item.concepto || unit > 0 || cant > 0 || ret > 0) {
+        if (sub > 0 || tot !== 0 || cant > 0 || unit > 0 || retIvaPct > 0 || retIsrPct > 0 || item.proveedor || item.facturaNum || item.concepto) {
             totSub += sub;
             totIva += iva;
-            totRet += ret;
+            totRetIva += retIvaAmount;
+            totRetIsr += retIsrAmount;
             totFinal += tot;
         }
 
         const subCell = document.getElementById(`prov-sub-${idx}`);
         const ivaCell = document.getElementById(`prov-iva-${idx}`);
-        const retCell = document.getElementById(`prov-ret-${idx}`);
         const totCell = document.getElementById(`prov-tot-${idx}`);
 
         if (subCell) subCell.innerText = `$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
         if (ivaCell) ivaCell.innerText = `$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-        if (retCell) retCell.innerText = `$${ret.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
         if (totCell) totCell.innerText = `$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     });
 
     const subEl = document.getElementById("op-prov-tot-sub");
     const ivaEl = document.getElementById("op-prov-tot-iva");
-    const retEl = document.getElementById("op-prov-tot-ret");
+    const retIvaEl = document.getElementById("op-prov-tot-ret-iva");
+    const retIsrEl = document.getElementById("op-prov-tot-ret-isr");
     const finEl = document.getElementById("op-prov-tot-final");
 
     if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-    if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (retIvaEl) retIvaEl.innerText = `$${totRetIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (retIsrEl) retIsrEl.innerText = `$${totRetIsr.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 }
 
-
 function renderProveedorClavesTable(p) {
+    if (!p) {
+        p = (typeof getActiveOperacionesProject === 'function') 
+            ? getActiveOperacionesProject() 
+            : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    }
+    if (!p) return;
     const tbody = document.getElementById("tbody-proveedor-claves");
     if (!tbody) return;
 
-    // Limpiar textos por defecto heredados de localStorage o datos semilla
-    if (p.proveedoresClaves && p.proveedoresClaves.length > 0) {
-        p.proveedoresClaves.forEach(item => {
-            if (item.proveedor && (item.proveedor.includes("EN ESTA SECCION") || item.proveedor.includes("Transportes Express"))) item.proveedor = '';
-            if (item.facturaNum && (item.facturaNum.includes("UN EXPEDIENTE") || item.facturaNum.includes("FAC-9921"))) item.facturaNum = '';
-            if (item.concepto && (item.concepto.includes("SECCION PARA SELECCIONAR") || item.concepto.includes("Flete terrestre"))) item.concepto = '';
-            if (item.unitario === 25000) { item.cantidad = ''; item.unitario = ''; item.subtotal = 0; item.iva = 0; item.retencion = 0; item.total = 0; }
-        });
+    if (!p.proveedoresClaves || !Array.isArray(p.proveedoresClaves) || p.proveedoresClaves.length === 0) {
+        p.proveedoresClaves = [
+            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 },
+            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 },
+            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 },
+            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 },
+            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 }
+        ];
+    }
+    while (p.proveedoresClaves.length < 5) {
+        p.proveedoresClaves.push({ proveedor: '', facturaNum: '', num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 });
     }
 
     let items = p.proveedoresClaves;
-    if (!items || items.length === 0) {
-        items = [
-            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
-        ];
-        p.proveedoresClaves = items;
-    }
-
-    let totSub = 0, totIva = 0, totRet = 0, totFinal = 0;
+    let totSub = 0, totIva = 0, totRetIva = 0, totRetIsr = 0, totFinal = 0;
 
     tbody.innerHTML = items.map((item, idx) => {
-        const cant = parseFloat(item.cantidad) || 0;
-        const unit = parseFloat(item.unitario) || 0;
+        const cant = (item.cantidad === '' || item.cantidad === undefined || item.cantidad === null) ? 0 : (parseFloat(item.cantidad) || 0);
+        const unit = (item.unitario === '' || item.unitario === undefined || item.unitario === null) ? 0 : (parseFloat(item.unitario) || 0);
         const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
-        const ret = parseFloat(item.retencion) || 0;
-        const tot = (sub > 0 || ret > 0) ? (sub + iva - ret) : 0;
+        
+        const rawRetIva = item.retencionIva !== undefined && item.retencionIva !== '' ? item.retencionIva : (item.retencion !== undefined && item.retencion !== '' ? item.retencion : '');
+        const retIvaPct = (rawRetIva === '' || rawRetIva === null || rawRetIva === undefined) ? 0 : (parseFloat(rawRetIva) || 0);
 
-        if (item.proveedor || item.facturaNum || item.concepto || unit > 0 || cant > 0 || ret > 0) {
+        const rawRetIsr = item.retencionIsr !== undefined && item.retencionIsr !== '' ? item.retencionIsr : (item.retIsr !== undefined && item.retIsr !== '' ? item.retIsr : '');
+        const retIsrPct = (rawRetIsr === '' || rawRetIsr === null || rawRetIsr === undefined) ? 0 : (parseFloat(rawRetIsr) || 0);
+
+        const retIvaAmount = sub > 0 ? (sub * (retIvaPct / 100)) : 0;
+        const retIsrAmount = sub > 0 ? (sub * (retIsrPct / 100)) : 0;
+
+        const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
+
+        item.subtotal = sub;
+        item.iva = iva;
+        item.retencionIvaPct = retIvaPct;
+        item.retencionIvaMonto = retIvaAmount;
+        item.retencionIsrPct = retIsrPct;
+        item.retencionIsrMonto = retIsrAmount;
+        item.total = tot;
+
+        if (sub > 0 || tot !== 0 || cant > 0 || unit > 0 || retIvaPct > 0 || retIsrPct > 0 || item.proveedor || item.facturaNum || item.concepto) {
             totSub += sub;
             totIva += iva;
-            totRet += ret;
+            totRetIva += retIvaAmount;
+            totRetIsr += retIsrAmount;
             totFinal += tot;
         }
+
+        const retIvaVal = (item.retencionIva !== undefined && item.retencionIva !== '' && item.retencionIva !== 0) 
+            ? item.retencionIva 
+            : (item.retencion !== undefined && item.retencion !== '' && item.retencion !== 0 ? item.retencion : '');
+        const retIsrVal = (item.retencionIsr !== undefined && item.retencionIsr !== '' && item.retencionIsr !== 0) 
+            ? item.retencionIsr 
+            : (item.retIsr !== undefined && item.retIsr !== '' && item.retIsr !== 0 ? item.retIsr : '');
 
         // Celdas amarillas: Proveedor, Factura #, Concepto sin texto escrito (placeholder vacío), dejando solo el color amarillo
         return `
@@ -10690,12 +10925,26 @@ function renderProveedorClavesTable(p) {
                 <td style="text-align:right;" id="prov-sub-${idx}">$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                 <td style="text-align:right;" id="prov-iva-${idx}">$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                 <td style="text-align:right;">
-                    <input type="number" 
-                           step="any"
-                           value="${item.retencion !== undefined && item.retencion !== '' && item.retencion !== 0 ? item.retencion : ''}" 
-                           placeholder="$0.00" 
-                           oninput="updateProveedorClavesFieldFast(${idx}, 'retencion', this.value)" 
-                           style="width:75px; text-align:right; border:none; background:transparent;" />
+                    <div style="display:inline-flex; align-items:center; justify-content:flex-end; gap:2px;">
+                        <input type="number" 
+                               step="any"
+                               value="${retIvaVal}" 
+                               placeholder="0" 
+                               oninput="updateProveedorClavesFieldFast(${idx}, 'retencionIva', this.value)" 
+                               style="width:50px; text-align:right; border:none; background:transparent; outline:none;" />
+                        <span style="font-size:12px; font-weight:700; color:#475569;">%</span>
+                    </div>
+                </td>
+                <td style="text-align:right;">
+                    <div style="display:inline-flex; align-items:center; justify-content:flex-end; gap:2px;">
+                        <input type="number" 
+                               step="any"
+                               value="${retIsrVal}" 
+                               placeholder="0" 
+                               oninput="updateProveedorClavesFieldFast(${idx}, 'retencionIsr', this.value)" 
+                               style="width:50px; text-align:right; border:none; background:transparent; outline:none;" />
+                        <span style="font-size:12px; font-weight:700; color:#475569;">%</span>
+                    </div>
                 </td>
                 <td style="text-align:right; font-weight:700;" id="prov-tot-${idx}">$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
             </tr>
@@ -10704,13 +10953,17 @@ function renderProveedorClavesTable(p) {
 
     const subEl = document.getElementById("op-prov-tot-sub");
     const ivaEl = document.getElementById("op-prov-tot-iva");
-    const retEl = document.getElementById("op-prov-tot-ret");
+    const retIvaEl = document.getElementById("op-prov-tot-ret-iva");
+    const retIsrEl = document.getElementById("op-prov-tot-ret-isr");
     const finEl = document.getElementById("op-prov-tot-final");
 
     if (subEl) subEl.innerText = `$${totSub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-    if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (retIvaEl) retIvaEl.innerText = `$${totRetIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if (retIsrEl) retIsrEl.innerText = `$${totRetIsr.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+    recalcProveedorClavesTotals(p);
 }
 
 function addProveedorClavesRow() {
@@ -10720,7 +10973,7 @@ function addProveedorClavesRow() {
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.proveedoresClaves) p.proveedoresClaves = [];
-    p.proveedoresClaves.push({ proveedor: '', facturaNum: (p.numFactura && p.numFactura !== '-' ? p.numFactura : ''), num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 });
+    p.proveedoresClaves.push({ proveedor: '', facturaNum: (p.numFactura && p.numFactura !== '-' ? p.numFactura : ''), num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 });
     renderProveedorClavesTable(p);
     saveOperacionesStorage();
     if (typeof window.syncAllOperacionesToProveedores === 'function') {
@@ -10826,13 +11079,17 @@ function generarProyectoOperaciones() {
         const facturaVal = document.getElementById("op-step1-factura-num")?.value;
         const ocVal = document.getElementById("op-step1-oc-num")?.value;
         const consecutivoVal = document.getElementById("op-step1-consecutivo-num")?.value;
+        const clienteVal = document.getElementById("op-cliente-input")?.value;
         if (facturaVal) p.numFactura = facturaVal;
         if (ocVal) p.numOC = ocVal;
         if (consecutivoVal) { p.numConsecutivo = consecutivoVal; p.consecutivo = consecutivoVal; p.numProyecto = consecutivoVal; }
+        if (clienteVal) { p.cliente = clienteVal; p.nombreCliente = clienteVal; }
+        p.generado = true;
         p.currentStep = 4;
         p.estatus = 'PENDIENTE';
         saveOperacionesStorage();
     }
+    alert("¡Proyecto generado y guardado en Operaciones con éxito!");
     closeOperacionesDetail();
 };
 
@@ -10852,9 +11109,12 @@ function openNuevoProyectoModal() {
         factura: '',
         numFactura: '',
         numOC: '',
+        cliente: '',
+        nombreCliente: '',
         numConsecutivo: initConsecutivo,
         consecutivo: initConsecutivo,
         estatus: 'PENDIENTE',
+        generado: false,
         currentStep: 1,
         tipoProyecto: initTipo,
         servicioName: 'Servicio local',
@@ -10871,11 +11131,11 @@ function openNuevoProyectoModal() {
             { servicio: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
         ],
         proveedoresClaves: [
-            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
-            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 }
+            { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 2, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 3, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 4, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 },
+            { proveedor: '', facturaNum: '', num: 5, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 }
         ],
         documentos: {}
     };
