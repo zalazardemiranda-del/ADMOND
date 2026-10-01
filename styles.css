@@ -577,6 +577,17 @@ select option {
     font-weight: 500 !important;
 }
 
+@keyframes dropdownOpenFade {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
 .form-row {
     display: flex;
     gap: 14px;
@@ -920,7 +931,7 @@ select option {
 }
 
 .custom-filter-item:hover {
-    background: #F8FAFC;
+    background: #F1F5F9;
 }
 
 .custom-filter-item.selected {
@@ -2553,15 +2564,16 @@ select option {
 .prov-estatus-global-menu {
     position: fixed !important;
     background: #FFFFFF !important;
-    border: 1px solid rgba(15, 23, 42, 0.16) !important;
+    border: 1px solid #E2E8F0 !important;
     border-radius: 12px !important;
-    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.24), 0 6px 14px rgba(15, 23, 42, 0.12) !important;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14), 0 4px 14px rgba(0, 0, 0, 0.04) !important;
     padding: 6px !important;
     z-index: 99999999 !important;
     min-width: 155px !important;
     display: none;
     user-select: none !important;
     transform: translateX(-50%) !important;
+    animation: dropdownOpenFade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .prov-estatus-global-menu .prov-dropdown-option {
@@ -3383,12 +3395,12 @@ input.excel-p-flag-x {
 .st-dropdown-menu {
     position: fixed !important;
     background: #FFFFFF !important;
-    border: 1px solid rgba(15, 23, 42, 0.16) !important;
+    border: 1px solid #E2E8F0 !important;
     border-radius: 12px !important;
-    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22), 0 6px 14px rgba(15, 23, 42, 0.1) !important;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14), 0 4px 14px rgba(0, 0, 0, 0.04) !important;
     padding: 6px !important;
     z-index: 99999 !important;
-    min-width: 130px !important;
+    min-width: 140px !important;
     display: none;
     opacity: 0;
     transition: opacity 0.15s ease, transform 0.15s ease !important;
@@ -3398,6 +3410,7 @@ input.excel-p-flag-x {
 .st-custom-dropdown-wrap.open .st-dropdown-menu {
     display: block !important;
     opacity: 1 !important;
+    animation: dropdownOpenFade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .st-dropdown-option {
@@ -3497,14 +3510,36 @@ input.excel-p-flag-x {
 }
 
 .pagination-page-size select {
-    padding: 4px 8px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-subtle);
-    background: #FFFFFF;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    background-color: #FFFFFF !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 8px center !important;
+    background-size: 11px 11px !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 8px !important;
+    padding: 4px 26px 4px 10px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    color: #1E293B !important;
+    cursor: pointer !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
 }
+
+.pagination-page-size select:hover {
+    border-color: #2563EB !important;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.12) !important;
+}
+
+.pagination-page-size select:focus {
+    border-color: #2563EB !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18) !important;
+}
+
 
 .pagination-buttons {
     display: flex;
@@ -3572,8 +3607,8 @@ input.excel-p-flag-x {
     align-items: center;
     justify-content: space-between;
     background: #FFFFFF;
-    border: 1px solid rgba(15, 23, 42, 0.14);
-    border-radius: var(--radius-sm);
+    border: 1px solid #CBD5E1;
+    border-radius: 10px;
     padding: 8px 12px;
     height: 40px;
     box-sizing: border-box;
@@ -3622,33 +3657,37 @@ input.excel-p-flag-x {
     left: 0;
     right: 0;
     background: #FFFFFF;
-    border: 1px solid rgba(15, 23, 42, 0.12);
+    border: 1px solid #E2E8F0;
     border-radius: 12px;
-    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16), 0 4px 12px rgba(15, 23, 42, 0.06);
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14), 0 4px 14px rgba(0, 0, 0, 0.04);
     padding: 6px;
     z-index: 1000;
     display: none;
     opacity: 0;
     transform: translateY(-6px) scale(0.98);
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.custom-dropdown-menu::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-dropdown-menu::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 4px;
+}
+
+.custom-dropdown-menu::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
 }
 
 .custom-select-wrapper.open .custom-dropdown-menu {
     display: block;
     opacity: 1;
     transform: translateY(0) scale(1);
-    animation: dropdownOpen 0.2s ease-out forwards;
-}
-
-@keyframes dropdownOpen {
-    from {
-        opacity: 0;
-        transform: translateY(-8px) scale(0.97);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+    animation: dropdownOpenFade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .custom-dropdown-option {
@@ -4270,15 +4309,15 @@ select.custom-excel-select option {
 
 .assignee-dropdown-menu {
     position: absolute;
-    top: calc(100% + 4px);
+    top: calc(100% + 6px);
     left: 0;
     width: 100%;
-    max-height: 240px;
+    max-height: 260px;
     overflow-y: auto;
     background: #FFFFFF;
-    border: 1.5px solid #CBD5E1;
-    border-radius: 10px;
-    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14), 0 4px 14px rgba(0, 0, 0, 0.04);
     z-index: 1000;
     display: none;
     padding: 6px;
@@ -4286,8 +4325,22 @@ select.custom-excel-select option {
     margin: 0;
 }
 
+.assignee-dropdown-menu::-webkit-scrollbar {
+    width: 6px;
+}
+
+.assignee-dropdown-menu::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 4px;
+}
+
+.assignee-dropdown-menu::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
+}
+
 .assignee-dropdown-menu.open {
     display: block;
+    animation: dropdownOpenFade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .assignee-dropdown-item {
@@ -4298,8 +4351,13 @@ select.custom-excel-select option {
     padding: 8px 10px;
     border-radius: 8px;
     cursor: pointer;
-    transition: background 0.15s ease, transform 0.1s ease;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
+    margin-bottom: 2px;
+}
+
+.assignee-dropdown-item:last-child {
+    margin-bottom: 0;
 }
 
 .assignee-dropdown-item:hover,
@@ -5402,30 +5460,51 @@ select.custom-excel-select option {
 
 .compose-recipient-dropdown {
     position: absolute;
-    top: 100%;
+    top: calc(100% + 4px);
     left: 62px;
     right: 18px;
     background: #FFFFFF;
-    border: 1px solid #CBD5E1;
-    border-radius: 8px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14), 0 4px 14px rgba(0, 0, 0, 0.04);
     z-index: 1000;
-    max-height: 200px;
+    max-height: 220px;
     overflow-y: auto;
+    padding: 6px;
+    animation: dropdownOpenFade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.compose-recipient-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.compose-recipient-dropdown::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 4px;
+}
+
+.compose-recipient-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
 }
 
 .compose-recipient-item {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 12px;
+    padding: 7px 10px;
+    border-radius: 8px;
     cursor: pointer;
-    border-bottom: 1px solid #F1F5F9;
-    transition: background 0.15s;
+    border-bottom: none;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-bottom: 2px;
+}
+
+.compose-recipient-item:last-child {
+    margin-bottom: 0;
 }
 
 .compose-recipient-item:hover {
-    background: #EFF6FF;
+    background: #F1F5F9;
 }
 
 .compose-recipient-avatar {
@@ -5479,14 +5558,34 @@ select.custom-excel-select option {
 }
 
 .compose-select-group select {
-    border: 1px solid #CBD5E1;
-    border-radius: 6px;
-    padding: 4px 8px;
-    font-size: 11px;
-    font-weight: 600;
-    background: #FFFFFF;
-    color: #334155;
-    outline: none;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    background-color: #FFFFFF !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 8px center !important;
+    background-size: 11px 11px !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 8px !important;
+    padding: 4px 26px 4px 10px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #1E293B !important;
+    outline: none !important;
+    cursor: pointer !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.compose-select-group select:hover {
+    border-color: #2563EB !important;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.12) !important;
+}
+
+.compose-select-group select:focus {
+    border-color: #2563EB !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18) !important;
 }
 
 .compose-formatting-bar {
@@ -5979,33 +6078,37 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     width: max-content;
     max-width: 320px;
     background: #FFFFFF;
-    border: 1px solid rgba(15, 23, 42, 0.12);
+    border: 1px solid #E2E8F0;
     border-radius: 12px;
-    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12), 0 4px 14px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14), 0 4px 14px rgba(0, 0, 0, 0.04);
     padding: 6px;
     z-index: 1000;
     display: none;
     opacity: 0;
     transform: translateY(-6px) scale(0.98);
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.op-custom-dropdown-menu::-webkit-scrollbar {
+    width: 6px;
+}
+
+.op-custom-dropdown-menu::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 4px;
+}
+
+.op-custom-dropdown-menu::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
 }
 
 .op-custom-select-wrap.open .op-custom-dropdown-menu {
     display: block;
     opacity: 1;
     transform: translateY(0) scale(1);
-    animation: opDropdownMenuFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes opDropdownMenuFadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-6px) scale(0.98);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+    animation: dropdownOpenFade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .op-dropdown-item {
@@ -6025,7 +6128,7 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 }
 
 .op-dropdown-item:hover {
-    background-color: #F8FAFC;
+    background-color: #F1F5F9;
 }
 
 .op-dropdown-item.selected {
@@ -7026,6 +7129,35 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     font-size: 13px;
     font-weight: 800;
     color: #0F172A;
+    white-space: nowrap;
+}
+
+.contenedor-header-input {
+    flex: 1;
+    max-width: 230px;
+    height: 26px;
+    padding: 2px 8px;
+    background: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #0F172A;
+    outline: none;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+
+.contenedor-header-input:focus {
+    border-color: #2563EB;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    background: #FFFFFF;
+}
+
+.contenedor-header-input::placeholder {
+    color: #94A3B8;
+    font-weight: 400;
+    font-size: 10.5px;
 }
 
 .btn-delete-contenedor {
@@ -7312,6 +7444,12 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     border-radius: 12px;
     font-size: 11px;
     font-weight: 700;
+    max-width: 170px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
 }
 
 .doc-status-badge.pending {
@@ -7322,6 +7460,50 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 .doc-status-badge.uploaded {
     background: #DCFCE7;
     color: #15803D;
+    cursor: pointer;
+}
+
+.doc-btn-view {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #EFF6FF;
+    border: 1px solid #BFDBFE;
+    color: #1D4ED8;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    height: 28px;
+    text-decoration: none;
+}
+
+.doc-btn-view:hover {
+    background: #DBEAFE;
+    border-color: #93C5FD;
+    color: #1E40AF;
+}
+
+.doc-btn-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: #94A3B8;
+    padding: 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    height: 28px;
+    width: 28px;
+}
+
+.doc-btn-delete:hover {
+    color: #EF4444;
+    background: rgba(239, 68, 68, 0.1);
 }
 
 /* Prefactura Slider Wrapper */
@@ -7590,6 +7772,13 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 #op-step-pane-2 .contenedor-card-title {
     font-size: 12px;
     font-weight: 800;
+}
+
+#op-step-pane-2 .contenedor-header-input {
+    height: 24px;
+    font-size: 11px;
+    padding: 2px 7px;
+    max-width: 200px;
 }
 
 #op-step-pane-2 .btn-delete-contenedor {
@@ -7975,6 +8164,28 @@ input[type="number"] {
     padding: 2px 6px;
     font-size: 9px;
     border-radius: 4px;
+    max-width: 140px;
+}
+
+#op-step-pane-4 .doc-btn-view {
+    height: 24px;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 5px;
+}
+
+#op-step-pane-4 .doc-btn-view .material-symbols-outlined {
+    font-size: 13px;
+}
+
+#op-step-pane-4 .doc-btn-delete {
+    height: 24px;
+    width: 24px;
+    padding: 2px;
+}
+
+#op-step-pane-4 .doc-btn-delete .material-symbols-outlined {
+    font-size: 14px;
 }
 
 

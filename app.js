@@ -8028,7 +8028,28 @@ function saveOperacionesStorage() {
     try {
         localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(list));
     } catch (e) {
-        console.warn("Error saving operaciones locally:", e);
+        console.warn("Storage quota exceeded or error, stripping large dataUrls for localStorage:", e);
+        try {
+            const safeList = list.map(p => {
+                if (!p.documentos) return p;
+                const safeDocs = {};
+                Object.keys(p.documentos).forEach(k => {
+                    const d = p.documentos[k];
+                    safeDocs[k] = {
+                        uploaded: d.uploaded,
+                        fileName: d.fileName,
+                        fileSize: d.fileSize,
+                        fileType: d.fileType,
+                        lastModified: d.lastModified,
+                        uploadedAt: d.uploadedAt
+                    };
+                });
+                return Object.assign({}, p, { documentos: safeDocs });
+            });
+            localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(safeList));
+        } catch (e2) {
+            console.error("Critical error saving operaciones locally:", e2);
+        }
     }
 
     if (Array.isArray(list)) {
@@ -8047,7 +8068,7 @@ function saveOperacionesStorage() {
     }
 };
 
-function syncOperacionesToCloud() {
+function syncOperacionesToCloud(forceImmediate = false) {
     window.syncOperacionesToCloud = syncOperacionesToCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
@@ -8070,19 +8091,21 @@ function syncOperacionesToCloud() {
         }
     }
 
-    // 2. Persistencia en la nube (Debounced para agrupar pulsaciones)
-    if (_syncOperacionesTimer) clearTimeout(_syncOperacionesTimer);
-    _syncOperacionesTimer = setTimeout(async () => {
+    const doSync = async () => {
         try {
             const list = appState.operacionesProyectos || [];
 
             // A. Guardar snapshot en tabla messages con chat_id especial para garantizar persistencia universal
-            await client.from('messages').insert({
-                chat_id: '__cloud_sync_operaciones__',
-                contenido: JSON.stringify(list),
-                emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
-                emisor_role: 'sistema'
-            });
+            try {
+                await client.from('messages').insert({
+                    chat_id: '__cloud_sync_operaciones__',
+                    contenido: JSON.stringify(list),
+                    emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                    emisor_role: 'sistema'
+                });
+            } catch (errSnap) {
+                console.warn("⚠️ Error saving snapshot to messages:", errSnap);
+            }
 
             // B. Si existe la tabla operaciones en Supabase, guardar cada proyecto
             try {
@@ -8103,7 +8126,14 @@ function syncOperacionesToCloud() {
         } catch (err) {
             console.warn("⚠️ Error persisting operaciones to Supabase:", err);
         }
-    }, 600);
+    };
+
+    if (_syncOperacionesTimer) clearTimeout(_syncOperacionesTimer);
+    if (forceImmediate) {
+        doSync();
+    } else {
+        _syncOperacionesTimer = setTimeout(doSync, 600);
+    }
 };
 
 async function fetchOperacionesFromCloud() {
@@ -8198,6 +8228,25 @@ function mergeOperacionesProjects(cloudList) {
             } else if (hasCloudProv) {
                 merged.proveedoresClaves = cp.proveedoresClaves;
             }
+
+            // Fusión inteligente de documentos: NUNCA sobreescribir ni perder documentos cargados
+            const localDocs = local.documentos || {};
+            const cloudDocs = cp.documentos || {};
+            const mergedDocs = Object.assign({}, cloudDocs, localDocs);
+
+            ['factura1', 'factura2', 'factura3', 'pod1', 'pod2'].forEach(k => {
+                const lDoc = localDocs[k];
+                const cDoc = cloudDocs[k];
+                if (lDoc && lDoc.uploaded && (!cDoc || !cDoc.uploaded)) {
+                    mergedDocs[k] = lDoc;
+                } else if (cDoc && cDoc.uploaded && (!lDoc || !lDoc.uploaded)) {
+                    mergedDocs[k] = cDoc;
+                } else if (lDoc && lDoc.uploaded && cDoc && cDoc.uploaded) {
+                    // Ambos están cargados: preferir el que tenga dataUrl o más reciente
+                    mergedDocs[k] = (lDoc.dataUrl || !cDoc.dataUrl) ? lDoc : cDoc;
+                }
+            });
+            merged.documentos = mergedDocs;
 
             appState.operacionesProyectos[idx] = merged;
         }
@@ -8876,6 +8925,11 @@ function openOperacionesDetail(projectId) {
 
     // Populate Step 4 (Documentos)
     renderDocumentosStatus(p);
+    if (window.DocStorage && p.id) {
+        window.DocStorage.restoreProjectDocs(p).then(changed => {
+            if (changed) renderDocumentosStatus(p);
+        });
+    }
 
     goToOperacionesStep(p.currentStep || 1);
 };
@@ -9085,6 +9139,9 @@ function goToOperacionesStep(stepNum) {
     if (p) {
         p.currentStep = stepNum;
         updateGenerarProyectoButton(p);
+        if (stepNum === 4 && typeof window.renderDocumentosStatus === 'function') {
+            window.renderDocumentosStatus(p);
+        }
         saveOperacionesStorage();
     }
 };
@@ -9166,6 +9223,7 @@ function renderContenedoresCards(p) {
                 <div class="contenedor-card-header">
                     <div class="contenedor-num-badge">${c.id}</div>
                     <span class="contenedor-card-title">${c.label || ('Lavado Contenedor ' + c.id)}</span>
+                    <input type="text" class="contenedor-header-input" value="${c.numContenedor || ''}" placeholder="Escribe número o matrícula..." oninput="updateContenedorField(${c.id}, 'numContenedor', this.value); const el = document.getElementById('lavado-mat-'+${c.id}); if(el) el.value=this.value;" />
                     <button type="button" class="btn-delete-contenedor" onclick="deleteContenedor(${c.id})" title="Eliminar contenedor">
                         <span class="material-symbols-outlined">delete</span>
                     </button>
@@ -9173,7 +9231,7 @@ function renderContenedoresCards(p) {
                 <div class="contenedor-fields-grid lavado-fields-grid">
                     <div class="field-wide">
                         <label>Lavado de contenedor (Matrícula)</label>
-                        <input type="text" value="${c.numContenedor || ''}" placeholder="Ej. TNCU2312248" oninput="updateContenedorField(${c.id}, 'numContenedor', this.value)" style="font-weight: 700; color: #15803D;" />
+                        <input type="text" id="lavado-mat-${c.id}" value="${c.numContenedor || ''}" placeholder="Ej. TNCU2312248" oninput="updateContenedorField(${c.id}, 'numContenedor', this.value); const h = this.closest('.contenedor-card')?.querySelector('.contenedor-header-input'); if(h) h.value=this.value;" style="font-weight: 700; color: #15803D;" />
                     </div>
                     <div class="field-wide">
                         <label>Evidencia enviada el</label>
@@ -9195,6 +9253,7 @@ function renderContenedoresCards(p) {
                 <div class="contenedor-card-header">
                     <div class="contenedor-num-badge">${c.id}</div>
                     <span class="contenedor-card-title">${c.label || ('Contenedor ' + c.id)}</span>
+                    <input type="text" class="contenedor-header-input" value="${c.numContenedor || ''}" placeholder="Escribe número o matrícula..." oninput="updateContenedorField(${c.id}, 'numContenedor', this.value)" />
                     <button type="button" class="btn-delete-contenedor" onclick="deleteContenedor(${c.id})" title="Eliminar contenedor">
                         <span class="material-symbols-outlined">delete</span>
                     </button>
@@ -9340,7 +9399,7 @@ function addContenedorToActiveProject() {
     if (p.tipoProyecto === 'lavado_contenedores') {
         p.contenedores.push({ id: nextId, label: `Lavado Contenedor ${nextId}`, numContenedor: '', evidenciaFecha: '', observaciones: '' });
     } else {
-        p.contenedores.push({ id: nextId, label: `Contenedor ${nextId}`, fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' });
+        p.contenedores.push({ id: nextId, label: `Contenedor ${nextId}`, numContenedor: '', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' });
     }
     // Navegar a la página donde quedó el nuevo contenedor (2 fichas laterales por vista)
     const itemsPerPage = 2;
@@ -9453,9 +9512,10 @@ function convertirCaratulaPDF() {
                 <div class="pdf-c-card">
                     <div class="pdf-c-card-header">
                         <span class="pdf-c-badge">${c.id}</span>
-                        <strong class="pdf-c-title">${c.label || ('Contenedor ' + c.id)}</strong>
+                        <strong class="pdf-c-title">${c.label || ('Contenedor ' + c.id)}${c.numContenedor ? ` · <span class="bold-green">${c.numContenedor}</span>` : ''}</strong>
                     </div>
                     <div class="pdf-c-fields">
+                        ${c.numContenedor ? `<div class="pdf-c-field full-row"><span class="pdf-label">No. Contenedor / Matrícula:</span><span class="pdf-val bold-green">${c.numContenedor}</span></div>` : ''}
                         <div class="pdf-c-field"><span class="pdf-label">Fecha despacho:</span><span class="pdf-val">${c.fechaDespacho || '-'}</span></div>
                         <div class="pdf-c-field"><span class="pdf-label">Horario / Terminal:</span><span class="pdf-val">${c.horarioTerminal || '-'}</span></div>
                         <div class="pdf-c-field"><span class="pdf-label">Fecha entrega:</span><span class="pdf-val">${c.fechaEntrega || '-'}</span></div>
@@ -10997,35 +11057,133 @@ function addProveedorClavesRow() {
     }
 };
 
-function renderDocumentosStatus(p) {
-    if (!p.documentos) {
-        p.documentos = {
-            factura1: { uploaded: false, fileName: '' },
-            factura2: { uploaded: false, fileName: '' },
-            factura3: { uploaded: false, fileName: '' },
-            pod1: { uploaded: false, fileName: '' },
-            pod2: { uploaded: false, fileName: '' }
-        };
+/* ==============================================================================
+   ALMACENAMIENTO PERMANENTE DE DOCUMENTOS (IndexedDB Vault + Base64 Cloud Sync)
+   ============================================================================== */
+window.DocStorage = {
+    _db: null,
+    async getDB() {
+        if (this._db) return this._db;
+        return new Promise((resolve) => {
+            try {
+                const req = indexedDB.open('rodipack_documents_vault', 1);
+                req.onupgradeneeded = e => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('docs')) {
+                        db.createObjectStore('docs', { keyPath: 'key' });
+                    }
+                };
+                req.onsuccess = e => {
+                    this._db = e.target.result;
+                    resolve(this._db);
+                };
+                req.onerror = () => resolve(null);
+            } catch (err) {
+                resolve(null);
+            }
+        });
+    },
+    async saveDoc(projId, docKey, docData) {
+        if (!projId || !docKey || !docData) return false;
+        try {
+            const db = await this.getDB();
+            if (!db) return false;
+            return new Promise((resolve) => {
+                const tx = db.transaction('docs', 'readwrite');
+                const store = tx.objectStore('docs');
+                store.put({ key: `${projId}__${docKey}`, data: docData, updatedAt: Date.now() });
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => resolve(false);
+            });
+        } catch (e) { return false; }
+    },
+    async getDoc(projId, docKey) {
+        if (!projId || !docKey) return null;
+        try {
+            const db = await this.getDB();
+            if (!db) return null;
+            return new Promise((resolve) => {
+                const tx = db.transaction('docs', 'readonly');
+                const store = tx.objectStore('docs');
+                const req = store.get(`${projId}__${docKey}`);
+                req.onsuccess = () => resolve(req.result ? req.result.data : null);
+                req.onerror = () => resolve(null);
+            });
+        } catch (e) { return null; }
+    },
+    async deleteDoc(projId, docKey) {
+        if (!projId || !docKey) return false;
+        try {
+            const db = await this.getDB();
+            if (!db) return false;
+            return new Promise((resolve) => {
+                const tx = db.transaction('docs', 'readwrite');
+                const store = tx.objectStore('docs');
+                store.delete(`${projId}__${docKey}`);
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => resolve(false);
+            });
+        } catch (e) { return false; }
+    },
+    async restoreProjectDocs(p) {
+        if (!p || !p.id) return false;
+        if (!p.documentos) p.documentos = {};
+        let restoredAny = false;
+        const keys = ['factura1', 'factura2', 'factura3', 'pod1', 'pod2'];
+        for (const k of keys) {
+            const cur = p.documentos[k];
+            if (!cur || !cur.dataUrl) {
+                const stored = await this.getDoc(p.id, k);
+                if (stored && stored.uploaded) {
+                    p.documentos[k] = Object.assign({}, cur || {}, stored);
+                    restoredAny = true;
+                }
+            }
+        }
+        return restoredAny;
     }
+};
+
+function renderDocumentosStatus(p) {
+    window.renderDocumentosStatus = renderDocumentosStatus;
+    if (!p) return;
+    if (!p.documentos) p.documentos = {};
 
     const docKeys = ['factura1', 'factura2', 'factura3', 'pod1', 'pod2'];
     let uploadedCount = 0;
 
     docKeys.forEach(key => {
         const badgeEl = document.getElementById(`doc-badge-${key}`);
+        if (!badgeEl) return;
+        const actionsContainer = badgeEl.parentElement;
         const docObj = p.documentos[key];
+
         if (docObj && docObj.uploaded) {
             uploadedCount++;
-            if (badgeEl) {
-                badgeEl.className = 'doc-status-badge uploaded';
-                badgeEl.innerText = `🟢 ${docObj.fileName || 'Cargado'}`;
-                badgeEl.title = `Archivo: ${docObj.fileName || 'Cargado'}`;
+            const fName = docObj.fileName || 'Cargado';
+            if (actionsContainer) {
+                actionsContainer.innerHTML = `
+                    <button type="button" class="doc-btn-view" onclick="viewDocItem('${key}')" title="Ver / Descargar ${fName}">
+                        <span class="material-symbols-outlined">visibility</span> Ver / Descargar
+                    </button>
+                    <button type="button" class="doc-btn-delete" onclick="deleteDocItem('${key}')" title="Desvincular o eliminar archivo">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
+                    <span class="doc-status-badge uploaded" id="doc-badge-${key}" title="Archivo: ${fName}">
+                        🟢 ${fName}
+                    </span>
+                `;
             }
         } else {
-            if (badgeEl) {
-                badgeEl.className = 'doc-status-badge pending';
-                badgeEl.innerText = '🕒 Pendiente';
-                badgeEl.title = '';
+            if (actionsContainer) {
+                actionsContainer.innerHTML = `
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="uploadDocItem('${key}')">
+                        <span class="material-symbols-outlined">upload</span> Subir / Vincular
+                    </button>
+                    <span class="doc-status-badge pending" id="doc-badge-${key}">
+                        🕒 Pendiente
+                    </span>
+                `;
             }
         }
     });
@@ -11051,14 +11209,45 @@ function uploadDocItem(docKey) {
     fileInput.onchange = function(e) {
         const file = e.target.files && e.target.files[0];
         if (file) {
-            p.documentos[docKey] = {
-                uploaded: true,
-                fileName: file.name,
-                fileSize: file.size,
-                lastModified: file.lastModified
+            // Indicar carga inmediata visual
+            const badgeEl = document.getElementById(`doc-badge-${docKey}`);
+            if (badgeEl) {
+                badgeEl.innerText = `⏳ Guardando ${file.name}...`;
+                badgeEl.className = 'doc-status-badge uploaded';
+            }
+
+            const reader = new FileReader();
+            reader.onload = async function(evt) {
+                const dataUrl = evt.target.result;
+                const docData = {
+                    uploaded: true,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    fileType: file.type || 'application/octet-stream',
+                    lastModified: file.lastModified,
+                    dataUrl: dataUrl,
+                    uploadedAt: new Date().toISOString()
+                };
+
+                p.documentos[docKey] = docData;
+
+                // 1. Guardar en bóveda IndexedDB (persistencia ilimitada local)
+                if (window.DocStorage && p.id) {
+                    await window.DocStorage.saveDoc(p.id, docKey, docData);
+                }
+
+                // 2. Actualizar interfaz
+                renderDocumentosStatus(p);
+
+                // 3. Guardar en almacenamiento seguro LocalStorage
+                saveOperacionesStorage();
+
+                // 4. Sincronizar inmediatamente a la nube Supabase sin demora
+                if (typeof window.syncOperacionesToCloud === 'function') {
+                    window.syncOperacionesToCloud(true);
+                }
             };
-            renderDocumentosStatus(p);
-            saveOperacionesStorage();
+            reader.readAsDataURL(file);
         }
     };
 
@@ -11068,8 +11257,61 @@ function uploadDocItem(docKey) {
         if (document.body.contains(fileInput)) {
             document.body.removeChild(fileInput);
         }
-    }, 1000);
-};
+    }, 2000);
+}
+
+async function viewDocItem(docKey) {
+    window.viewDocItem = viewDocItem;
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p || !p.documentos || !p.documentos[docKey]) return;
+    let doc = p.documentos[docKey];
+
+    let dataUrl = doc.dataUrl;
+    if (!dataUrl && window.DocStorage && p.id) {
+        const stored = await window.DocStorage.getDoc(p.id, docKey);
+        if (stored && stored.dataUrl) {
+            dataUrl = stored.dataUrl;
+            doc.dataUrl = dataUrl;
+        }
+    }
+
+    if (!dataUrl) {
+        alert("El archivo '" + (doc.fileName || docKey) + "' está registrado en el expediente.");
+        return;
+    }
+
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = doc.fileName || `${docKey}.pdf`;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        if (document.body.contains(a)) document.body.removeChild(a);
+    }, 500);
+}
+
+async function deleteDocItem(docKey) {
+    window.deleteDocItem = deleteDocItem;
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!p || !p.documentos || !p.documentos[docKey]) return;
+    
+    const docName = p.documentos[docKey].fileName || docKey;
+    if (!confirm(`¿Estás seguro de desvincular el documento "${docName}"?`)) return;
+
+    delete p.documentos[docKey];
+
+    if (window.DocStorage && p.id) {
+        await window.DocStorage.deleteDoc(p.id, docKey);
+    }
+
+    renderDocumentosStatus(p);
+    saveOperacionesStorage();
+
+    if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(true);
+    }
+}
 
 function finishOperacionesWizard() {
     window.finishOperacionesWizard = finishOperacionesWizard;
@@ -11140,7 +11382,7 @@ function openNuevoProyectoModal() {
         infoViaje: { terminal: '', mblMawb: '', destino: '', observaciones: '' },
         infoLavado: { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: 1, observaciones: '' },
         contenedores: [
-            { id: 1, label: 'Contenedor 1', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
+            { id: 1, label: 'Contenedor 1', numContenedor: '', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
         ],
         partidasConceptos: [
             { servicio: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: 0, total: 0 },
