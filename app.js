@@ -12137,10 +12137,16 @@ window.DocStorage = {
             const cur = p.documentos[k];
             if (!cur || !cur.dataUrl) {
                 const stored = await this.getDoc(p.id, k);
-                if (stored && stored.uploaded) {
+                if (stored && stored.uploaded && stored.dataUrl) {
                     p.documentos[k] = Object.assign({}, cur || {}, stored);
                     restoredAny = true;
                 }
+            }
+        }
+        if (restoredAny) {
+            saveOperacionesStorage();
+            if (typeof window.syncOperacionesToCloud === 'function') {
+                window.syncOperacionesToCloud(true);
             }
         }
         return restoredAny;
