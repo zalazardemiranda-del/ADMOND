@@ -5411,6 +5411,77 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 4e. Solicitud de documento entre dispositivos (iPad <-> PC)
+    window.chatRealtimeChannel.on('broadcast', { event: 'request_document' }, async payload => {
+        const req = payload.payload;
+        if (!req || !req.projectId || !req.docKey) return;
+        try {
+            let docData = null;
+            if (window.DocStorage) {
+                docData = await window.DocStorage.getDoc(req.projectId, req.docKey);
+            }
+            if (!docData || !docData.dataUrl) {
+                const p = (appState.operacionesProyectos || []).find(x => x.id === req.projectId || x.consecutivo === req.projectId || x.numProyecto === req.projectId);
+                if (p && p.documentos && p.documentos[req.docKey] && p.documentos[req.docKey].dataUrl) {
+                    docData = p.documentos[req.docKey];
+                }
+            }
+            if (docData && docData.dataUrl && !isFakeDummyPdf(docData.dataUrl)) {
+                const client = window.SUPABASE_CONFIG?.client;
+                if (client) {
+                    await client.from('messages').insert({
+                        chat_id: `__doc_${req.projectId}_${req.docKey}__`,
+                        contenido: JSON.stringify(docData),
+                        emisor_nombre: appState.currentUser?.nombre || 'Expediente',
+                        emisor_role: 'documento'
+                    });
+                }
+                window.chatRealtimeChannel.send({
+                    type: 'broadcast',
+                    event: 'document_ready',
+                    payload: {
+                        projectId: req.projectId,
+                        docKey: req.docKey,
+                        fileName: docData.fileName
+                    }
+                });
+            }
+        } catch(err) {
+            console.warn("Error serving requested document:", err);
+        }
+    });
+
+    // 4f. Documento listo transferido desde la nube o par
+    window.chatRealtimeChannel.on('broadcast', { event: 'document_ready' }, async payload => {
+        const data = payload.payload;
+        if (!data || !data.projectId || !data.docKey) return;
+        const client = window.SUPABASE_CONFIG?.client;
+        if (!client) return;
+        try {
+            const { data: rows } = await client.from('messages')
+                .select('contenido')
+                .eq('chat_id', `__doc_${data.projectId}_${data.docKey}__`)
+                .order('created_at', { ascending: false })
+                .limit(1);
+            if (rows && rows.length > 0 && rows[0].contenido) {
+                const fetched = JSON.parse(rows[0].contenido);
+                if (fetched && fetched.dataUrl && !isFakeDummyPdf(fetched.dataUrl)) {
+                    if (window.DocStorage) {
+                        await window.DocStorage.saveDoc(data.projectId, data.docKey, fetched);
+                    }
+                    const p = (appState.operacionesProyectos || []).find(x => x.id === data.projectId || x.consecutivo === data.projectId || x.numProyecto === data.projectId);
+                    if (p) {
+                        if (!p.documentos) p.documentos = {};
+                        p.documentos[data.docKey] = fetched;
+                        if (appState.activeOperacionesProjectId === p.id && typeof window.renderDocumentosStatus === 'function') {
+                            renderDocumentosStatus(p);
+                        }
+                    }
+                }
+            }
+        } catch(e) {}
+    });
+
     // 5. Cambios de base de datos PostgreSQL en mensajes (canal secundario)
     window.chatRealtimeChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         const row = payload.new;
@@ -5418,6 +5489,9 @@ function setupRealtimeSubscriptions() {
         const channelKey = row.chat_id || 'general';
         if (channelKey.startsWith('__')) {
             // Mensajes de sincronización interna
+            if (channelKey.startsWith('__doc_') && typeof window.handleIncomingCloudDoc === 'function') {
+                window.handleIncomingCloudDoc(channelKey, row.contenido);
+            }
             if (channelKey === '__cloud_sync_operaciones__' && typeof window.fetchOperacionesFromCloud === 'function') {
                 window.fetchOperacionesFromCloud();
             }
@@ -12187,6 +12261,25 @@ window.DocStorage = {
                 if (stored && stored.uploaded && stored.dataUrl && !isFakeDummyPdf(stored.dataUrl)) {
                     p.documentos[k] = Object.assign({}, cur || {}, stored);
                     restoredAny = true;
+                } else if (cur && cur.uploaded && window.isSupabaseActive && window.isSupabaseActive()) {
+                    const client = window.SUPABASE_CONFIG?.client;
+                    if (client) {
+                        try {
+                            const { data: rows } = await client.from('messages')
+                                .select('contenido')
+                                .eq('chat_id', `__doc_${p.id}_${k}__`)
+                                .order('created_at', { ascending: false })
+                                .limit(1);
+                            if (rows && rows.length > 0 && rows[0].contenido) {
+                                const fetched = JSON.parse(rows[0].contenido);
+                                if (fetched && fetched.dataUrl && !isFakeDummyPdf(fetched.dataUrl)) {
+                                    await this.saveDoc(p.id, k, fetched);
+                                    p.documentos[k] = Object.assign({}, cur || {}, fetched);
+                                    restoredAny = true;
+                                }
+                            }
+                        } catch(e) {}
+                    }
                 }
             }
         }
@@ -12198,6 +12291,30 @@ window.DocStorage = {
         }
         return restoredAny;
     }
+};
+
+window.handleIncomingCloudDoc = async function(channelKey, contenido) {
+    if (!channelKey || !contenido) return;
+    try {
+        const match = channelKey.match(/^__doc_(.+)_(factura1|factura2|factura3|pod1|pod2)__$/);
+        if (!match) return;
+        const projId = match[1];
+        const docKey = match[2];
+        const docObj = JSON.parse(contenido);
+        if (docObj && docObj.dataUrl && !isFakeDummyPdf(docObj.dataUrl)) {
+            if (window.DocStorage) {
+                await window.DocStorage.saveDoc(projId, docKey, docObj);
+            }
+            const p = (appState.operacionesProyectos || []).find(x => x.id === projId || x.consecutivo === projId || x.numProyecto === projId);
+            if (p) {
+                if (!p.documentos) p.documentos = {};
+                p.documentos[docKey] = docObj;
+                if (appState.activeOperacionesProjectId === p.id && typeof window.renderDocumentosStatus === 'function') {
+                    renderDocumentosStatus(p);
+                }
+            }
+        }
+    } catch(e) {}
 };
 
 // Purgar automáticamente cualquier comprobante sintético viejo de IndexedDB y almacenamiento local
@@ -12335,13 +12452,45 @@ function uploadDocItem(docKey) {
                     await window.DocStorage.saveDoc(p.id, docKey, docData);
                 }
 
-                // 2. Actualizar interfaz
+                // 2. Guardar en slot dedicado en Supabase garantizando persistencia universal
+                if (window.isSupabaseActive && window.isSupabaseActive()) {
+                    const client = window.SUPABASE_CONFIG?.client;
+                    if (client) {
+                        try {
+                            await client.from('messages').insert({
+                                chat_id: `__doc_${p.id}_${docKey}__`,
+                                contenido: JSON.stringify(docData),
+                                emisor_nombre: appState.currentUser?.nombre || 'Expediente',
+                                emisor_role: 'documento'
+                            });
+                        } catch(eDoc) {
+                            console.warn("⚠️ Error saving doc slot to Supabase:", eDoc);
+                        }
+                    }
+                }
+
+                // 3. Notificar a otros dispositivos por WebSocket que el documento está listo
+                if (window.chatRealtimeChannel) {
+                    try {
+                        window.chatRealtimeChannel.send({
+                            type: 'broadcast',
+                            event: 'document_ready',
+                            payload: {
+                                projectId: p.id,
+                                docKey: docKey,
+                                fileName: docData.fileName
+                            }
+                        });
+                    } catch(eWs) {}
+                }
+
+                // 4. Actualizar interfaz
                 renderDocumentosStatus(p);
 
-                // 3. Guardar en almacenamiento seguro LocalStorage
+                // 5. Guardar en almacenamiento seguro LocalStorage
                 saveOperacionesStorage();
 
-                // 4. Sincronizar inmediatamente a la nube Supabase sin demora
+                // 6. Sincronizar inmediatamente a la nube Supabase sin demora
                 if (typeof window.syncOperacionesToCloud === 'function') {
                     window.syncOperacionesToCloud(true);
                 }
@@ -12400,8 +12549,51 @@ async function viewDocItem(docKey) {
         }
     }
 
+    // 3. Si aún no está en memoria local, recuperar del slot dedicado en Supabase
+    if (!dataUrl && window.isSupabaseActive && window.isSupabaseActive()) {
+        const client = window.SUPABASE_CONFIG?.client;
+        if (client) {
+            try {
+                if (typeof showCustomNotification === 'function') {
+                    showCustomNotification("Recuperando documento auténtico de la nube...", "info");
+                }
+                const { data: docRows } = await client.from('messages')
+                    .select('contenido')
+                    .eq('chat_id', `__doc_${p.id}_${docKey}__`)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                if (docRows && docRows.length > 0 && docRows[0].contenido) {
+                    const fetchedDoc = JSON.parse(docRows[0].contenido);
+                    if (fetchedDoc && fetchedDoc.dataUrl && !isFakeDummyPdf(fetchedDoc.dataUrl)) {
+                        dataUrl = fetchedDoc.dataUrl;
+                        doc.dataUrl = dataUrl;
+                        if (window.DocStorage && p.id) {
+                            await window.DocStorage.saveDoc(p.id, docKey, fetchedDoc);
+                        }
+                    }
+                }
+            } catch(e) {
+                console.warn("Error fetching document from cloud slot:", e);
+            }
+        }
+    }
+
+    // 4. Si aún no está disponible, solicitar transmisión P2P por WebSockets al compañero
+    if (!dataUrl && window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'request_document',
+                payload: {
+                    projectId: p.id,
+                    docKey: docKey
+                }
+            });
+        } catch(e) {}
+    }
+
     if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:') || isFakeDummyPdf(dataUrl)) {
-        alert(`El archivo original "${doc.fileName || docKey}" fue cargado por tu compañero en su dispositivo.\n\nPara visualizarlo y descargarlo en esta computadora:\n1. Pídele a tu compañero que abra el proyecto en su iPad/equipo para que se transfiera el archivo original auténtico a la nube automáticamente, o\n2. Si tienes el archivo en esta computadora, cárgalo directamente pulsando "Subir / Vincular".`);
+        alert(`El archivo original "${doc.fileName || docKey}" se está sincronizando entre dispositivos.\n\nSe ha solicitado la transferencia automática a tu compañero. Por favor reintenta dar clic en "Ver / Descargar" en unos segundos.\n\nTambién puedes cargarlo directamente pulsando "Subir / Vincular".`);
         return;
     }
 
@@ -12448,6 +12640,15 @@ async function deleteDocItem(docKey) {
 
     if (window.DocStorage && p.id) {
         await window.DocStorage.deleteDoc(p.id, docKey);
+    }
+
+    if (window.isSupabaseActive && window.isSupabaseActive()) {
+        const client = window.SUPABASE_CONFIG?.client;
+        if (client) {
+            try {
+                await client.from('messages').delete().eq('chat_id', `__doc_${p.id}_${docKey}__`);
+            } catch(e) {}
+        }
     }
 
     renderDocumentosStatus(p);
