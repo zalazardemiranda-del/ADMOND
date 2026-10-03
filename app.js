@@ -327,12 +327,15 @@ const runInitialAppSetup = async () => {
 
     // Restaurar pestaña activa persistida o desde hash de URL
     const isLocalhost = window.isLocalhostEnvironment();
-    const hashTab = window.location.hash ? window.location.hash.replace('#', '').trim() : '';
-    const storedTab = localStorage.getItem("rp_current_tab");
-    if (hashTab && ['emails', 'tasks', 'chat', 'administracion', 'meetings', 'users', 'profile'].includes(hashTab)) {
-        appState.currentTab = (hashTab === 'emails' && !isLocalhost) ? 'tasks' : hashTab;
+    let hashTab = window.location.hash ? window.location.hash.replace('#', '').trim() : '';
+    let storedTab = localStorage.getItem("rp_current_tab");
+    if (hashTab === 'emails') hashTab = 'schema';
+    if (storedTab === 'emails') storedTab = 'schema';
+
+    if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'meetings', 'users', 'profile'].includes(hashTab)) {
+        appState.currentTab = (hashTab === 'schema' && !isLocalhost) ? 'tasks' : hashTab;
     } else if (storedTab) {
-        appState.currentTab = (storedTab === 'emails' && !isLocalhost) ? 'tasks' : storedTab;
+        appState.currentTab = (storedTab === 'schema' && !isLocalhost) ? 'tasks' : storedTab;
     } else {
         appState.currentTab = 'tasks';
     }
@@ -343,14 +346,9 @@ const runInitialAppSetup = async () => {
         appState.currentAdminFicha = storedAdminFicha;
     }
 
-    // Inicializar Centro de Correos Electrónicos ÚNICAMENTE en localhost
-    if (isLocalhost) {
-        if (typeof loadEmailsData === 'function') {
-            await loadEmailsData();
-        }
-        if (typeof setupSupabaseEmailsRealtime === 'function') {
-            setupSupabaseEmailsRealtime();
-        }
+    // Inicializar Esquematización de Sistema ÚNICAMENTE en localhost
+    if (isLocalhost && typeof initSchemaEngine === 'function') {
+        initSchemaEngine();
     }
 
     setRole(appState.currentRole);
@@ -649,8 +647,12 @@ function handleAuthNavItemClick(e) {
 // 2. Tab Switcher
 function switchTab(tabName) {
     window.switchTab = switchTab;
-    // Si no está en localhost, bloquear Centro de Correos y redirigir a tareas
-    if (tabName === 'emails' && typeof window.isLocalhostEnvironment === 'function' && !window.isLocalhostEnvironment()) {
+    // Redirigir emails a schema
+    if (tabName === 'emails') {
+        tabName = 'schema';
+    }
+    // Si no está en localhost, bloquear Esquematización y redirigir a tareas
+    if (tabName === 'schema' && typeof window.isLocalhostEnvironment === 'function' && !window.isLocalhostEnvironment()) {
         tabName = 'tasks';
     }
 
@@ -688,7 +690,11 @@ function switchTab(tabName) {
     const titleEl = document.getElementById("page-main-title");
     const subtitleEl = document.getElementById("page-subtitle");
     
-    if (tabName === 'emails') {
+    if (tabName === 'schema') {
+        titleEl.innerText = "Esquematización de Sistema";
+        subtitleEl.innerText = "Mapeo jerárquico de proyectos, ramificación por departamentos y trazabilidad de bloqueos";
+        if (typeof renderSchemaView === 'function') renderSchemaView();
+    } else if (tabName === 'emails') {
         titleEl.innerText = "Centro de Correos";
         subtitleEl.innerText = "Buzón corporativo y mensajería interna sin intermediarios externos";
         if (typeof renderEmailCenter === 'function') renderEmailCenter();
@@ -4421,6 +4427,7 @@ function getAvailableAssignees() {
 
     return list;
 }
+window.getAvailableAssignees = getAvailableAssignees;
 
 function openAssigneeDropdown() {
     window.openAssigneeDropdown = openAssigneeDropdown;

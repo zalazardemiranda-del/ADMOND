@@ -32,7 +32,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <link rel="stylesheet" href="styles.css?v=3.5">
+    <link rel="stylesheet" href="styles.css?v=6.4">
 
     <script>
 
@@ -47,6 +47,7 @@
             if (!isLocal) {
 
                 document.documentElement.classList.add('hide-emails-feature');
+                document.documentElement.classList.add('hide-schema-feature');
 
             } else {
 
@@ -143,15 +144,13 @@
 
                 <ul>
 
-                    <li id="sidebar-item-emails">
+                    <li id="sidebar-item-schema">
 
-                        <a href="#" class="nav-item" id="nav-emails" onclick="switchTab('emails')" title="Centro de Correos">
+                        <a href="#" class="nav-item" id="nav-schema" onclick="switchTab('schema')" title="Esquematización de Sistema">
 
-                            <span class="material-symbols-outlined">mark_email_unread</span>
+                            <span class="material-symbols-outlined">account_tree</span>
 
-                            <span class="nav-text-label">Centro de Correos</span>
-
-                            <span class="chat-badge email-badge" id="unread-email-count" style="display: none; background: #EF4444;">0</span>
+                            <span class="nav-text-label">Esquematización</span>
 
                         </a>
 
@@ -385,445 +384,122 @@
 
                 
 
-                <!-- TAB 0: CENTRO DE CORREOS (WEBMAIL INTERNO RODIPACK) -->
-
-                <section id="tab-emails" class="tab-pane">
-
-                    <div class="email-layout card">
-
-                        <!-- Columna 1: Carpetas y Categorías -->
-
-                        <aside class="email-sidebar-pane">
-
-                            <button type="button" class="btn-email-compose" onclick="openComposeModal()">
-
-                                <span class="material-symbols-outlined">edit_square</span>
-
-                                <span>Redactar Correo</span>
-
-                            </button>
-
-
-
-                            <div class="email-folder-group">
-
-                                <span class="email-group-title">BANDEJAS</span>
-
-                                <ul class="email-folder-list">
-
-                                    <li class="email-folder-item active" id="folder-inbox" onclick="selectEmailFolder('inbox')">
-
-                                        <span class="material-symbols-outlined">inbox</span>
-
-                                        <span class="folder-name">Bandeja de Entrada</span>
-
-                                        <span class="folder-badge" id="badge-folder-inbox" style="display: none;">0</span>
-
-                                    </li>
-
-                                    <li class="email-folder-item" id="folder-starred" onclick="selectEmailFolder('starred')">
-
-                                        <span class="material-symbols-outlined">star</span>
-
-                                        <span class="folder-name">Destacados</span>
-
-                                        <span class="folder-badge" id="badge-folder-starred" style="display: none;">0</span>
-
-                                    </li>
-
-                                    <li class="email-folder-item" id="folder-sent" onclick="selectEmailFolder('sent')">
-
-                                        <span class="material-symbols-outlined">send</span>
-
-                                        <span class="folder-name">Enviados</span>
-
-                                        <span class="folder-badge" id="badge-folder-sent" style="display: none;">0</span>
-
-                                    </li>
-
-                                    <li class="email-folder-item" id="folder-drafts" onclick="selectEmailFolder('drafts')">
-
-                                        <span class="material-symbols-outlined">draft</span>
-
-                                        <span class="folder-name">Borradores</span>
-
-                                        <span class="folder-badge" id="badge-folder-drafts" style="display: none;">0</span>
-
-                                    </li>
-
-                                    <li class="email-folder-item" id="folder-notifications" onclick="selectEmailFolder('notifications')">
-
-                                        <span class="material-symbols-outlined">notifications</span>
-
-                                        <span class="folder-name">Notificaciones</span>
-
-                                        <span class="folder-badge" id="badge-folder-notifications" style="display: none;">0</span>
-
-                                    </li>
-
-                                    <li class="email-folder-item" id="folder-trash" onclick="selectEmailFolder('trash')">
-
-                                        <span class="material-symbols-outlined">delete</span>
-
-                                        <span class="folder-name">Papelera</span>
-
-                                        <span class="folder-badge" id="badge-folder-trash" style="display: none;">0</span>
-
-                                    </li>
-
-                                </ul>
-
-                            </div>
-
-
-
-                            <div class="email-folder-group">
-
-                                <span class="email-group-title">DEPARTAMENTOS</span>
-
-                                <div class="email-tags-list">
-
-                                    <button type="button" class="email-tag-chip active" id="tag-all" onclick="filterEmailByCategory('all')">
-
-                                        <span class="tag-dot" style="background: #64748B;"></span> Todos
-
-                                    </button>
-
-                                    <button type="button" class="email-tag-chip" id="tag-operaciones" onclick="filterEmailByCategory('Operaciones')">
-
-                                        <span class="tag-dot" style="background: #2563EB;"></span> Operaciones
-
-                                    </button>
-
-                                    <button type="button" class="email-tag-chip" id="tag-facturacion" onclick="filterEmailByCategory('Facturación')">
-
-                                        <span class="tag-dot" style="background: #10B981;"></span> Facturación
-
-                                    </button>
-
-                                    <button type="button" class="email-tag-chip" id="tag-gerencia" onclick="filterEmailByCategory('Gerencia')">
-
-                                        <span class="tag-dot" style="background: #8B5CF6;"></span> Gerencia
-
-                                    </button>
-
-                                    <button type="button" class="email-tag-chip" id="tag-soporte" onclick="filterEmailByCategory('Soporte')">
-
-                                        <span class="tag-dot" style="background: #F59E0B;"></span> Soporte
-
-                                    </button>
-
+                                <!-- TAB 0: ESQUEMATIZACIÓN DE SISTEMA (RAMIFICACIÓN, PROYECTOS, DEPARTAMENTOS Y BLOQUEOS) -->
+                <section id="tab-schema" class="tab-pane">
+                    <div class="canvas-board-container" id="canvas-board-container">
+                        
+                        <!-- ÁREA DEL PIZARRÓN INFINITO (LADO DERECHO) -->
+                        <main class="canvas-infinite-viewport" id="canvas-infinite-viewport">
+                            
+                            <!-- Barra Superior Flotante del Canvas -->
+                            <div class="canvas-top-bar">
+                                <div class="canvas-project-badge">
+                                    <span class="material-symbols-outlined" style="color: #2563EB;">lan</span>
+                                    <select id="schema-active-project-select" onchange="handleSelectSchemaProject(this.value)">
+                                        <!-- Dinámico -->
+                                    </select>
                                 </div>
 
-                            </div>
-
-
-
-                            <!-- Estado del buzón corporativo -->
-
-                            <div class="email-account-status">
-
-                                <div class="status-indicator-dot online"></div>
-
-                                <div class="status-account-info">
-
-                                    <span class="account-title">Buzón Interno Rodipack</span>
-
-                                    <span class="account-email" id="email-account-address">roberto@rodipack.online</span>
-
-                                </div>
-
-                            </div>
-
-                        </aside>
-
-
-
-                        <!-- Columna 2: Lista de Mensajes -->
-
-                        <section class="email-list-pane">
-
-                            <div class="email-list-header">
-
-                                <div class="email-search-bar">
-
-                                    <span class="material-symbols-outlined search-icon">search</span>
-
-                                    <input type="text" id="email-search-input" placeholder="Buscar por asunto, persona o mensaje..." oninput="handleEmailSearch(event)">
-
-                                    <button type="button" id="email-search-clear" onclick="clearEmailSearch()" style="display: none;" title="Limpiar búsqueda">✕</button>
-
-                                </div>
-
-                                
-
-                                <div class="email-quick-filter-chips">
-
-                                    <button type="button" class="filter-chip active" id="chip-filter-all" onclick="setEmailQuickFilter('all')">Todos</button>
-
-                                    <button type="button" class="filter-chip" id="chip-filter-unread" onclick="setEmailQuickFilter('unread')">No leídos</button>
-
-                                    <button type="button" class="filter-chip" id="chip-filter-starred" onclick="setEmailQuickFilter('starred')">Destacados</button>
-
-                                    <button type="button" class="filter-chip" id="chip-filter-attachments" onclick="setEmailQuickFilter('attachments')">Con adjuntos</button>
-
-                                </div>
-
-
-
-                                <div class="email-actions-toolbar">
-
-                                    <label class="select-all-checkbox-container" title="Seleccionar todos">
-
-                                        <input type="checkbox" id="email-select-all" onchange="toggleSelectAllEmails(this.checked)">
-
-                                        <span class="checkmark"></span>
-
-                                    </label>
-
-                                    <div class="toolbar-btn-group">
-
-                                        <button type="button" class="toolbar-btn" onclick="batchMarkEmailsRead(true)" title="Marcar como leídos">
-
-                                            <span class="material-symbols-outlined">drafts</span>
-
-                                        </button>
-
-                                        <button type="button" class="toolbar-btn" onclick="batchMarkEmailsRead(false)" title="Marcar como no leídos">
-
-                                            <span class="material-symbols-outlined">mark_email_unread</span>
-
-                                        </button>
-
-                                        <button type="button" class="toolbar-btn text-danger" onclick="batchDeleteEmails()" title="Mover a papelera">
-
-                                            <span class="material-symbols-outlined">delete</span>
-
-                                        </button>
-
-                                        <button type="button" class="toolbar-btn" onclick="refreshEmails()" title="Actualizar buzón">
-
-                                            <span class="material-symbols-outlined">refresh</span>
-
-                                        </button>
-
-                                    </div>
-
-                                    <span class="email-counter-display" id="email-counter-display">0 correos</span>
-
-                                </div>
-
-                            </div>
-
-
-
-                            <div class="email-list-content" id="email-list-content">
-
-                                <!-- Correos renderizados dinámicamente -->
-
-                            </div>
-
-                        </section>
-
-
-
-                        <!-- Columna 3: Visor de Lectura Detallado -->
-
-                        <section class="email-reading-pane" id="email-reading-pane">
-
-                            <!-- Estado Vacío -->
-
-                            <div class="email-reader-empty" id="email-reader-empty">
-
-                                <div class="empty-icon-wrap">
-
-                                    <span class="material-symbols-outlined">mark_email_read</span>
-
-                                </div>
-
-                                <h3>Selecciona un correo para leerlo</h3>
-
-                                <p>Explora tu correspondencia interna corporativa o redacta un nuevo mensaje para tu equipo.</p>
-
-                                <button type="button" class="btn-primary-action" onclick="openComposeModal()" style="margin-top: 14px; padding: 10px 18px; font-size: 13px;">
-
-                                    <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Redactar Nuevo Mensaje
-
-                                </button>
-
-                            </div>
-
-
-
-                            <!-- Contenido del Correo Abierto -->
-
-                            <div class="email-reader-view" id="email-reader-view" style="display: none;">
-
-                                <div class="email-reader-header">
-
-                                    <div class="reader-subject-row">
-
-                                        <h2 id="reader-subject">Asunto del Correo</h2>
-
-                                        <div class="reader-badges">
-
-                                            <span class="badge" id="reader-category-badge">General</span>
-
-                                            <span class="badge" id="reader-priority-badge" style="display: none;">Alta</span>
-
+                                <!-- Panel de Filtro de Colaborador y Métricas (Idéntico a Imagen 2) -->
+                                <div class="tasks-user-filter-section schema-user-filter-panel" id="schema-user-filter-panel">
+                                    <div class="user-filter-main">
+                                        <div class="user-filter-badge-icon">
+                                            <span class="material-symbols-outlined">person_search</span>
                                         </div>
+                                        <div class="user-filter-info">
+                                            <span class="user-filter-label">FILTRAR POR COLABORADOR:</span>
+                                            <div class="user-filter-select-wrap">
+                                                <div class="custom-user-filter-dropdown" id="schema-user-filter-trigger" onclick="window.schemaEngine.toggleUserFilterMenu(event)" title="Filtrar y destacar tareas de un colaborador en el pizarrón">
+                                                    <div class="filter-selected-user" id="schema-filter-selected-user-display">
+                                                        <div class="trigger-avatar icon-all">
+                                                            <span class="material-symbols-outlined">groups</span>
+                                                        </div>
+                                                        <div class="trigger-text-wrap">
+                                                            <span class="selected-name">Todos los colaboradores</span>
+                                                            <span class="selected-metrics-badge" id="schema-filter-badge-count">32 tareas</span>
+                                                        </div>
+                                                    </div>
+                                                    <span class="material-symbols-outlined filter-dropdown-arrow">expand_more</span>
+                                                </div>
 
-                                    </div>
+                                                <ul class="custom-user-filter-menu" id="schema-custom-user-filter-menu">
+                                                    <!-- Cargado dinámicamente con JS -->
+                                                </ul>
 
-
-
-                                    <div class="reader-actions-bar">
-
-                                        <button type="button" class="reader-action-btn" onclick="handleReplyCurrentEmail()" title="Responder">
-
-                                            <span class="material-symbols-outlined">reply</span> <span>Responder</span>
-
-                                        </button>
-
-                                        <button type="button" class="reader-action-btn" onclick="handleForwardCurrentEmail()" title="Reenviar">
-
-                                            <span class="material-symbols-outlined">forward</span> <span>Reenviar</span>
-
-                                        </button>
-
-                                        <button type="button" class="reader-action-btn" id="reader-star-btn" onclick="toggleCurrentEmailStar()" title="Destacar">
-
-                                            <span class="material-symbols-outlined">star_border</span>
-
-                                        </button>
-
-                                        <button type="button" class="reader-action-btn" onclick="toggleCurrentEmailUnread()" title="Marcar como no leído">
-
-                                            <span class="material-symbols-outlined">mark_email_unread</span>
-
-                                        </button>
-
-                                        <button type="button" class="reader-action-btn text-danger" onclick="deleteCurrentEmail()" title="Eliminar">
-
-                                            <span class="material-symbols-outlined">delete</span>
-
-                                        </button>
-
-                                        <button type="button" class="reader-action-btn" onclick="printCurrentEmail()" title="Imprimir correo">
-
-                                            <span class="material-symbols-outlined">print</span>
-
-                                        </button>
-
-                                    </div>
-
-
-
-                                    <div class="reader-meta-box">
-
-                                        <div class="reader-sender-avatar" id="reader-sender-avatar">G</div>
-
-                                        <div class="reader-sender-details">
-
-                                            <div class="sender-name-row">
-
-                                                <strong id="reader-sender-name">Remitente</strong>
-
-                                                <span class="sender-email-tag" id="reader-sender-email">&lt;remitente@rodipack.online&gt;</span>
-
+                                                <select id="schema-task-user-filter-select" onchange="window.schemaEngine.setCollaboratorFilter(this.value)" style="display: none;">
+                                                    <option value="all">Todos los colaboradores</option>
+                                                </select>
                                             </div>
-
-                                            <div class="recipient-row">
-
-                                                <span>Para: <strong id="reader-recipient-name">Destinatario</strong> <span id="reader-recipient-email">&lt;destinatario@rodipack.online&gt;</span></span>
-
-                                                <span id="reader-cc-wrapper" style="display: none; margin-left: 8px;">| CC: <span id="reader-cc-emails"></span></span>
-
-                                            </div>
-
                                         </div>
-
-                                        <div class="reader-date-time" id="reader-date-time">11 Sep 2026, 14:30</div>
-
                                     </div>
 
+                                    <div class="user-filter-metrics" id="schema-user-filter-metrics">
+                                        <div class="filter-metric-item metric-total" title="Total de tareas">
+                                            <span class="metric-num" id="schema-stat-total">32</span>
+                                            <span class="metric-label">TOTAL</span>
+                                        </div>
+                                        <div class="filter-metric-item metric-pending" id="schema-metric-pending" title="Tareas pendientes">
+                                            <div class="metric-head">
+                                                <span class="material-symbols-outlined metric-icon">pending</span>
+                                                <span class="metric-num" id="schema-stat-pending">19</span>
+                                            </div>
+                                            <span class="metric-label">PENDIENTES</span>
+                                        </div>
+                                        <div class="filter-metric-item metric-completed" id="schema-metric-completed" title="Tareas completadas">
+                                            <div class="metric-head">
+                                                <span class="material-symbols-outlined metric-icon">check_circle</span>
+                                                <span class="metric-num" id="schema-stat-completed">13</span>
+                                            </div>
+                                            <span class="metric-label">COMPLETADAS</span>
+                                        </div>
+                                        <div class="filter-metric-progress" title="Porcentaje de avance / cumplimiento">
+                                            <div class="metric-progress-header">
+                                                <span class="metric-progress-title">Cumplimiento</span>
+                                                <span class="metric-progress-pct" id="schema-stat-progress-pct">41%</span>
+                                            </div>
+                                            <div class="metric-progress-track">
+                                                <div class="metric-progress-fill" id="schema-stat-progress-bar" style="width: 41%;"></div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-
-
-
-                                <div class="email-reader-body" id="reader-body">
-
-                                    <!-- Contenido del correo -->
-
-                                </div>
-
-
-
-                                <!-- Adjuntos -->
-
-                                <div class="email-reader-attachments" id="reader-attachments-section" style="display: none;">
-
-                                    <div class="attachments-header">
-
-                                        <span class="material-symbols-outlined">attach_file</span>
-
-                                        <span id="reader-attachments-count">Archivos Adjuntos (0)</span>
-
-                                    </div>
-
-                                    <div class="attachments-grid" id="reader-attachments-grid">
-
-                                        <!-- Tarjetas de adjunto -->
-
-                                    </div>
-
-                                </div>
-
-
-
-                                <!-- Respuesta Rápida Integrada -->
-
-                                <div class="email-quick-reply-box">
-
-                                    <div class="quick-reply-header">
-
-                                        <span class="material-symbols-outlined">quickreply</span>
-
-                                        <span>Respuesta rápida a <strong id="quick-reply-target-name">remitente</strong>:</span>
-
-                                    </div>
-
-                                    <textarea id="quick-reply-input" placeholder="Escribe tu respuesta aquí..." rows="2"></textarea>
-
-                                    <div class="quick-reply-actions">
-
-                                        <button type="button" class="btn-secondary" onclick="openFullReplyModal()" style="font-size: 12px; padding: 6px 12px; cursor: pointer; border-radius: 8px; border: 1px solid #CBD5E1; background: #FFFFFF; display: inline-flex; align-items: center; gap: 4px;">
-
-                                            <span class="material-symbols-outlined" style="font-size: 16px;">open_in_full</span> Modo Completo
-
-                                        </button>
-
-                                        <button type="button" class="btn-primary-action" onclick="sendQuickReply()" style="font-size: 12px; padding: 6px 14px; cursor: pointer; border-radius: 8px; border: none; background: #2563EB; color: #FFFFFF; display: inline-flex; align-items: center; gap: 4px;">
-
-                                            <span class="material-symbols-outlined" style="font-size: 16px;">send</span> Enviar Respuesta
-
-                                        </button>
-
-                                    </div>
-
-                                </div>
-
                             </div>
 
-                        </section>
+                            <!-- Pizarrón / Superficie con Transform (Pan & Zoom) -->
+                            <div class="canvas-surface" id="canvas-surface">
+                                <!-- Capa SVG de Flechas y Conectores Dinámicos -->
+                                <svg class="canvas-svg-layer" id="canvas-svg-layer">
+                                    <defs>
+                                        <marker id="arrow-locked" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                            <path d="M 0 1 L 8 5 L 0 9 z" fill="#DC2626" />
+                                        </marker>
+                                        <marker id="arrow-unlocked" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                            <path d="M 0 1 L 8 5 L 0 9 z" fill="#059669" />
+                                        </marker>
+                                        <marker id="arrow-neutral" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                            <path d="M 0 1 L 8 5 L 0 9 z" fill="#94A3B8" />
+                                        </marker>
+                                    </defs>
+                                </svg>
 
+                                <!-- Capa Canvas para Dibujo Libre con lápiz -->
+                                <canvas class="canvas-drawing-layer" id="canvas-drawing-layer"></canvas>
+
+                                <!-- Capa de Nodos (Tarjetas, Departamentos, Notas y Textos) -->
+                                <div class="canvas-nodes-layer" id="canvas-nodes-layer">
+                                    <!-- Renderizado dinámico -->
+                                </div>
+                            </div>
+
+
+
+
+
+                        </main>
                     </div>
-
                 </section>
 
-
-
-                <!-- TAB 1: TAREAS -->
+<!-- TAB 1: TAREAS -->
 
                 <section id="tab-tasks" class="tab-pane active">
 
@@ -4261,6 +3937,9 @@
                     </div>
 
                 </section>
+            </div>
+        </main>
+    </div>
 
 
 
@@ -4886,6 +4565,10 @@
 
             </div>
 
+        </div>
+
+    </div>
+
 
 
     <!-- ========================================== -->
@@ -5198,6 +4881,457 @@
 
 
 
+    
+    <!-- ========================================== -->
+    <!-- MODAL: CREAR / EDITAR TAREA EN ESQUEMA     -->
+    <!-- (Formato idéntico a Imagen 2)              -->
+    <!-- ========================================== -->
+    <div id="modal-schema-task" class="custom-modal-overlay" onclick="if (event.target === this) closeSchemaTaskModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 999999; align-items: center; justify-content: center; padding: 20px;">
+        <div class="custom-modal-content" style="background: #FFFFFF; border-radius: 18px; width: 100%; max-width: 440px; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25); padding: 26px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 10px; background: #EFF6FF; color: #2563EB; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-outlined">add_task</span>
+                    </div>
+                    <div>
+                        <h3 id="modal-task-title-text" style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Asignar Nueva Tarea</h3>
+                        <span id="modal-task-dept-badge" style="font-size: 11px; font-weight: 700; color: #64748B;">Departamento: IT</span>
+                    </div>
+                </div>
+                <button type="button" onclick="closeSchemaTaskModal()" style="background: none; border: none; font-size: 20px; color: #64748B; cursor: pointer;">✕</button>
+            </div>
+
+            <form id="form-schema-task" onsubmit="handleSaveSchemaTask(event)">
+                <input type="hidden" id="schema-form-task-id" value="">
+                <input type="hidden" id="schema-form-dept" value="IT">
+                <input type="hidden" id="schema-form-dept-id" value="">
+                <input type="hidden" id="schema-form-subdept" value="">
+                <input type="hidden" id="schema-form-subdept-id" value="">
+                <input type="hidden" id="schema-form-status" value="pending">
+                <input type="hidden" id="schema-form-duedate" value="">
+
+                <!-- 1. Título de la Tarea (Imagen 2) -->
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="schema-form-title" style="display: block; font-size: 13px; font-weight: 700; color: #1E293B; margin-bottom: 6px;">Título de la Tarea</label>
+                    <input type="text" id="schema-form-title" required placeholder="Ej: Revisar cubicación contenedor #42" style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; background: #fff; box-sizing: border-box;">
+                </div>
+
+                <!-- 2. Descripción / Instrucciones (Imagen 2) -->
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="schema-form-desc" style="display: block; font-size: 13px; font-weight: 700; color: #1E293B; margin-bottom: 6px;">Descripción / Instrucciones</label>
+                    <textarea id="schema-form-desc" rows="3" required placeholder="Detalles de la tarea para el colaborador..." style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; background: #fff; resize: vertical; box-sizing: border-box;"></textarea>
+                </div>
+
+                <!-- 3. Asignar a (Responsable / Colaborador) (Imagen 2) -->
+                <div class="form-group" style="margin-bottom: 16px; position: relative;">
+                    <label for="schema-form-assignee" style="display: block; font-size: 13px; font-weight: 700; color: #1E293B; margin-bottom: 6px;">Asignar a (Responsable / Colaborador)</label>
+                    <div class="assignee-autocomplete-wrapper">
+                        <input type="text" id="schema-form-assignee" required placeholder="Escribe o selecciona un colaborador..." autocomplete="off" onfocus="window.schemaEngine.openSchemaAssigneeDropdown()" onclick="window.schemaEngine.openSchemaAssigneeDropdown()" oninput="window.schemaEngine.filterSchemaAssigneeDropdown(this.value)" style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; background: #fff; box-sizing: border-box;">
+                        <ul id="schema-task-assignee-dropdown" class="assignee-dropdown-menu"></ul>
+                    </div>
+                </div>
+
+                <!-- 4. Prioridad (Segmented Control como en Imagen 2) -->
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #1E293B; margin-bottom: 6px;">Prioridad</label>
+                    <input type="hidden" id="schema-form-priority" value="alta" required>
+                    <div class="priority-segmented-control" id="schema-priority-segmented">
+                        <button type="button" class="priority-segment-btn active" data-priority="alta" onclick="window.schemaEngine.setSchemaPrioritySegment('alta')">
+                            <span class="priority-bullet priority-bullet-alta"></span>
+                            <span>Alta</span>
+                        </button>
+                        <button type="button" class="priority-segment-btn" data-priority="media" onclick="window.schemaEngine.setSchemaPrioritySegment('media')">
+                            <span class="priority-bullet priority-bullet-media"></span>
+                            <span>Media</span>
+                        </button>
+                        <button type="button" class="priority-segment-btn" data-priority="baja" onclick="window.schemaEngine.setSchemaPrioritySegment('baja')">
+                            <span class="priority-bullet priority-bullet-baja"></span>
+                            <span>Baja</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 5. Opciones de dependencias (opcional / plegable) -->
+                <details style="margin-bottom: 20px; border-top: 1px solid #F1F5F9; padding-top: 10px;">
+                    <summary style="font-size: 12px; font-weight: 700; color: #64748B; cursor: pointer; user-select: none;">
+                        🔗 Dependencias de bloqueo (opcional)
+                    </summary>
+                    <div style="margin-top: 10px;">
+                        <p style="margin: 0 0 8px 0; font-size: 11px; color: #94A3B8;">
+                            Si marcas una tarea previa, esta tarea quedará bloqueada hasta que la previa se complete.
+                        </p>
+                        <div class="schema-dependency-checklist" id="schema-form-dependencies-list">
+                            <!-- Checkboxes dinámicos -->
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Botón Azul Ancho de Envío (Exactamente como Imagen 2) -->
+                <button type="submit" class="btn btn-primary" style="width: 100%; height: 44px; justify-content: center; margin-top: 6px; font-size: 14px; font-weight: 700; border-radius: 8px; background: #2563EB; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); display: flex; align-items: center; gap: 8px; color: #FFFFFF; border: none; cursor: pointer;">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">send</span> Asignar Tarea
+                </button>
+            </form>
+        </div>
+    </div>
+    <!-- ========================================== -->
+    <!-- MODAL: NUEVO DEPARTAMENTO (Tema Central)    -->
+    <!-- ========================================== -->
+    <div id="modal-schema-new-dept" class="custom-modal-overlay" onclick="if (event.target === this) window.schemaEngine.closeNewDeptModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 999999; align-items: center; justify-content: center; padding: 20px;">
+        <div class="custom-modal-content" style="background: #FFFFFF; border-radius: 18px; width: 100%; max-width: 450px; box-shadow: 0 24px 50px rgba(15, 23, 42, 0.25); padding: 26px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 10px; background: #EFF6FF; color: #2563EB; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-outlined">domain</span>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Nuevo Departamento</h3>
+                        <span style="font-size: 11px; color: #64748B;">Añadir al Tema Central</span>
+                    </div>
+                </div>
+                <button type="button" onclick="window.schemaEngine.closeNewDeptModal()" style="background: none; border: none; font-size: 20px; color: #64748B; cursor: pointer;">✕</button>
+            </div>
+
+            <form id="form-schema-new-dept" onsubmit="window.schemaEngine.handleSaveNewDept(event)">
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Nombre del Departamento: *</label>
+                    <input type="text" id="schema-new-dept-name" required placeholder="Ej: IT, Ventas, Operaciones..." style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 13px; outline: none; box-sizing: border-box;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Descripción: *</label>
+                    <input type="text" id="schema-new-dept-desc" required placeholder="Ej: Desarrollo Software, Atención comercial..." style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 13px; outline: none; box-sizing: border-box;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px; position: relative;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Encargado: *</label>
+                    <div class="custom-collab-select-wrapper">
+                        <input type="hidden" id="schema-new-dept-manager" value="Roberto Miranda">
+                        <div id="schema-new-dept-manager-trigger" class="custom-collab-select-trigger" onclick="window.schemaEngine.toggleCollabSelectDropdown('schema-new-dept-manager', 'schema-new-dept-manager-dropdown')"></div>
+                        <div id="schema-new-dept-manager-dropdown" class="custom-collab-dropdown-menu"></div>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 22px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 8px;">Color Identificador:</label>
+                    <div class="schema-color-picker-grid" id="schema-new-dept-color-picker" style="display: flex; flex-wrap: wrap; gap: 10px;"></div>
+                    <input type="hidden" id="schema-new-dept-color" value="#2563EB">
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn-secondary" onclick="window.schemaEngine.closeNewDeptModal()" style="padding: 10px 16px; font-size: 13px; border-radius: 8px;">Cancelar</button>
+                    <button type="submit" class="btn-primary-action" style="padding: 10px 20px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #2563EB; color: #FFF; border: none; cursor: pointer;">Crear Departamento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: EDITAR DEPARTAMENTO                 -->
+    <!-- ========================================== -->
+    <div id="modal-schema-edit-dept" class="custom-modal-overlay" onclick="if (event.target === this) window.schemaEngine.closeEditDeptModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 999999; align-items: center; justify-content: center; padding: 20px;">
+        <div class="custom-modal-content" style="background: #FFFFFF; border-radius: 18px; width: 100%; max-width: 450px; box-shadow: 0 24px 50px rgba(15, 23, 42, 0.25); padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 10px; background: #EEF2FF; color: #4F46E5; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-outlined">edit</span>
+                    </div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Editar Departamento</h3>
+                </div>
+                <button type="button" onclick="window.schemaEngine.closeEditDeptModal()" style="background: none; border: none; font-size: 20px; color: #64748B; cursor: pointer;">✕</button>
+            </div>
+
+            <form id="form-schema-edit-dept" onsubmit="window.schemaEngine.handleSaveEditDept(event)">
+                <input type="hidden" id="schema-edit-dept-id" value="">
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Nombre del Departamento: *</label>
+                    <input type="text" id="schema-edit-dept-name" required placeholder="Ej: IT, Ventas, Operaciones..." style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 13px; outline: none; box-sizing: border-box;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Descripción: *</label>
+                    <input type="text" id="schema-edit-dept-desc" required placeholder="Ej: Desarrollo Software..." style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 13px; outline: none; box-sizing: border-box;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px; position: relative;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Encargado: *</label>
+                    <div class="custom-collab-select-wrapper">
+                        <input type="hidden" id="schema-edit-dept-manager" value="Roberto Miranda">
+                        <div id="schema-edit-dept-manager-trigger" class="custom-collab-select-trigger" onclick="window.schemaEngine.toggleCollabSelectDropdown('schema-edit-dept-manager', 'schema-edit-dept-manager-dropdown')"></div>
+                        <div id="schema-edit-dept-manager-dropdown" class="custom-collab-dropdown-menu"></div>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 22px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 8px;">Color Identificador:</label>
+                    <div class="schema-color-picker-grid" id="schema-dept-color-picker" style="display: flex; flex-wrap: wrap; gap: 10px;"></div>
+                    <input type="hidden" id="schema-edit-dept-color" value="#2563EB">
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <button type="button" class="btn-secondary" onclick="window.schemaEngine.deleteDepartment(document.getElementById('schema-edit-dept-id').value); window.schemaEngine.closeEditDeptModal();" style="padding: 10px 14px; font-size: 12px; color: #DC2626; border-color: #FECACA; background: #FEF2F2; cursor: pointer; border-radius: 8px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; pointer-events: none; vertical-align: middle;">delete</span> Eliminar
+                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn-secondary" onclick="window.schemaEngine.closeEditDeptModal()" style="padding: 10px 16px; font-size: 13px; border-radius: 8px;">Cancelar</button>
+                        <button type="submit" class="btn-primary-action" style="padding: 10px 20px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #2563EB; color: #FFF; border: none; cursor: pointer;">Guardar Cambios</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: NUEVO SUB-DEPARTAMENTO (Botón +)    -->
+    <!-- ========================================== -->
+    <div id="modal-schema-new-subdept" class="custom-modal-overlay" onclick="if (event.target === this) window.schemaEngine.closeNewSubDeptModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 999999; align-items: center; justify-content: center; padding: 20px;">
+        <div class="custom-modal-content" style="background: #FFFFFF; border-radius: 18px; width: 100%; max-width: 440px; box-shadow: 0 24px 50px rgba(15, 23, 42, 0.25); padding: 26px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 10px; background: #F0FDF4; color: #16A34A; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-outlined">add_circle</span>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Nuevo Sub-departamento</h3>
+                        <span id="schema-new-subdept-parent-badge" style="font-size: 11px; font-weight: 700; color: #16A34A;">Departamento: IT</span>
+                    </div>
+                </div>
+                <button type="button" onclick="window.schemaEngine.closeNewSubDeptModal()" style="background: none; border: none; font-size: 20px; color: #64748B; cursor: pointer;">✕</button>
+            </div>
+
+            <form id="form-schema-new-subdept" onsubmit="window.schemaEngine.handleSaveNewSubDept(event)">
+                <input type="hidden" id="schema-new-subdept-dept-id" value="">
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Nombre del Sub-departamento: *</label>
+                    <input type="text" id="schema-new-subdept-name" required placeholder="Ej: Portilaw, ERP, Facturación Web..." style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 13px; outline: none; box-sizing: border-box;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Descripción: *</label>
+                    <input type="text" id="schema-new-subdept-desc" required placeholder="Ej: Sistema MVE, Módulo de Inventario..." style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 13px; outline: none; box-sizing: border-box;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 22px; position: relative;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Encargado: *</label>
+                    <div class="custom-collab-select-wrapper">
+                        <input type="hidden" id="schema-new-subdept-manager" value="Roberto Miranda">
+                        <div id="schema-new-subdept-manager-trigger" class="custom-collab-select-trigger" onclick="window.schemaEngine.toggleCollabSelectDropdown('schema-new-subdept-manager', 'schema-new-subdept-manager-dropdown')"></div>
+                        <div id="schema-new-subdept-manager-dropdown" class="custom-collab-dropdown-menu"></div>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn-secondary" onclick="window.schemaEngine.closeNewSubDeptModal()" style="padding: 10px 16px; font-size: 13px; border-radius: 8px;">Cancelar</button>
+                    <button type="submit" class="btn-primary-action" style="padding: 10px 20px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #16A34A; color: #FFF; border: none; cursor: pointer;">Crear Sub-departamento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: EDITAR SUB-DEPARTAMENTO             -->
+    <!-- ========================================== -->
+    <div id="modal-schema-edit-subdept" class="custom-modal-overlay" onclick="if (event.target === this) window.schemaEngine.closeEditSubDeptModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 999999; align-items: center; justify-content: center; padding: 20px;">
+        <div class="custom-modal-content" style="background: #FFFFFF; border-radius: 18px; width: 100%; max-width: 440px; box-shadow: 0 24px 50px rgba(15, 23, 42, 0.25); padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 10px; background: #FEF3C7; color: #D97706; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-outlined">edit</span>
+                    </div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Editar Sub-departamento</h3>
+                </div>
+                <button type="button" onclick="window.schemaEngine.closeEditSubDeptModal()" style="background: none; border: none; font-size: 20px; color: #64748B; cursor: pointer;">✕</button>
+            </div>
+
+            <form id="form-schema-edit-subdept" onsubmit="window.schemaEngine.handleSaveEditSubDept(event)">
+                <input type="hidden" id="schema-edit-subdept-id" value="">
+                <input type="hidden" id="schema-edit-subdept-dept-id" value="">
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Nombre del Sub-departamento: *</label>
+                    <input type="text" id="schema-edit-subdept-name" required placeholder="Ej: Portilaw..." style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 13px; outline: none; box-sizing: border-box;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Descripción: *</label>
+                    <input type="text" id="schema-edit-subdept-desc" required placeholder="Ej: Sistema MVE..." style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 13px; outline: none; box-sizing: border-box;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 22px; position: relative;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Encargado: *</label>
+                    <div class="custom-collab-select-wrapper">
+                        <input type="hidden" id="schema-edit-subdept-manager" value="Roberto Miranda">
+                        <div id="schema-edit-subdept-manager-trigger" class="custom-collab-select-trigger" onclick="window.schemaEngine.toggleCollabSelectDropdown('schema-edit-subdept-manager', 'schema-edit-subdept-manager-dropdown')"></div>
+                        <div id="schema-edit-subdept-manager-dropdown" class="custom-collab-dropdown-menu"></div>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn-secondary" onclick="window.schemaEngine.closeEditSubDeptModal()" style="padding: 10px 16px; font-size: 13px; border-radius: 8px;">Cancelar</button>
+                    <button type="submit" class="btn-primary-action" style="padding: 10px 20px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #D97706; color: #FFF; border: none; cursor: pointer;">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: EDITAR NOMBRE DEL TEMA CENTRAL      -->
+    <!-- ========================================== -->
+    <div id="modal-schema-edit-root" class="custom-modal-overlay" onclick="if (event.target === this) window.schemaEngine.closeEditRootModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 999999; align-items: center; justify-content: center; padding: 20px;">
+        <div class="custom-modal-content" style="background: #FFFFFF; border-radius: 18px; width: 100%; max-width: 440px; box-shadow: 0 24px 50px rgba(15, 23, 42, 0.25); padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 10px; background: #EFF6FF; color: #2563EB; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-outlined">edit_note</span>
+                    </div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Editar Tema Central</h3>
+                </div>
+                <button type="button" onclick="window.schemaEngine.closeEditRootModal()" style="background: none; border: none; font-size: 20px; color: #64748B; cursor: pointer;">✕</button>
+            </div>
+
+            <form id="form-schema-edit-root" onsubmit="window.schemaEngine.handleSaveEditRoot(event)">
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Nombre del Tema Central: *</label>
+                    <input type="text" id="schema-root-name-input" required placeholder="Ej: Admond / Esquema Tareas" style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 13px; outline: none; box-sizing: border-box;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 22px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Descripción / Propósito:</label>
+                    <textarea id="schema-root-desc-input" rows="3" placeholder="Estructura operativa interdepartamental..." style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 13px; outline: none; box-sizing: border-box; resize: vertical;"></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn-secondary" onclick="window.schemaEngine.closeEditRootModal()" style="padding: 10px 16px; font-size: 13px; border-radius: 8px;">Cancelar</button>
+                    <button type="submit" class="btn-primary-action" style="padding: 10px 20px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #2563EB; color: #FFF; border: none; cursor: pointer;">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: NUEVO TEMA / PROYECTO               -->
+    <!-- ========================================== -->
+    <div id="modal-schema-project" class="custom-modal-overlay" onclick="if (event.target === this) closeSchemaProjectModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 999999; align-items: center; justify-content: center; padding: 20px;">
+        <div class="custom-modal-content" style="background: #FFFFFF; border-radius: 16px; width: 100%; max-width: 480px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #E2E8F0;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 10px; background: #ECFDF5; color: #059669; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-outlined">account_tree</span>
+                    </div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Crear Nuevo Tema / Proyecto</h3>
+                </div>
+                <button type="button" onclick="closeSchemaProjectModal()" style="background: none; border: none; font-size: 20px; color: #64748B; cursor: pointer;">✕</button>
+            </div>
+
+            <form id="form-schema-project" onsubmit="handleCreateSchemaProject(event)">
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Nombre del Tema / Proyecto: *</label>
+                    <input type="text" id="schema-project-name" required placeholder="Ej: Rodipack, Expansión Guadalajara, Nuevo Módulo..." style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Descripción:</label>
+                    <textarea id="schema-project-desc" rows="2" placeholder="Objetivo general del flujo..." style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; resize: vertical;"></textarea>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Plantilla Inicial:</label>
+                    <select id="schema-project-template" style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; background: #FFF;">
+                        <option value="blank" selected>Pizarrón limpio (Sin tareas iniciales)</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn-secondary" onclick="closeSchemaProjectModal()" style="padding: 10px 16px; font-size: 13px; border-radius: 8px;">Cancelar</button>
+                    <button type="submit" class="btn-primary-action" style="padding: 10px 20px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #059669; color: #FFF; border: none; cursor: pointer;">Crear Proyecto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: ENTRELAZAR TAREAS / BLOQUEOS (IMAGEN 3) -->
+    <!-- ========================================== -->
+    <div id="modal-schema-link-task" class="custom-modal-overlay" onclick="if (event.target === this) window.schemaEngine.closeLinkTaskModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(5px); z-index: 999999; align-items: center; justify-content: center; padding: 20px;">
+        <div class="custom-modal-content" style="background: #FFFFFF; border-radius: 20px; width: 100%; max-width: 540px; box-shadow: 0 25px 60px rgba(15, 23, 42, 0.3); padding: 26px; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 40px; height: 40px; border-radius: 12px; background: #EEF2FF; color: #4F46E5; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-outlined" style="font-size: 24px;">alt_route</span>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0F172A;">Entrelazar Tareas y Bloquear Avance</h3>
+                        <span style="font-size: 11px; color: #64748B;">Trazabilidad interdepartamental de frenos y dependencias</span>
+                    </div>
+                </div>
+                <button type="button" onclick="window.schemaEngine.closeLinkTaskModal()" style="background: none; border: none; font-size: 20px; color: #64748B; cursor: pointer;">✕</button>
+            </div>
+
+            <!-- Tarea Origen / Actual -->
+            <input type="hidden" id="schema-link-source-task-id" value="">
+            <input type="hidden" id="schema-link-selected-target-id" value="">
+
+            <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Tarea en curso:</div>
+            <div id="schema-link-origin-preview" class="link-task-card-origin">
+                <!-- Se llena dinámicamente -->
+            </div>
+
+            <!-- Explicación de la Lógica de Bloqueo (Requisito Imagen 3) -->
+            <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; display: flex; gap: 10px; align-items: flex-start;">
+                <span class="material-symbols-outlined" style="color: #D97706; font-size: 20px; flex-shrink: 0; margin-top: 1px;">lock</span>
+                <p style="margin: 0; font-size: 11.5px; color: #92400E; line-height: 1.4;">
+                    Al entrelazar esta tarea con otra, <strong>la tarea seleccionada se bloquea</strong> (demostrando con qué tarea no puede avanzar hasta que esta sea completada).
+                </p>
+            </div>
+
+            <!-- Selector de dirección del bloqueo -->
+            <div class="link-task-radio-group">
+                <label class="link-task-radio-option selected" id="link-option-target-blocked" onclick="window.schemaEngine.setLinkDirection('target_blocked')">
+                    <input type="radio" name="link-direction" value="target_blocked" checked style="accent-color: #2563EB;">
+                    <div>
+                        <div style="font-size: 12.5px; font-weight: 700; color: #1E293B;">La tarea seleccionada quedará BLOQUEADA</div>
+                        <div style="font-size: 11px; color: #64748B;">La otra persona no podrá avanzar hasta que termines esta tarea.</div>
+                    </div>
+                </label>
+                <label class="link-task-radio-option" id="link-option-source-blocked" onclick="window.schemaEngine.setLinkDirection('source_blocked')">
+                    <input type="radio" name="link-direction" value="source_blocked" style="accent-color: #2563EB;">
+                    <div>
+                        <div style="font-size: 12.5px; font-weight: 700; color: #1E293B;">Esta tarea quedará BLOQUEADA por la seleccionada</div>
+                        <div style="font-size: 11px; color: #64748B;">No puedes avanzar aquí hasta que la otra persona complete su tarea.</div>
+                    </div>
+                </label>
+            </div>
+
+            <!-- Buscador de Tareas de todos los departamentos -->
+            <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Seleccionar tarea para entrelazar:</div>
+            <div class="link-task-search-box">
+                <span class="material-symbols-outlined">search</span>
+                <input type="text" id="schema-link-search-input" placeholder="Buscar por título, departamento, sub-depto o encargado..." oninput="window.schemaEngine.filterLinkTaskModal(this.value)">
+            </div>
+
+            <!-- Lista de Tareas para seleccionar -->
+            <div id="schema-link-tasks-list" class="link-tasks-list">
+                <!-- Se llena dinámicamente con todas las tareas de todos los departamentos -->
+            </div>
+
+            <!-- Vinculaciones existentes de esta tarea (para poder desvincular si se desea) -->
+            <div id="schema-link-existing-section" class="existing-links-container" style="display: none;">
+                <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Vínculos y Bloqueos actuales:</div>
+                <div id="schema-link-existing-list"></div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid #F1F5F9;">
+                <button type="button" class="btn-secondary" onclick="window.schemaEngine.closeLinkTaskModal()" style="padding: 10px 16px; font-size: 13px; border-radius: 8px;">Cerrar</button>
+                <button type="button" id="schema-link-btn-save" class="btn-primary-action" onclick="window.schemaEngine.handleSaveLinkTask()" style="padding: 10px 20px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #2563EB; color: #FFF; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">link</span>
+                    <span>Entrelazar y Aplicar Bloqueo</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+
     <!-- Supabase JS Client & App Scripts -->
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -5206,7 +5340,9 @@
 
     <script src="consecutivo_data.js?v=3.1"></script>
 
-    <script src="app.js?v=3.5"></script>
+    <script src="schema.js?v=6.4"></script>
+
+    <script src="app.js?v=5.3"></script>
 
 </body>
 
