@@ -187,14 +187,21 @@ const runInitialAppSetup = async () => {
     appState.customChannels = JSON.parse(localStorage.getItem('rp_custom_channels')) || [];
     appState.meetings = JSON.parse(localStorage.getItem('rp_meetings')) || [];
     
-    // Load Operaciones Data
+    // Load Operaciones Data (con purga de consecutivos antiguos RDP2609171 y RDP2609172)
+    const purgedProjectIds = new Set([
+        'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
+        'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
+        'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F'
+    ]);
+    window.purgedProjectIds = purgedProjectIds;
+
     try {
         const storedOps = localStorage.getItem('rp_operaciones_proyectos');
         if (storedOps) {
-            const fakeOpIds = new Set(['RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F']);
             const parsed = JSON.parse(storedOps);
             if (Array.isArray(parsed)) {
-                appState.operacionesProyectos = parsed.filter(p => p && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
+                appState.operacionesProyectos = parsed.filter(p => p && !purgedProjectIds.has(p.id) && !purgedProjectIds.has(p.numProyecto) && !purgedProjectIds.has(p.consecutivo) && !purgedProjectIds.has(p.numConsecutivo));
+                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             }
         }
     } catch(e) {}
@@ -1200,9 +1207,11 @@ function renderProveedorChips() {
         const count = validLinked.filter(p => p.proveedor && p.proveedor.toLowerCase() === name.toLowerCase()).length;
         const chip = document.createElement("button");
         chip.className = `proveedor-chip ${appState.selectedProveedorFilter.toLowerCase() === name.toLowerCase() ? 'active' : ''}`;
-        chip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">person</span> ${name} (${count}) <span class="material-symbols-outlined chip-delete-btn" style="font-size: 14px; margin-left: 6px; opacity: 0.6;" title="Eliminar proveedor" onclick="deleteProveedorName('${name}', event)">close</span>`;
+        chip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">person</span> ${name} (${count}) ` +
+            `<span class="material-symbols-outlined chip-edit-btn" style="font-size: 14px; margin-left: 6px; opacity: 0.7; cursor: pointer;" title="Editar nombre de proveedor" onclick="editProveedorName('${name}', event)">edit</span> ` +
+            `<span class="material-symbols-outlined chip-delete-btn" style="font-size: 14px; margin-left: 4px; opacity: 0.7; cursor: pointer;" title="Eliminar proveedor" onclick="deleteProveedorName('${name}', event)">close</span>`;
         chip.onclick = (e) => {
-            if (e.target && e.target.classList.contains('chip-delete-btn')) return;
+            if (e.target && (e.target.classList.contains('chip-delete-btn') || e.target.classList.contains('chip-edit-btn'))) return;
             filterByProveedor(name);
         };
         container.appendChild(chip);
@@ -1214,17 +1223,124 @@ function renderProveedorChips() {
 function deleteProveedorName(name, event) {
     window.deleteProveedorName = deleteProveedorName;
     if (event) event.stopPropagation();
-    if (confirm(`¿Eliminar al proveedor "${name}" de la lista y del sistema?`)) {
-        appState.proveedorNamesList = (appState.proveedorNamesList || []).filter(n => n.toLowerCase() !== name.toLowerCase());
-        if (appState.selectedProveedorFilter.toLowerCase() === name.toLowerCase()) {
+    if (!name || !name.trim()) return;
+    const targetName = name.trim().toLowerCase();
+
+    // 1. Validar si el proveedor está en uso en algún proyecto de Operaciones activo
+    let assignedProject = null;
+    const projects = appState.operacionesProyectos || [];
+    for (const p of projects) {
+        if (!p) continue;
+        if (window.purgedProjectIds && (window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo) || window.purgedProjectIds.has(p.numProyecto))) continue;
+        const claves = p.proveedoresClaves || [];
+        const found = claves.find(pc => pc && pc.proveedor && pc.proveedor.trim().toLowerCase() === targetName);
+        if (found || (p.proveedor && p.proveedor.trim().toLowerCase() === targetName)) {
+            assignedProject = p.consecutivo || p.numConsecutivo || p.numProyecto || p.id || 'un proyecto';
+            break;
+        }
+    }
+
+    // 2. Validar si está en alguna fila activa de la tabla Proveedores con OP asignada
+    if (!assignedProject) {
+        const rows = appState.proveedores || [];
+        for (const r of rows) {
+            if (!r) continue;
+            if (window.purgedProjectIds && r.op && window.purgedProjectIds.has(String(r.op).trim())) continue;
+            if (r.proveedor && r.proveedor.trim().toLowerCase() === targetName && r.op) {
+                assignedProject = r.op;
+                break;
+            }
+        }
+    }
+
+    // Requisito Imagen 4: Si está en algún proyecto, pedir no borrarlo sino editar el nombre
+    if (assignedProject) {
+        alert(`⚠️ No es posible eliminar al proveedor "${name}" porque está asignado al proyecto (${assignedProject}).\n\nPor favor no lo elimines; si necesitas corregirlo o actualizarlo, edita el nombre directamente para mantener el historial del proyecto.`);
+        return;
+    }
+
+    if (confirm(`¿Eliminar al proveedor "${name}" de la lista y del sistema para todos los usuarios?`)) {
+        appState.proveedorNamesList = (appState.proveedorNamesList || []).filter(n => n.toLowerCase() !== targetName);
+        if (appState.selectedProveedorFilter && appState.selectedProveedorFilter.toLowerCase() === targetName) {
             appState.selectedProveedorFilter = 'all';
         }
         saveToStorage();
         renderProveedorChips();
         renderProveedores();
+        if (typeof window.syncProveedoresCatalogToCloud === 'function') {
+            window.syncProveedoresCatalogToCloud();
+        }
     }
 }
 window.deleteProveedorName = deleteProveedorName;
+
+function editProveedorName(oldName, event) {
+    window.editProveedorName = editProveedorName;
+    if (event) event.stopPropagation();
+    if (!oldName || !oldName.trim()) return;
+
+    const newName = prompt(`Editar nombre del proveedor "${oldName}":`, oldName);
+    if (!newName || !newName.trim() || newName.trim() === oldName.trim()) return;
+
+    const cleanNewName = newName.trim();
+    const oldLower = oldName.trim().toLowerCase();
+
+    // 1. Actualizar catálogo de proveedores
+    appState.proveedorNamesList = (appState.proveedorNamesList || []).map(n => 
+        n.trim().toLowerCase() === oldLower ? cleanNewName : n
+    );
+    if (!appState.proveedorNamesList.some(n => n.toLowerCase() === cleanNewName.toLowerCase())) {
+        appState.proveedorNamesList.push(cleanNewName);
+    }
+
+    if (appState.selectedProveedorFilter && appState.selectedProveedorFilter.toLowerCase() === oldLower) {
+        appState.selectedProveedorFilter = cleanNewName;
+    }
+
+    // 2. Actualizar en proyectos de Operaciones
+    let updatedInProjects = false;
+    (appState.operacionesProyectos || []).forEach(p => {
+        if (!p) return;
+        let modified = false;
+        if (p.proveedor && p.proveedor.trim().toLowerCase() === oldLower) {
+            p.proveedor = cleanNewName;
+            modified = true;
+        }
+        if (p.proveedoresClaves && Array.isArray(p.proveedoresClaves)) {
+            p.proveedoresClaves.forEach(pc => {
+                if (pc && pc.proveedor && pc.proveedor.trim().toLowerCase() === oldLower) {
+                    pc.proveedor = cleanNewName;
+                    modified = true;
+                }
+            });
+        }
+        if (modified) updatedInProjects = true;
+    });
+
+    // 3. Actualizar en tabla de Proveedores
+    (appState.proveedores || []).forEach(r => {
+        if (r && r.proveedor && r.proveedor.trim().toLowerCase() === oldLower) {
+            r.proveedor = cleanNewName;
+        }
+    });
+
+    saveToStorage();
+    if (updatedInProjects && typeof window.saveOperacionesStorage === 'function') {
+        window.saveOperacionesStorage();
+    }
+
+    renderProveedorChips();
+    renderProveedores();
+
+    // Sincronizar catálogo y datos a Supabase para todos los usuarios
+    if (typeof window.syncProveedoresCatalogToCloud === 'function') {
+        window.syncProveedoresCatalogToCloud();
+    }
+    if (typeof window.broadcastProveedoresUpdate === 'function') {
+        window.broadcastProveedoresUpdate();
+    }
+}
+window.editProveedorName = editProveedorName;
 
 function filterByProveedor(name) {
     window.filterByProveedor = filterByProveedor;
@@ -1250,8 +1366,187 @@ function promptAddProveedor() {
         saveToStorage();
         renderProveedorChips();
         renderProveedores();
+        if (typeof window.syncProveedoresCatalogToCloud === 'function') {
+            window.syncProveedoresCatalogToCloud();
+        }
     }
 }
+
+// Sincronización del catálogo de proveedores en Supabase (todos los administradores y gerentes)
+async function syncProveedoresCatalogToCloud() {
+    window.syncProveedoresCatalogToCloud = syncProveedoresCatalogToCloud;
+    const catalog = appState.proveedorNamesList || [];
+
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'proveedores_catalog_update',
+                payload: {
+                    catalog: catalog,
+                    sender: appState.currentUser?.email || 'admin',
+                    timestamp: new Date().toISOString()
+                }
+            });
+        } catch (e) {
+            console.warn("⚠️ Error broadcasting proveedores catalog update:", e);
+        }
+    }
+
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    try {
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_proveedores_catalog__',
+            contenido: JSON.stringify(catalog),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (err) {
+        console.warn("⚠️ Error saving proveedores catalog to Supabase:", err);
+    }
+}
+
+async function fetchProveedoresCatalogFromCloud() {
+    window.fetchProveedoresCatalogFromCloud = fetchProveedoresCatalogFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    try {
+        const { data: msgs, error } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_proveedores_catalog__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    appState.proveedorNamesList = parsed;
+                    localStorage.setItem('rp_proveedor_names', JSON.stringify(parsed));
+                    if (typeof window.renderProveedorChips === 'function') {
+                        window.renderProveedorChips();
+                    }
+                    if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
+                        window.renderProveedores();
+                    }
+                }
+            } catch (e) {}
+        }
+    } catch (err) {
+        console.warn("⚠️ Error fetching proveedores catalog from cloud:", err);
+    }
+}
+
+// Sincronización en tiempo real y persistencia en la nube de los registros y estatus de Proveedores
+let _syncProveedoresTimer = null;
+function syncProveedoresToCloud(forceImmediate = false) {
+    window.syncProveedoresToCloud = syncProveedoresToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    const doSync = async () => {
+        try {
+            const list = appState.proveedores || [];
+            await client.from('messages').insert({
+                chat_id: '__cloud_sync_proveedores_data__',
+                contenido: JSON.stringify(list),
+                emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                emisor_role: 'sistema'
+            });
+        } catch (e) {
+            console.warn("⚠️ Error persisting proveedores data to Supabase:", e);
+        }
+    };
+
+    if (_syncProveedoresTimer) clearTimeout(_syncProveedoresTimer);
+    if (forceImmediate) {
+        doSync();
+    } else {
+        _syncProveedoresTimer = setTimeout(doSync, 500);
+    }
+}
+window.syncProveedoresToCloud = syncProveedoresToCloud;
+
+function broadcastProveedoresUpdate() {
+    window.broadcastProveedoresUpdate = broadcastProveedoresUpdate;
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'proveedores_update',
+                payload: {
+                    proveedores: appState.proveedores || [],
+                    sender: appState.currentUser?.email || 'admin',
+                    timestamp: new Date().toISOString()
+                }
+            });
+        } catch (e) {
+            console.warn("⚠️ Error broadcasting proveedores update:", e);
+        }
+    }
+    syncProveedoresToCloud();
+}
+window.broadcastProveedoresUpdate = broadcastProveedoresUpdate;
+
+async function fetchProveedoresDataFromCloud() {
+    window.fetchProveedoresDataFromCloud = fetchProveedoresDataFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    try {
+        const { data: msgs, error } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_proveedores_data__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    const statusMap = new Map();
+                    parsed.forEach(r => {
+                        if (!r) return;
+                        const st = r.p || r.estatus;
+                        if (!st) return;
+                        if (r.opRefId) statusMap.set(r.opRefId, st);
+                        if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
+                        if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
+                        if (r.op && r.proveedor) statusMap.set(`${String(r.op).trim().toLowerCase()}_${String(r.proveedor).trim().toLowerCase()}`, st);
+                    });
+
+                    (appState.proveedores || []).forEach(localR => {
+                        const key = localR.opRefId || (localR.projectId && localR.opRowIndex !== undefined ? `${localR.projectId}_${localR.opRowIndex}` : null) || (localR.op ? `${String(localR.op).trim().toLowerCase()}_${localR.opRowIndex}` : null);
+                        const provKey = (localR.op && localR.proveedor) ? `${String(localR.op).trim().toLowerCase()}_${String(localR.proveedor).trim().toLowerCase()}` : null;
+                        if (key && statusMap.has(key)) {
+                            localR.p = statusMap.get(key);
+                            localR.estatus = statusMap.get(key);
+                        } else if (provKey && statusMap.has(provKey)) {
+                            localR.p = statusMap.get(provKey);
+                            localR.estatus = statusMap.get(provKey);
+                        }
+                    });
+
+                    saveToStorage();
+                    if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
+                        updateProveedorStatusCounts();
+                        renderProveedores();
+                    }
+                }
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching proveedores data from cloud:", e);
+    }
+}
+window.fetchProveedoresDataFromCloud = fetchProveedoresDataFromCloud;
 
 // Generador unificado de opciones de proveedor para que Imagen 3 e Imagen 4 coincidan idénticamente
 function getProveedorOptionsHTML(selectedName) {
@@ -1578,7 +1873,7 @@ function syncProveedorRowBackToOperaciones(row) {
         }
     }
 
-    saveOperacionesStorage();
+    saveOperacionesStorage(true);
 }
 window.syncProveedorRowBackToOperaciones = syncProveedorRowBackToOperaciones;
 
@@ -1660,6 +1955,24 @@ function selectGlobalProvEstatus(newStatus, event) {
     menu.style.display = "none";
     
     if (isNaN(idx) || !appState.proveedores[idx]) return;
+
+    // Actualización visual inmediata en el DOM del badge / trigger
+    const trigger = document.getElementById(`prov-estatus-trigger-${idx}`);
+    if (trigger) {
+        let estClass = 'estatus-p';
+        let dLabel = 'P';
+        if (String(newStatus).toLowerCase().includes('cancel')) {
+            estClass = 'estatus-cancelado';
+            dLabel = 'Canc';
+        } else if (String(newStatus).toUpperCase() === 'C') {
+            estClass = 'estatus-c';
+            dLabel = 'C';
+        }
+        trigger.className = `prov-estatus-trigger ${estClass}`;
+        const spanLabel = trigger.querySelector('span:first-child');
+        if (spanLabel) spanLabel.innerText = dLabel;
+        trigger.title = `Estatus: ${newStatus}. Haz clic para cambiar el estatus.`;
+    }
     
     updateProveedorCell(idx, 'p', newStatus);
 }
@@ -1853,6 +2166,9 @@ function updateProveedorCell(index, key, val) {
         if (key === 'p' || key === 'proveedor') {
             updateProveedorStatusCounts();
             renderProveedores();
+            if (typeof window.broadcastProveedoresUpdate === 'function') {
+                window.broadcastProveedoresUpdate();
+            }
         }
     }
 }
@@ -4902,15 +5218,72 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 4b. Recibir Actualizaciones de Proveedores por Broadcast en tiempo real (instantáneo entre usuarios)
+    window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_update' }, payload => {
+        const data = payload.payload;
+        if (!data || !Array.isArray(data.proveedores)) return;
+        if (data.proveedores.length > 0) {
+            const statusMap = new Map();
+            data.proveedores.forEach(r => {
+                if (!r) return;
+                const st = r.p || r.estatus;
+                if (!st) return;
+                if (r.opRefId) statusMap.set(r.opRefId, st);
+                if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
+                if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
+                if (r.op && r.proveedor) statusMap.set(`${String(r.op).trim().toLowerCase()}_${String(r.proveedor).trim().toLowerCase()}`, st);
+            });
+
+            (appState.proveedores || []).forEach(localR => {
+                const key = localR.opRefId || (localR.projectId && localR.opRowIndex !== undefined ? `${localR.projectId}_${localR.opRowIndex}` : null) || (localR.op ? `${String(localR.op).trim().toLowerCase()}_${localR.opRowIndex}` : null);
+                const provKey = (localR.op && localR.proveedor) ? `${String(localR.op).trim().toLowerCase()}_${String(localR.proveedor).trim().toLowerCase()}` : null;
+                if (key && statusMap.has(key)) {
+                    localR.p = statusMap.get(key);
+                    localR.estatus = statusMap.get(key);
+                } else if (provKey && statusMap.has(provKey)) {
+                    localR.p = statusMap.get(provKey);
+                    localR.estatus = statusMap.get(provKey);
+                }
+            });
+        }
+        saveToStorage();
+        if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
+            updateProveedorStatusCounts();
+            renderProveedores();
+        }
+    });
+
+    // 4c. Recibir Actualizaciones del Catálogo de Proveedores por Broadcast (sincronizado para todos)
+    window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_catalog_update' }, payload => {
+        const data = payload.payload;
+        if (!data || !Array.isArray(data.catalog)) return;
+        appState.proveedorNamesList = data.catalog;
+        try {
+            localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
+        } catch (e) {}
+        if (typeof window.renderProveedorChips === 'function') {
+            window.renderProveedorChips();
+        }
+        if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
+            renderProveedores();
+        }
+    });
+
     // 5. Cambios de base de datos PostgreSQL en mensajes (canal secundario)
     window.chatRealtimeChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         const row = payload.new;
         if (!row) return;
         const channelKey = row.chat_id || 'general';
         if (channelKey.startsWith('__')) {
-            // Mensaje de sincronización interna (como snapshot de operaciones)
+            // Mensajes de sincronización interna
             if (channelKey === '__cloud_sync_operaciones__' && typeof window.fetchOperacionesFromCloud === 'function') {
                 window.fetchOperacionesFromCloud();
+            }
+            if (channelKey === '__cloud_sync_proveedores_catalog__' && typeof window.fetchProveedoresCatalogFromCloud === 'function') {
+                window.fetchProveedoresCatalogFromCloud();
+            }
+            if (channelKey === '__cloud_sync_proveedores_data__' && typeof window.fetchProveedoresDataFromCloud === 'function') {
+                window.fetchProveedoresDataFromCloud();
             }
             return;
         }
@@ -4997,6 +5370,14 @@ async function fetchCloudData() {
         // Sincronizar proyectos de Operaciones (nube <-> local)
         if (typeof window.fetchOperacionesFromCloud === 'function') {
             await window.fetchOperacionesFromCloud();
+        }
+
+        // Sincronizar catálogo y datos de Proveedores (nube <-> local para todos los usuarios)
+        if (typeof window.fetchProveedoresCatalogFromCloud === 'function') {
+            await window.fetchProveedoresCatalogFromCloud();
+        }
+        if (typeof window.fetchProveedoresDataFromCloud === 'function') {
+            await window.fetchProveedoresDataFromCloud();
         }
         
         // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)
@@ -7857,27 +8238,34 @@ async function sendQuickReply() {
 // Regla: RDP + últimos 2 dígitos del año actual (26) + mes en 2 dígitos (09) + número secuencial
 // - Servicio local y movimientos foráneos: sigue el 171 y el usuario define la letra
 // - Lavado de contenedores: sigue el 56 y el sistema agrega la letra 'L'
-function generateProjectConsecutivo(tipoProyecto) {
+function generateProjectConsecutivo(tipoProyecto, excludeProjectId = null) {
     window.generateProjectConsecutivo = generateProjectConsecutivo;
     const now = new Date();
     const year2 = String(now.getFullYear()).slice(-2);
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const isLavado = (tipoProyecto === 'lavado_contenedores');
     
-    // Base de secuencia especificada por el usuario
-    let maxSeq = isLavado ? 55 : 170;
+    // Base de secuencia especificada por el usuario (Octubre 2026):
+    // - Servicio Local y Movimientos Foráneos: el siguiente consecutivo es RDP2610172 (base 171)
+    // - Lavado de Contenedores: el siguiente consecutivo es RDP261058-L (base 57)
+    let maxSeq = isLavado ? 57 : 171;
     
     const projects = appState.operacionesProyectos || [];
     projects.forEach(p => {
-        const val = (p.numConsecutivo || p.consecutivo || '').trim();
-        // Regex para capturar RDP + 4 dígitos de fecha (YYMM) + números + letra opcional
-        const m = val.match(/^RDP\d{4}(\d+)([A-Z]?)$/i);
+        if (!p) return;
+        if (excludeProjectId && (p.id === excludeProjectId || p.consecutivo === excludeProjectId || p.numProyecto === excludeProjectId)) return;
+        if (window.purgedProjectIds && (window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo) || window.purgedProjectIds.has(p.numProyecto))) return;
+
+        const val = (p.numConsecutivo || p.consecutivo || p.numProyecto || '').trim();
+        // Regex para capturar RDP + 4 dígitos de fecha (YYMM) + números + sufijo opcional (-L o letra)
+        const m = val.match(/^RDP\d{4}(\d+)(?:-?([A-Z]))?$/i);
         if (m) {
             const n = parseInt(m[1], 10);
             const letter = (m[2] || '').toUpperCase();
-            if (isLavado && (letter === 'L' || p.tipoProyecto === 'lavado_contenedores')) {
+            const projIsLavado = (letter === 'L' || val.includes('-L') || val.endsWith('L') || p.tipoProyecto === 'lavado_contenedores');
+            if (isLavado && projIsLavado) {
                 if (!isNaN(n) && n > maxSeq) maxSeq = n;
-            } else if (!isLavado && letter !== 'L') {
+            } else if (!isLavado && !projIsLavado) {
                 if (!isNaN(n) && n > maxSeq) maxSeq = n;
             }
         }
@@ -7885,30 +8273,31 @@ function generateProjectConsecutivo(tipoProyecto) {
 
     const nextSeq = maxSeq + 1;
     if (isLavado) {
-        return `RDP${year2}${month}${nextSeq}L`;
+        return `RDP${year2}${month}${nextSeq}-L`;
     } else {
-        // En servicio local y foráneos, el consecutivo inicia en 171 y el usuario introduce la letra
         return `RDP${year2}${month}${nextSeq}`;
     }
 };
 
-function updateConsecutivoLetterForTipo(currentConsecutivo, tipoProyecto) {
+function updateConsecutivoLetterForTipo(currentConsecutivo, tipoProyecto, currentProjectId = null) {
     window.updateConsecutivoLetterForTipo = updateConsecutivoLetterForTipo;
     const isLavado = (tipoProyecto === 'lavado_contenedores');
     if (!currentConsecutivo) {
-        return generateProjectConsecutivo(tipoProyecto);
+        return generateProjectConsecutivo(tipoProyecto, currentProjectId);
     }
     const val = currentConsecutivo.trim();
+    const isCurrentlyLavado = val.endsWith('-L') || val.endsWith('L');
+
     if (isLavado) {
-        // Si no termina en L o no es serie de lavado, recalcular para serie 56L
-        if (!val.endsWith('L')) {
-            return generateProjectConsecutivo('lavado_contenedores');
+        // Si no termina en -L o no es de la serie de lavado, recalcular para serie de lavado (58-L en adelante)
+        if (!isCurrentlyLavado) {
+            return generateProjectConsecutivo('lavado_contenedores', currentProjectId);
         }
         return val;
     } else {
-        // Si venía con 'L' de lavado, cambiar a serie de local/foráneos (171 en adelante)
-        if (val.endsWith('L')) {
-            return generateProjectConsecutivo(tipoProyecto);
+        // Si venía con terminación de lavado (-L o L), cambiar a serie de local/foráneos (172 en adelante)
+        if (isCurrentlyLavado) {
+            return generateProjectConsecutivo(tipoProyecto, currentProjectId);
         }
         return val;
     }
@@ -7926,7 +8315,7 @@ function syncAllOperacionesToConsecutivo() {
         const stored = localStorage.getItem('rp_operaciones_proyectos');
         if (stored) {
             try {
-                const fakeOpIds = new Set(['RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F']);
+                const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F']);
                 let parsed = JSON.parse(stored);
                 if (Array.isArray(parsed)) {
                     appState.operacionesProyectos = parsed.filter(p => p && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
@@ -8029,7 +8418,7 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
     }
 }
 
-function saveOperacionesStorage() {
+function saveOperacionesStorage(skipProveedoresSync = false) {
     window.saveOperacionesStorage = saveOperacionesStorage;
     const list = appState.operacionesProyectos || [];
     try {
@@ -8064,7 +8453,7 @@ function saveOperacionesStorage() {
             if (p && typeof window.syncProjectToConsecutivo === 'function') {
                 window.syncProjectToConsecutivo(p);
             }
-            if (p && typeof window.syncProjectToProveedores === 'function') {
+            if (!skipProveedoresSync && p && typeof window.syncProjectToProveedores === 'function') {
                 window.syncProjectToProveedores(p);
             }
         });
@@ -8206,7 +8595,7 @@ function mergeOperacionesProjects(cloudList) {
     if (!Array.isArray(cloudList) || cloudList.length === 0) return;
     if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
 
-    const fakeOpIds = new Set(['RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F']);
+    const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F']);
 
     cloudList.forEach(cp => {
         if (!cp || fakeOpIds.has(cp.id) || fakeOpIds.has(cp.consecutivo) || fakeOpIds.has(cp.numProyecto)) return;
@@ -8510,10 +8899,7 @@ function renderOperaciones() {
         window.clearGhostData();
     }
 
-    const fakeOpIds = new Set([
-        'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
-        'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F'
-    ]);
+    const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F']);
     const stored = localStorage.getItem('rp_operaciones_proyectos');
     if (stored) {
         try {
@@ -8957,8 +9343,8 @@ function selectProjectTipo(tipo) {
         p.infoViaje = { terminal: '', mblMawb: '', destino: '', observaciones: '' };
     }
 
-    // Actualizar letra de consecutivo según el tipo seleccionado (F para local/foráneo, L para lavado)
-    p.numConsecutivo = updateConsecutivoLetterForTipo(p.numConsecutivo, tipo);
+    // Actualizar consecutivo según el tipo seleccionado (172 para local/foráneo, 58-L para lavado)
+    p.numConsecutivo = updateConsecutivoLetterForTipo(p.numConsecutivo, tipo, p.id);
     p.consecutivo = p.numConsecutivo;
     p.numProyecto = p.consecutivo;
 
