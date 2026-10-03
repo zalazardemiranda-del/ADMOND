@@ -187,7 +187,15 @@ const runInitialAppSetup = async () => {
     appState.customChannels = JSON.parse(localStorage.getItem('rp_custom_channels')) || [];
     appState.meetings = JSON.parse(localStorage.getItem('rp_meetings')) || [];
     
-    // Load Operaciones Data (con purga de consecutivos antiguos RDP2609171 y RDP2609172)
+    function isProjectGenerado(p) {
+        if (!p) return false;
+        if (p.generado !== true) return false;
+        if (p.isDraft === true || p.isNewProject === true) return false;
+        return true;
+    }
+    window.isProjectGenerado = isProjectGenerado;
+
+    // Load Operaciones Data (con purga de consecutivos antiguos y proyectos no generados)
     const purgedProjectIds = new Set([
         'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
@@ -200,7 +208,8 @@ const runInitialAppSetup = async () => {
         if (storedOps) {
             const parsed = JSON.parse(storedOps);
             if (Array.isArray(parsed)) {
-                appState.operacionesProyectos = parsed.filter(p => p && !purgedProjectIds.has(p.id) && !purgedProjectIds.has(p.numProyecto) && !purgedProjectIds.has(p.consecutivo) && !purgedProjectIds.has(p.numConsecutivo));
+                // Conservar ÚNICAMENTE los proyectos que hayan sido oficialmente generados
+                appState.operacionesProyectos = parsed.filter(p => p && isProjectGenerado(p) && !purgedProjectIds.has(p.id) && !purgedProjectIds.has(p.numProyecto) && !purgedProjectIds.has(p.consecutivo) && !purgedProjectIds.has(p.numConsecutivo));
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             }
         }
@@ -249,10 +258,20 @@ const runInitialAppSetup = async () => {
             try {
                 let parsed = JSON.parse(storedConsecutivo);
                 if (Array.isArray(parsed) && parsed.length > 0) {
+                    const validOpKeys = new Set();
+                    (appState.operacionesProyectos || []).forEach(p => {
+                        if (isProjectGenerado(p)) {
+                            [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].forEach(k => {
+                                if (k) validOpKeys.add(String(k).trim().toLowerCase());
+                            });
+                        }
+                    });
                     parsed = parsed.filter(row => {
                         if (!row) return false;
                         const ref = row.referenciaOp ? String(row.referenciaOp).trim() : '';
-                        return !purgedProjectIds.has(ref);
+                        if (purgedProjectIds.has(ref)) return false;
+                        if (ref && !validOpKeys.has(ref.toLowerCase())) return false;
+                        return true;
                     });
                     appState.consecutivo = parsed;
                     localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
@@ -1739,6 +1758,7 @@ function syncAllOperacionesToProveedores() {
     if (Array.isArray(appState.operacionesProyectos) && appState.operacionesProyectos.length > 0) {
         appState.operacionesProyectos.forEach(p => {
             if (!p) return;
+            if (typeof isProjectGenerado === 'function' && !isProjectGenerado(p)) return;
             const projOp = p.numProyecto || p.consecutivo || p.numConsecutivo || p.id;
             if (!projOp || String(projOp).trim() === '') return;
 
@@ -8263,6 +8283,7 @@ function generateProjectConsecutivo(tipoProyecto, excludeProjectId = null) {
     const projects = appState.operacionesProyectos || [];
     projects.forEach(p => {
         if (!p) return;
+        if (typeof isProjectGenerado === 'function' && !isProjectGenerado(p)) return;
         if (excludeProjectId && (p.id === excludeProjectId || p.consecutivo === excludeProjectId || p.numProyecto === excludeProjectId)) return;
         if (window.purgedProjectIds && (window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo) || window.purgedProjectIds.has(p.numProyecto))) return;
 
@@ -8333,14 +8354,14 @@ function syncAllOperacionesToConsecutivo() {
             try {
                 let parsed = JSON.parse(stored);
                 if (Array.isArray(parsed)) {
-                    appState.operacionesProyectos = parsed.filter(p => p && !purgedIds.has(p.id) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numConsecutivo));
+                    appState.operacionesProyectos = parsed.filter(p => p && isProjectGenerado(p) && !purgedIds.has(p.id) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numConsecutivo));
                 }
             } catch (e) {}
         }
     }
 
     const activeProjects = (appState.operacionesProyectos || []).filter(p => 
-        p && !purgedIds.has(p.id) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numConsecutivo)
+        p && isProjectGenerado(p) && !purgedIds.has(p.id) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numConsecutivo)
     );
     appState.operacionesProyectos = activeProjects;
 
@@ -8386,6 +8407,7 @@ function syncAllOperacionesToConsecutivo() {
 function syncProjectToConsecutivo(p, shouldRender = false) {
     window.syncProjectToConsecutivo = syncProjectToConsecutivo;
     if (!p) return;
+    if (typeof isProjectGenerado === 'function' && !isProjectGenerado(p)) return;
     if (!appState.consecutivo || !Array.isArray(appState.consecutivo)) {
         appState.consecutivo = [];
     }
@@ -8472,12 +8494,13 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
 function saveOperacionesStorage(skipProveedoresSync = false) {
     window.saveOperacionesStorage = saveOperacionesStorage;
     const list = appState.operacionesProyectos || [];
+    const validList = list.filter(p => isProjectGenerado(p));
     try {
-        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(list));
+        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(validList));
     } catch (e) {
         console.warn("Storage quota exceeded or error, stripping large dataUrls for localStorage:", e);
         try {
-            const safeList = list.map(p => {
+            const safeList = validList.map(p => {
                 if (!p.documentos) return p;
                 const safeDocs = {};
                 Object.keys(p.documentos).forEach(k => {
@@ -8499,8 +8522,8 @@ function saveOperacionesStorage(skipProveedoresSync = false) {
         }
     }
 
-    if (Array.isArray(list)) {
-        list.forEach(p => {
+    if (Array.isArray(validList)) {
+        validList.forEach(p => {
             if (p && typeof window.syncProjectToConsecutivo === 'function') {
                 window.syncProjectToConsecutivo(p);
             }
@@ -8521,6 +8544,8 @@ function syncOperacionesToCloud(forceImmediate = false) {
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
+    const validProyectos = (appState.operacionesProyectos || []).filter(p => isProjectGenerado(p));
+
     // 1. Broadcast instantáneo por WebSockets (sub-50ms) a otros dispositivos activos (iPad, PC)
     if (window.chatRealtimeChannel) {
         try {
@@ -8528,7 +8553,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
                 type: 'broadcast',
                 event: 'operaciones_update',
                 payload: {
-                    proyectos: appState.operacionesProyectos || [],
+                    proyectos: validProyectos,
                     sender: appState.currentUser?.email || 'operaciones',
                     timestamp: new Date().toISOString()
                 }
@@ -8540,7 +8565,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
 
     const doSync = async () => {
         try {
-            const list = appState.operacionesProyectos || [];
+            const list = (appState.operacionesProyectos || []).filter(p => isProjectGenerado(p));
 
             // A. Guardar snapshot en tabla messages con chat_id especial para garantizar persistencia universal
             try {
@@ -8650,6 +8675,7 @@ function mergeOperacionesProjects(cloudList) {
 
     cloudList.forEach(cp => {
         if (!cp || fakeOpIds.has(cp.id) || fakeOpIds.has(cp.consecutivo) || fakeOpIds.has(cp.numProyecto)) return;
+        if (typeof isProjectGenerado === 'function' && !isProjectGenerado(cp)) return;
         const key = cp.id || cp.consecutivo || cp.numProyecto;
         const idx = appState.operacionesProyectos.findIndex(p => (p.id || p.consecutivo || p.numProyecto) === key);
         if (idx === -1) {
@@ -8956,7 +8982,7 @@ function renderOperaciones() {
         try {
             let parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
-                parsed = parsed.filter(p => p && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
+                parsed = parsed.filter(p => p && isProjectGenerado(p) && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
                 appState.operacionesProyectos = parsed;
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(parsed));
             }
@@ -8997,10 +9023,11 @@ function renderOperaciones() {
     // Renderizar Banner de Advertencia de Cierre de Mes (si faltan 10 días o menos para el 30/31)
     renderMonthEndWarning(proyectos);
 
-    // 1. Métricas KPIs
-    const closedCount = proyectos.filter(p => p.archivado === true || p.estatus === 'CERRADO').length;
-    const openCount = proyectos.filter(p => !p.archivado && p.estatus !== 'CERRADO').length;
-    const totalCount = proyectos.length;
+    // 1. Métricas KPIs (Solo contar proyectos oficialmente GENERADOS)
+    const validProyectos = proyectos.filter(p => isProjectGenerado(p));
+    const closedCount = validProyectos.filter(p => p.archivado === true || p.estatus === 'CERRADO').length;
+    const openCount = validProyectos.filter(p => !p.archivado && p.estatus !== 'CERRADO').length;
+    const totalCount = validProyectos.length;
 
     const closedEl = document.getElementById("op-kpi-closed");
     const openEl = document.getElementById("op-kpi-open");
@@ -9032,8 +9059,9 @@ function renderOperaciones() {
             : `Proyectos registrados`;
     }
 
-    // Filtrar según el modo activo
+    // Filtrar según el modo activo (SOLO proyectos generados; nunca borradores)
     let filtered = proyectos.filter(p => {
+        if (!isProjectGenerado(p)) return false;
         const isArchivado = p.archivado === true || p.estatus === 'CERRADO';
         return isExpedienteMode ? isArchivado : !isArchivado;
     });
@@ -9287,7 +9315,8 @@ if (typeof window !== 'undefined' && !window._opCustomSelectListenersAdded) {
 
 function isProjectGenerado(p) {
     if (!p) return false;
-    if (p.generado === false || p.isNewProject === true) return false;
+    if (p.generado !== true) return false;
+    if (p.isDraft === true || p.isNewProject === true) return false;
     return true;
 }
 window.isProjectGenerado = isProjectGenerado;
@@ -9315,15 +9344,17 @@ function openOperacionesDetail(projectId) {
             if (stored) {
                 const parsed = JSON.parse(stored);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    appState.operacionesProyectos = parsed;
+                    appState.operacionesProyectos = parsed.filter(p => isProjectGenerado(p));
                 }
             }
         } catch(e) {}
     }
     const proyectos = (appState.operacionesProyectos && appState.operacionesProyectos.length > 0)
         ? appState.operacionesProyectos
-        : defaultOperacionesProyectos;
-    let p = proyectos.find(x => x && (x.id === projectId || x.numProyecto === projectId || x.consecutivo === projectId));
+        : (appState.draftOperacionesProject ? [appState.draftOperacionesProject] : defaultOperacionesProyectos);
+    let p = (appState.draftOperacionesProject && (appState.draftOperacionesProject.id === projectId || !projectId))
+        ? appState.draftOperacionesProject
+        : proyectos.find(x => x && (x.id === projectId || x.numProyecto === projectId || x.consecutivo === projectId));
     if (!p) {
         p = proyectos[0];
     }
@@ -9538,6 +9569,17 @@ function renderStep1View(p) {
 
 function closeOperacionesDetail() {
     window.closeOperacionesDetail = closeOperacionesDetail;
+
+    // Si había un borrador activo no generado, retirarlo de operacionesProyectos
+    if (appState.draftOperacionesProject && !isProjectGenerado(appState.draftOperacionesProject)) {
+        if (appState.operacionesProyectos) {
+            appState.operacionesProyectos = appState.operacionesProyectos.filter(
+                x => x && x.id !== appState.draftOperacionesProject.id && isProjectGenerado(x)
+            );
+        }
+        appState.draftOperacionesProject = null;
+    }
+
     const listPane = document.getElementById("operaciones-view-list");
     const detailPane = document.getElementById("operaciones-view-detail");
     const topbarBack = document.getElementById("op-detail-topbar");
@@ -9551,7 +9593,7 @@ function closeOperacionesDetail() {
 
 function goToOperacionesStep(stepNum) {
     window.goToOperacionesStep = goToOperacionesStep;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
 
     if (stepNum > 4) return;
 
@@ -9586,7 +9628,9 @@ function goToOperacionesStep(stepNum) {
         if (stepNum === 4 && typeof window.renderDocumentosStatus === 'function') {
             window.renderDocumentosStatus(p);
         }
-        saveOperacionesStorage();
+        if (isProjectGenerado(p)) {
+            saveOperacionesStorage();
+        }
     }
 };
 
@@ -11775,7 +11819,7 @@ function finishOperacionesWizard() {
 
 function generarProyectoOperaciones() {
     window.generarProyectoOperaciones = generarProyectoOperaciones;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (p) {
         // Asegurar que los datos del encabezado queden persistidos
         const facturaVal = document.getElementById("op-step1-factura-num")?.value;
@@ -11788,10 +11832,29 @@ function generarProyectoOperaciones() {
         if (clienteVal) { p.cliente = clienteVal; p.nombreCliente = clienteVal; }
         p.generado = true;
         p.isNewProject = false;
+        p.isDraft = false;
         p.currentStep = 4;
         p.estatus = 'PENDIENTE';
+
+        appState.draftOperacionesProject = null;
+
+        if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
+        if (!appState.operacionesProyectos.some(x => x.id === p.id)) {
+            appState.operacionesProyectos.unshift(p);
+        }
+
         updateGenerarProyectoButton(p);
         saveOperacionesStorage();
+
+        if (typeof window.syncOperacionesToCloud === 'function') {
+            window.syncOperacionesToCloud(true);
+        }
+        if (typeof window.syncProjectToConsecutivo === 'function') {
+            window.syncProjectToConsecutivo(p);
+        }
+        if (typeof window.syncAllOperacionesToConsecutivo === 'function') {
+            window.syncAllOperacionesToConsecutivo();
+        }
     }
     alert("¡Proyecto generado y guardado en Operaciones con éxito!");
     closeOperacionesDetail();
@@ -11799,6 +11862,15 @@ function generarProyectoOperaciones() {
 
 function openNuevoProyectoModal() {
     window.openNuevoProyectoModal = openNuevoProyectoModal;
+
+    // Si ya existe un borrador no generado en edición, reanudarlo y evitar duplicados por clics múltiples
+    if (appState.draftOperacionesProject && !isProjectGenerado(appState.draftOperacionesProject)) {
+        openOperacionesDetail(appState.draftOperacionesProject.id);
+        goToOperacionesStep(1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+    }
+
     const todayStr = new Date().toISOString().split('T')[0];
     const todayDisplay = new Date().toLocaleDateString('es-MX');
 
@@ -11820,6 +11892,7 @@ function openNuevoProyectoModal() {
         estatus: 'PENDIENTE',
         generado: false,
         isNewProject: true,
+        isDraft: true,
         currentStep: 1,
         tipoProyecto: initTipo,
         servicioName: 'Servicio local',
@@ -11845,13 +11918,21 @@ function openNuevoProyectoModal() {
         documentos: {}
     };
 
-    if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
+    appState.draftOperacionesProject = newProject;
+    appState.activeOperacionesProjectId = newProject.id;
     appState.operacionesViewMode = 'activos';
-    appState.operacionesProyectos.unshift(newProject);
-    saveOperacionesStorage();
 
-    renderOperaciones();
+    if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
+    // Limpiar borradores residuales no generados
+    appState.operacionesProyectos = appState.operacionesProyectos.filter(p => isProjectGenerado(p));
+    // Agregamos en memoria para que los componentes del wizard puedan leer y escribir en él
+    appState.operacionesProyectos.unshift(newProject);
+
+    // NOTA: NO guardamos en LocalStorage y NO sincronizamos a la nube aquí.
+    // Solo cuando el usuario haga clic en GENERAR PROYECTO (Paso 4) se registrará formalmente.
     openOperacionesDetail(newProject.id);
+    goToOperacionesStep(1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 // ---------------------------------------------------------------------------------
