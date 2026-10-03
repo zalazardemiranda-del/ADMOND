@@ -5267,9 +5267,12 @@ function setupRealtimeSubscriptions() {
             } catch (e) {}
             if (appState.currentAdminFicha === 'operaciones' && typeof window.renderOperaciones === 'function') {
                 window.renderOperaciones();
-                if (appState.activeOperacionesProjectId && typeof window.renderStep1View === 'function') {
+                if (appState.activeOperacionesProjectId) {
                     const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
-                    if (activeP) window.renderStep1View(activeP);
+                    if (activeP) {
+                        if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
+                        if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
+                    }
                 }
             }
         }
@@ -8657,7 +8660,34 @@ function syncOperacionesToCloud(forceImmediate = false) {
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
+    const cleanProjectsForCloud = (projList) => {
+        return (projList || []).map(p => {
+            if (!p) return p;
+            const copy = Object.assign({}, p);
+            if (copy.documentos) {
+                const cleanDocs = {};
+                Object.keys(copy.documentos).forEach(k => {
+                    const d = copy.documentos[k];
+                    if (d) {
+                        cleanDocs[k] = {
+                            uploaded: !!d.uploaded,
+                            fileName: d.fileName || `${k}.pdf`,
+                            fileSize: d.fileSize || 0,
+                            fileType: d.fileType || 'application/pdf',
+                            lastModified: d.lastModified || Date.now(),
+                            uploadedAt: d.uploadedAt || new Date().toISOString(),
+                            dataUrl: (d.dataUrl && d.dataUrl.length < 50000 ? d.dataUrl : '')
+                        };
+                    }
+                });
+                copy.documentos = cleanDocs;
+            }
+            return copy;
+        });
+    };
+
     const validProyectos = (appState.operacionesProyectos || []).filter(p => isProjectGenerado(p));
+    const safePayload = cleanProjectsForCloud(validProyectos);
 
     // 1. Broadcast instantáneo por WebSockets (sub-50ms) a otros dispositivos activos (iPad, PC)
     if (window.chatRealtimeChannel) {
@@ -8666,7 +8696,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
                 type: 'broadcast',
                 event: 'operaciones_update',
                 payload: {
-                    proyectos: validProyectos,
+                    proyectos: safePayload,
                     sender: appState.currentUser?.email || 'operaciones',
                     timestamp: new Date().toISOString()
                 }
@@ -8679,12 +8709,13 @@ function syncOperacionesToCloud(forceImmediate = false) {
     const doSync = async () => {
         try {
             const list = (appState.operacionesProyectos || []).filter(p => isProjectGenerado(p));
+            const safeList = cleanProjectsForCloud(list);
 
             // A. Guardar snapshot en tabla messages con chat_id especial para garantizar persistencia universal
             try {
                 await client.from('messages').insert({
                     chat_id: '__cloud_sync_operaciones__',
-                    contenido: JSON.stringify(list),
+                    contenido: JSON.stringify(safeList),
                     emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
                     emisor_role: 'sistema'
                 });
@@ -8883,8 +8914,15 @@ async function fetchOperacionesFromCloud() {
             try {
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             } catch (e) {}
-            if (appState.currentAdminFicha === 'operaciones' && typeof window.renderOperaciones === 'function') {
-                window.renderOperaciones();
+            if (appState.currentAdminFicha === 'operaciones') {
+                if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
+                if (appState.activeOperacionesProjectId) {
+                    const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+                    if (activeP) {
+                        if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
+                        if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
+                    }
+                }
             }
         }
     } catch (err) {
@@ -8993,6 +9031,13 @@ function mergeOperacionesProjects(cloudList) {
     });
 
     cleanOperacionesLegacyData(appState.operacionesProyectos);
+    if (appState.activeOperacionesProjectId) {
+        const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+        if (activeP) {
+            if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
+            if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
+        }
+    }
 };
 
 // Helper: Validar requisitos para avanzar a Facturación (Paso 4)
