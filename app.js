@@ -368,7 +368,9 @@ const runInitialAppSetup = async () => {
                             subtotal: 48300,
                             iva: 7728,
                             retencionIvaPct: 4,
-                            retencionIva: 1932,
+                            retencionIva: 4,
+                            retencionIvaMonto: 1932,
+                            ret4: 1932,
                             retencion4: 1932,
                             retencionIsr: 0,
                             retencionIsrPct: 0,
@@ -5342,6 +5344,8 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'operaciones_update' }, payload => {
         const data = payload.payload;
         if (!data || !Array.isArray(data.proyectos)) return;
+        // Evitar procesar el eco de nuestra propia emisión en esta misma pestaña
+        if (data.senderId && window._myClientId && data.senderId === window._myClientId) return;
         if (typeof window.mergeOperacionesProjects === 'function') {
             window.mergeOperacionesProjects(data.proyectos, true);
             try {
@@ -5358,9 +5362,17 @@ function setupRealtimeSubscriptions() {
                 if (appState.activeOperacionesProjectId) {
                     const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
                     if (activeP) {
-                        if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
-                        if (typeof window.renderProveedorClavesTable === 'function') window.renderProveedorClavesTable(activeP);
-                        if (typeof window.renderPartidasTable === 'function') window.renderPartidasTable(activeP);
+                        const isUserEditingInWizard = document.activeElement && (
+                            document.activeElement.closest('#tbody-partidas-conceptos') || 
+                            document.activeElement.closest('#tbody-proveedor-claves') ||
+                            document.activeElement.closest('#operaciones-view-detail input') ||
+                            document.activeElement.closest('#operaciones-view-detail select')
+                        );
+                        if (!isUserEditingInWizard) {
+                            if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
+                            if (typeof window.renderProveedorClavesTable === 'function') window.renderProveedorClavesTable(activeP);
+                            if (typeof window.renderPartidasTable === 'function') window.renderPartidasTable(activeP);
+                        }
                         if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
                     }
                 }
@@ -5496,7 +5508,11 @@ function setupRealtimeSubscriptions() {
                 window.handleIncomingCloudDoc(channelKey, row.contenido);
             }
             if (channelKey === '__cloud_sync_operaciones__' && typeof window.fetchOperacionesFromCloud === 'function') {
-                window.fetchOperacionesFromCloud();
+                if (Date.now() - (window._lastLocalOperacionesSyncTime || 0) < 3000) {
+                    // Omitir recarga: acabamos de sincronizar nosotros mismos hace un instante
+                } else {
+                    window.fetchOperacionesFromCloud();
+                }
             }
             if (channelKey === '__cloud_sync_consecutivo__' && typeof window.fetchConsecutivoFromCloud === 'function') {
                 window.fetchConsecutivoFromCloud();
@@ -8836,6 +8852,11 @@ function syncOperacionesToCloud(forceImmediate = false) {
         });
     };
 
+    window._lastLocalOperacionesSyncTime = Date.now();
+    if (!window._myClientId) {
+        window._myClientId = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+    }
+
     const validProyectos = (appState.operacionesProyectos || []).filter(p => isProjectGenerado(p));
     const safePayload = cleanProjectsForCloud(validProyectos);
 
@@ -8863,6 +8884,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
                 payload: {
                     proyectos: wsPayload,
                     sender: appState.currentUser?.email || 'operaciones',
+                    senderId: window._myClientId,
                     timestamp: new Date().toISOString()
                 }
             });
@@ -9162,27 +9184,35 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
             appState.operacionesProyectos.push(cp);
         } else {
             const local = appState.operacionesProyectos[idx];
+            const isCurrentlyActive = (appState.activeOperacionesProjectId === local.id || appState.activeOperacionesProjectId === key);
+            
             // Si es broadcast en tiempo real, priorizar el cambio entrante del otro usuario
             const merged = forceRealtime ? Object.assign({}, local, cp) : Object.assign({}, cp, local);
             
-            const hasLocalPartidas = local.partidasConceptos && local.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
-            const hasCloudPartidas = cp.partidasConceptos && cp.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
-            if (forceRealtime && hasCloudPartidas) {
-                merged.partidasConceptos = cp.partidasConceptos;
-            } else if (hasCloudPartidas) {
-                merged.partidasConceptos = cp.partidasConceptos;
-            } else if (hasLocalPartidas) {
-                merged.partidasConceptos = local.partidasConceptos;
-            }
+            // Si este proyecto está siendo editado activamente en esta pantalla, NUNCA sobreescribir las tablas de partidas o proveedores con copias viejas de la nube
+            if (isCurrentlyActive) {
+                merged.partidasConceptos = (local.partidasConceptos && local.partidasConceptos.length > 0) ? local.partidasConceptos : cp.partidasConceptos;
+                merged.proveedoresClaves = (local.proveedoresClaves && local.proveedoresClaves.length > 0) ? local.proveedoresClaves : cp.proveedoresClaves;
+            } else {
+                const hasLocalPartidas = local.partidasConceptos && local.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+                const hasCloudPartidas = cp.partidasConceptos && cp.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+                if (forceRealtime && hasCloudPartidas) {
+                    merged.partidasConceptos = cp.partidasConceptos;
+                } else if (hasLocalPartidas) {
+                    merged.partidasConceptos = local.partidasConceptos;
+                } else if (hasCloudPartidas) {
+                    merged.partidasConceptos = cp.partidasConceptos;
+                }
 
-            const hasLocalProv = local.proveedoresClaves && local.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
-            const hasCloudProv = cp.proveedoresClaves && cp.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
-            if (forceRealtime && hasCloudProv) {
-                merged.proveedoresClaves = cp.proveedoresClaves;
-            } else if (hasCloudProv) {
-                merged.proveedoresClaves = cp.proveedoresClaves;
-            } else if (hasLocalProv) {
-                merged.proveedoresClaves = local.proveedoresClaves;
+                const hasLocalProv = local.proveedoresClaves && local.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+                const hasCloudProv = cp.proveedoresClaves && cp.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+                if (forceRealtime && hasCloudProv) {
+                    merged.proveedoresClaves = cp.proveedoresClaves;
+                } else if (hasLocalProv) {
+                    merged.proveedoresClaves = local.proveedoresClaves;
+                } else if (hasCloudProv) {
+                    merged.proveedoresClaves = cp.proveedoresClaves;
+                }
             }
 
             // Fusión de documentos: dar prioridad a documentos reales (> 3000 caracteres)
@@ -9224,7 +9254,9 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
                             subtotal: 48300,
                             iva: 7728,
                             retencionIvaPct: 1,
-                            retencionIva: 483,
+                            retencionIva: 1,
+                            retencionIvaMonto: 483,
+                            ret4: 483,
                             retencion4: 483,
                             retencionIsr: 0,
                             retencionIsrPct: 0,
@@ -9245,9 +9277,17 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
     if (appState.activeOperacionesProjectId) {
         const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
         if (activeP) {
-            if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
-            if (typeof window.renderProveedorClavesTable === 'function') window.renderProveedorClavesTable(activeP);
-            if (typeof window.renderPartidasTable === 'function') window.renderPartidasTable(activeP);
+            const isUserEditingInWizard = document.activeElement && (
+                document.activeElement.closest('#tbody-partidas-conceptos') || 
+                document.activeElement.closest('#tbody-proveedor-claves') ||
+                document.activeElement.closest('#operaciones-view-detail input') ||
+                document.activeElement.closest('#operaciones-view-detail select')
+            );
+            if (!isUserEditingInWizard) {
+                if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
+                if (typeof window.renderProveedorClavesTable === 'function') window.renderProveedorClavesTable(activeP);
+                if (typeof window.renderPartidasTable === 'function') window.renderPartidasTable(activeP);
+            }
             if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
         }
     }
@@ -9411,6 +9451,32 @@ function cleanOperacionesLegacyData(proyectos) {
         }
         if (p.consecutivo || p.numConsecutivo) {
             p.numProyecto = p.consecutivo || p.numConsecutivo;
+        }
+
+        // Saneamiento de porcentajes de retención en proveedoresClaves (evitar que montos en pesos se lean como %)
+        if (p.proveedoresClaves && Array.isArray(p.proveedoresClaves)) {
+            p.proveedoresClaves.forEach(row => {
+                if (!row) return;
+                const sub = parseFloat(row.subtotal) || (parseFloat(row.cantidad) || 0) * (parseFloat(row.unitario) || 0);
+                if (row.retencionIva > 100 && sub > 0) {
+                    row.retencionIvaPct = Math.round((row.retencionIva / sub) * 100 * 100) / 100;
+                    row.retencionIvaMonto = row.retencionIva;
+                    row.retencionIva = row.retencionIvaPct;
+                } else if (row.retencionIvaPct > 100 && sub > 0) {
+                    row.retencionIvaMonto = row.retencionIvaPct;
+                    row.retencionIvaPct = Math.round((row.retencionIvaPct / sub) * 100 * 100) / 100;
+                    row.retencionIva = row.retencionIvaPct;
+                }
+                if (row.retencionIsr > 100 && sub > 0) {
+                    row.retencionIsrPct = Math.round((row.retencionIsr / sub) * 100 * 100) / 100;
+                    row.retencionIsrMonto = row.retencionIsr;
+                    row.retencionIsr = row.retencionIsrPct;
+                } else if (row.retencionIsrPct > 100 && sub > 0) {
+                    row.retencionIsrMonto = row.retencionIsrPct;
+                    row.retencionIsrPct = Math.round((row.retencionIsrPct / sub) * 100 * 100) / 100;
+                    row.retencionIsr = row.retencionIsrPct;
+                }
+            });
         }
     });
 }
@@ -11805,6 +11871,14 @@ function renderPartidasTable(p) {
     const tbody = document.getElementById("tbody-partidas-conceptos");
     if (!tbody) return;
 
+    // Si el usuario está interactuando activamente con un input dentro de esta tabla,
+    // NO destruir el HTML para no perder el foco ni borrar lo que está escribiendo
+    const activeEl = document.activeElement;
+    if (activeEl && tbody.contains(activeEl)) {
+        recalcPartidasTotals(p);
+        return;
+    }
+
     if (!p.partidasConceptos || !Array.isArray(p.partidasConceptos) || p.partidasConceptos.length === 0) {
         p.partidasConceptos = [
             { servicio: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 },
@@ -11827,7 +11901,10 @@ function renderPartidasTable(p) {
         const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
         const rawRet = (item.retencion === '' || item.retencion === undefined || item.retencion === null) ? '' : item.retencion;
-        const retPct = (rawRet === '' || rawRet === null || rawRet === undefined) ? 0 : (parseFloat(rawRet) || 0);
+        let retPct = (rawRet === '' || rawRet === null || rawRet === undefined) ? 0 : (parseFloat(rawRet) || 0);
+        if (retPct > 100 && sub > 0) {
+            retPct = Math.round((retPct / sub) * 100 * 100) / 100;
+        }
         const retAmount = sub > 0 ? (sub * (retPct / 100)) : 0;
         const tot = (sub > 0 || iva > 0 || retAmount > 0) ? (sub + iva - retAmount) : 0;
 
@@ -11844,7 +11921,9 @@ function renderPartidasTable(p) {
             totFinal += tot;
         }
 
-        const retVal = (item.retencion !== undefined && item.retencion !== '' && item.retencion !== 0) ? item.retencion : '';
+        const cantVal = (item.cantidad !== undefined && item.cantidad !== '' && item.cantidad !== null) ? item.cantidad : '';
+        const unitVal = (item.unitario !== undefined && item.unitario !== '' && item.unitario !== null) ? item.unitario : '';
+        const retVal = (item.retencion !== undefined && item.retencion !== '' && item.retencion !== null) ? item.retencion : '';
 
         return `
             <tr>
@@ -11872,14 +11951,14 @@ function renderPartidasTable(p) {
                 </td>
                 <td style="text-align:right;">
                     <input type="number" 
-                           value="${item.cantidad !== undefined && item.cantidad !== '' && item.cantidad !== 0 ? item.cantidad : ''}" 
+                           value="${cantVal}" 
                            placeholder="" 
                            oninput="updatePartidaFieldFast(${idx}, 'cantidad', this.value)" 
                            style="width:50px; text-align:right; border:none; background:transparent;" />
                 </td>
                 <td style="text-align:right;">
                     <input type="number" 
-                           value="${item.unitario !== undefined && item.unitario !== '' && item.unitario !== 0 ? item.unitario : ''}" 
+                           value="${unitVal}" 
                            placeholder="$0.00" 
                            oninput="updatePartidaFieldFast(${idx}, 'unitario', this.value)" 
                            style="width:85px; text-align:right; border:none; background:transparent;" />
@@ -11954,7 +12033,7 @@ function debouncedRealtimeSync(forceImmediate = false) {
         _realtimeSyncTimer = setTimeout(() => {
             if (typeof window.syncOperacionesToCloud === 'function') window.syncOperacionesToCloud(false);
             if (typeof window.broadcastProveedoresUpdate === 'function') window.broadcastProveedoresUpdate();
-        }, 120);
+        }, 1200);
     }
 }
 window.debouncedRealtimeSync = debouncedRealtimeSync;
@@ -11976,11 +12055,9 @@ function updateProveedorClavesFieldFast(idx, key, val) {
         const valClean = val === '' ? '' : (parseFloat(val) || 0);
         p.proveedoresClaves[idx].retencionIva = valClean;
         p.proveedoresClaves[idx].retencionIvaPct = valClean;
-        p.proveedoresClaves[idx].retencion = valClean;
     } else if (key === 'retencionIsr') {
         const valClean = val === '' ? '' : (parseFloat(val) || 0);
         p.proveedoresClaves[idx].retencionIsr = valClean;
-        p.proveedoresClaves[idx].retIsr = valClean;
         p.proveedoresClaves[idx].retencionIsrPct = valClean;
     } else {
         p.proveedoresClaves[idx][key] = val;
@@ -12010,8 +12087,12 @@ function recalcProveedorClavesTotals(p) {
     items.forEach((item, idx) => {
         let cant = (item.cantidad === '' || item.cantidad === undefined || item.cantidad === null) ? 0 : (parseFloat(item.cantidad) || 0);
         let unit = (item.unitario === '' || item.unitario === undefined || item.unitario === null) ? 0 : (parseFloat(item.unitario) || 0);
-        let rawRetIva = item.retencionIva !== undefined && item.retencionIva !== '' ? item.retencionIva : (item.retencion !== undefined && item.retencion !== '' ? item.retencion : '');
-        let rawRetIsr = item.retencionIsr !== undefined && item.retencionIsr !== '' ? item.retencionIsr : (item.retIsr !== undefined && item.retIsr !== '' ? item.retIsr : '');
+        let rawRetIva = (item.retencionIvaPct !== undefined && item.retencionIvaPct !== '' && item.retencionIvaPct !== null)
+            ? item.retencionIvaPct
+            : ((item.retencionIva !== undefined && item.retencionIva !== '' && item.retencionIva !== null) ? item.retencionIva : '');
+        let rawRetIsr = (item.retencionIsrPct !== undefined && item.retencionIsrPct !== '' && item.retencionIsrPct !== null)
+            ? item.retencionIsrPct
+            : ((item.retencionIsr !== undefined && item.retencionIsr !== '' && item.retencionIsr !== null) ? item.retencionIsr : '');
 
         if (tbody && tbody.children[idx]) {
             const tr = tbody.children[idx];
@@ -12023,16 +12104,25 @@ function recalcProveedorClavesTotals(p) {
                 if (inputs[2].value !== '') unit = parseFloat(inputs[2].value) || 0;
                 else if (item.unitario === '') unit = 0;
                 if (inputs[3].value !== '') rawRetIva = inputs[3].value;
-                else if (item.retencionIva === '') rawRetIva = '';
+                else if (item.retencionIvaPct === '' || item.retencionIva === '') rawRetIva = '';
                 if (inputs[4].value !== '') rawRetIsr = inputs[4].value;
-                else if (item.retencionIsr === '') rawRetIsr = '';
+                else if (item.retencionIsrPct === '' || item.retencionIsr === '') rawRetIsr = '';
             }
         }
 
         const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
-        const retIvaPct = (rawRetIva === '' || rawRetIva === null || rawRetIva === undefined) ? 0 : (parseFloat(rawRetIva) || 0);
-        const retIsrPct = (rawRetIsr === '' || rawRetIsr === null || rawRetIsr === undefined) ? 0 : (parseFloat(rawRetIsr) || 0);
+        let retIvaPct = (rawRetIva === '' || rawRetIva === null || rawRetIva === undefined) ? 0 : (parseFloat(rawRetIva) || 0);
+        let retIsrPct = (rawRetIsr === '' || rawRetIsr === null || rawRetIsr === undefined) ? 0 : (parseFloat(rawRetIsr) || 0);
+
+        // Si el porcentaje ingresado/heredado es mayor a 100 y sub > 0, corregir monto en pesos a porcentaje
+        if (retIvaPct > 100 && sub > 0) {
+            retIvaPct = Math.round((retIvaPct / sub) * 100 * 100) / 100;
+        }
+        if (retIsrPct > 100 && sub > 0) {
+            retIsrPct = Math.round((retIsrPct / sub) * 100 * 100) / 100;
+        }
+
         const retIvaAmount = sub > 0 ? (sub * (retIvaPct / 100)) : 0;
         const retIsrAmount = sub > 0 ? (sub * (retIsrPct / 100)) : 0;
         const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
@@ -12090,6 +12180,14 @@ function renderProveedorClavesTable(p) {
     const tbody = document.getElementById("tbody-proveedor-claves");
     if (!tbody) return;
 
+    // Si el usuario está interactuando activamente con un input dentro de esta tabla,
+    // NO destruir el HTML para no perder el foco ni borrar lo que está escribiendo
+    const activeEl = document.activeElement;
+    if (activeEl && tbody.contains(activeEl)) {
+        recalcProveedorClavesTotals(p);
+        return;
+    }
+
     if (!p.proveedoresClaves || !Array.isArray(p.proveedoresClaves) || p.proveedoresClaves.length === 0) {
         p.proveedoresClaves = [
             { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 },
@@ -12112,11 +12210,19 @@ function renderProveedorClavesTable(p) {
         const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
         
-        const rawRetIva = item.retencionIva !== undefined && item.retencionIva !== '' ? item.retencionIva : (item.retencion !== undefined && item.retencion !== '' ? item.retencion : '');
-        const retIvaPct = (rawRetIva === '' || rawRetIva === null || rawRetIva === undefined) ? 0 : (parseFloat(rawRetIva) || 0);
+        let retIvaPct = (item.retencionIvaPct !== undefined && item.retencionIvaPct !== '' && !isNaN(parseFloat(item.retencionIvaPct)))
+            ? parseFloat(item.retencionIvaPct)
+            : ((item.retencionIva !== undefined && item.retencionIva !== '' && !isNaN(parseFloat(item.retencionIva))) ? parseFloat(item.retencionIva) : 0);
+        let retIsrPct = (item.retencionIsrPct !== undefined && item.retencionIsrPct !== '' && !isNaN(parseFloat(item.retencionIsrPct)))
+            ? parseFloat(item.retencionIsrPct)
+            : ((item.retencionIsr !== undefined && item.retencionIsr !== '' && !isNaN(parseFloat(item.retencionIsr))) ? parseFloat(item.retencionIsr) : 0);
 
-        const rawRetIsr = item.retencionIsr !== undefined && item.retencionIsr !== '' ? item.retencionIsr : (item.retIsr !== undefined && item.retIsr !== '' ? item.retIsr : '');
-        const retIsrPct = (rawRetIsr === '' || rawRetIsr === null || rawRetIsr === undefined) ? 0 : (parseFloat(rawRetIsr) || 0);
+        if (retIvaPct > 100 && sub > 0) {
+            retIvaPct = Math.round((retIvaPct / sub) * 100 * 100) / 100;
+        }
+        if (retIsrPct > 100 && sub > 0) {
+            retIsrPct = Math.round((retIsrPct / sub) * 100 * 100) / 100;
+        }
 
         const retIvaAmount = sub > 0 ? (sub * (retIvaPct / 100)) : 0;
         const retIsrAmount = sub > 0 ? (sub * (retIsrPct / 100)) : 0;
@@ -12125,10 +12231,15 @@ function renderProveedorClavesTable(p) {
 
         item.subtotal = sub;
         item.iva = iva;
+        item.retencionIva = retIvaPct;
         item.retencionIvaPct = retIvaPct;
         item.retencionIvaMonto = retIvaAmount;
+        item.ret4 = retIvaAmount;
+        item.retencion = retIvaAmount;
+        item.retencionIsr = retIsrPct;
         item.retencionIsrPct = retIsrPct;
         item.retencionIsrMonto = retIsrAmount;
+        item.retIsr = retIsrAmount;
         item.total = tot;
 
         if (sub > 0 || tot !== 0 || cant > 0 || unit > 0 || retIvaPct > 0 || retIsrPct > 0 || item.proveedor || item.facturaNum || item.concepto) {
@@ -12139,12 +12250,14 @@ function renderProveedorClavesTable(p) {
             totFinal += tot;
         }
 
-        const retIvaVal = (item.retencionIva !== undefined && item.retencionIva !== '' && item.retencionIva !== 0) 
-            ? item.retencionIva 
-            : (item.retencion !== undefined && item.retencion !== '' && item.retencion !== 0 ? item.retencion : '');
-        const retIsrVal = (item.retencionIsr !== undefined && item.retencionIsr !== '' && item.retencionIsr !== 0) 
-            ? item.retencionIsr 
-            : (item.retIsr !== undefined && item.retIsr !== '' && item.retIsr !== 0 ? item.retIsr : '');
+        const cantVal = (item.cantidad !== undefined && item.cantidad !== '' && item.cantidad !== null) ? item.cantidad : '';
+        const unitVal = (item.unitario !== undefined && item.unitario !== '' && item.unitario !== null) ? item.unitario : '';
+        const retIvaVal = (item.retencionIvaPct !== undefined && item.retencionIvaPct !== '' && item.retencionIvaPct !== null)
+            ? item.retencionIvaPct
+            : ((item.retencionIva !== undefined && item.retencionIva !== '' && item.retencionIva !== null) ? (item.retencionIva > 100 ? retIvaPct : item.retencionIva) : '');
+        const retIsrVal = (item.retencionIsrPct !== undefined && item.retencionIsrPct !== '' && item.retencionIsrPct !== null)
+            ? item.retencionIsrPct
+            : ((item.retencionIsr !== undefined && item.retencionIsr !== '' && item.retencionIsr !== null) ? (item.retencionIsr > 100 ? retIsrPct : item.retencionIsr) : '');
 
         // Celdas amarillas: Proveedor, Factura #, Concepto sin texto escrito (placeholder vacío), dejando solo el color amarillo
         return `
@@ -12176,14 +12289,14 @@ function renderProveedorClavesTable(p) {
                 </td>
                 <td style="text-align:right;">
                     <input type="number" 
-                           value="${item.cantidad !== undefined && item.cantidad !== '' && item.cantidad !== 0 ? item.cantidad : ''}" 
+                           value="${cantVal}" 
                            placeholder="" 
                            oninput="updateProveedorClavesFieldFast(${idx}, 'cantidad', this.value)" 
                            style="width:50px; text-align:right; border:none; background:transparent;" />
                 </td>
                 <td style="text-align:right;">
                     <input type="number" 
-                           value="${item.unitario !== undefined && item.unitario !== '' && item.unitario !== 0 ? item.unitario : ''}" 
+                           value="${unitVal}" 
                            placeholder="$0.00" 
                            oninput="updateProveedorClavesFieldFast(${idx}, 'unitario', this.value)" 
                            style="width:70px; text-align:right; border:none; background:transparent;" />
