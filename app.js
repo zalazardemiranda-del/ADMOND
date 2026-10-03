@@ -287,8 +287,10 @@ const runInitialAppSetup = async () => {
                         if (purgedProjectIds.has(ref)) return false;
                         return true;
                     });
+                    parsed.forEach((row, idx) => {
+                        row.consecutivo = idx + 1;
+                    });
                     appState.consecutivo = parsed;
-                    localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
                     localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
                 } else {
                     appState.consecutivo = window.initialConsecutivoData || [];
