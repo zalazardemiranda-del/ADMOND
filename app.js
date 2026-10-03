@@ -206,7 +206,9 @@ const runInitialAppSetup = async () => {
                 (p.nombreCliente && p.nombreCliente.trim()) ||
                 (p.numFactura && p.numFactura.trim() && p.numFactura !== '-') ||
                 (p.numOC && p.numOC.trim() && p.numOC !== '-') ||
-                (p.partidasConceptos && p.partidasConceptos.some(item => item && (item.servicio || item.concepto || item.total > 0)))
+                (p.subtotal && Number(p.subtotal) > 0) ||
+                (p.total && Number(p.total) > 0) ||
+                (p.partidasConceptos && p.partidasConceptos.some(item => item && (item.servicio || item.concepto || item.total > 0 || item.subtotal > 0)))
             );
             if (!hasRealData) return true;
         }
@@ -279,22 +281,14 @@ const runInitialAppSetup = async () => {
             try {
                 let parsed = JSON.parse(storedConsecutivo);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    const validOpKeys = new Set();
-                    (appState.operacionesProyectos || []).forEach(p => {
-                        if (isProjectGenerado(p)) {
-                            [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].forEach(k => {
-                                if (k) validOpKeys.add(String(k).trim().toLowerCase());
-                            });
-                        }
-                    });
                     parsed = parsed.filter(row => {
                         if (!row) return false;
                         const ref = row.referenciaOp ? String(row.referenciaOp).trim() : '';
                         if (purgedProjectIds.has(ref)) return false;
-                        if (ref && !validOpKeys.has(ref.toLowerCase())) return false;
                         return true;
                     });
                     appState.consecutivo = parsed;
+                    localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
                     localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
                 } else {
                     appState.consecutivo = window.initialConsecutivoData || [];
@@ -826,6 +820,7 @@ function renderAdministracion() {
         renderProveedorChips();
         renderProveedores();
     } else if (appState.currentAdminFicha === 'consecutivo') {
+        if (typeof window.fetchConsecutivoFromCloud === 'function') window.fetchConsecutivoFromCloud();
         renderConsecutivo();
     } else if (appState.currentAdminFicha === 'archivo-digital') {
         renderArchivoDigital();
@@ -4309,9 +4304,12 @@ function renderConsecutivoPagination(totalPages) {
 
 function updateConsecutivoCell(index, key, val) {
     window.updateConsecutivoCell = updateConsecutivoCell;
-    if (appState.consecutivo[index]) {
+    if (appState.consecutivo && appState.consecutivo[index]) {
         appState.consecutivo[index][key] = val;
         saveToStorage();
+        if (typeof window.syncConsecutivoToCloud === 'function') {
+            window.syncConsecutivoToCloud();
+        }
     }
 };
 
@@ -4353,6 +4351,9 @@ function liveUpdateConsecutivoRow(index) {
         appState.consecutivo[index].porcHugo = porcHugo;
         
         saveToStorage();
+        if (typeof window.syncConsecutivoToCloud === 'function') {
+            window.syncConsecutivoToCloud();
+        }
         updateConsecutivoKPIs(getFilteredConsecutivoList());
         renderConsecutivoFooterTotals(getFilteredConsecutivoList());
     }
@@ -4410,6 +4411,9 @@ function addNewConsecutivoRow() {
     // Add to the end of the array
     appState.consecutivo.push(newRecord);
     saveToStorage();
+    if (typeof window.syncConsecutivoToCloud === 'function') {
+        window.syncConsecutivoToCloud(true);
+    }
     
     // Clear search filter so the newly created row is visible
     if (appState.consecutivoSearch) {
@@ -5320,6 +5324,15 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 4d. Recibir Actualizaciones de Consecutivo por Broadcast en tiempo real (instantáneo entre usuarios)
+    window.chatRealtimeChannel.on('broadcast', { event: 'consecutivo_update' }, payload => {
+        const data = payload.payload;
+        if (!data || !Array.isArray(data.consecutivo)) return;
+        if (typeof window.mergeConsecutivoFromCloud === 'function') {
+            window.mergeConsecutivoFromCloud(data.consecutivo);
+        }
+    });
+
     // 5. Cambios de base de datos PostgreSQL en mensajes (canal secundario)
     window.chatRealtimeChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         const row = payload.new;
@@ -5329,6 +5342,9 @@ function setupRealtimeSubscriptions() {
             // Mensajes de sincronización interna
             if (channelKey === '__cloud_sync_operaciones__' && typeof window.fetchOperacionesFromCloud === 'function') {
                 window.fetchOperacionesFromCloud();
+            }
+            if (channelKey === '__cloud_sync_consecutivo__' && typeof window.fetchConsecutivoFromCloud === 'function') {
+                window.fetchConsecutivoFromCloud();
             }
             if (channelKey === '__cloud_sync_proveedores_catalog__' && typeof window.fetchProveedoresCatalogFromCloud === 'function') {
                 window.fetchProveedoresCatalogFromCloud();
@@ -5394,6 +5410,13 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 8. Cambios de base de datos PostgreSQL en consecutivo
+    window.chatRealtimeChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'consecutivo' }, async () => {
+        if (typeof window.fetchConsecutivoFromCloud === 'function') {
+            await window.fetchConsecutivoFromCloud();
+        }
+    });
+
     window.chatRealtimeChannel.subscribe((status) => {
         console.log("⚡ [Realtime Hub Subscripción]:", status);
         if (status === 'SUBSCRIBED') {
@@ -5421,6 +5444,11 @@ async function fetchCloudData() {
         // Sincronizar proyectos de Operaciones (nube <-> local)
         if (typeof window.fetchOperacionesFromCloud === 'function') {
             await window.fetchOperacionesFromCloud();
+        }
+
+        // Sincronizar registros de Consecutivo (nube <-> local para todos los usuarios)
+        if (typeof window.fetchConsecutivoFromCloud === 'function') {
+            await window.fetchConsecutivoFromCloud();
         }
 
         // Sincronizar catálogo y datos de Proveedores (nube <-> local para todos los usuarios)
@@ -8394,16 +8422,74 @@ function syncAllOperacionesToConsecutivo() {
         });
     });
 
-    // Limpiar de Consecutivo cualquier fila que tenga referenciaOp a proyectos eliminados o inexistentes
+    // Limpiar de Consecutivo únicamente filas de proyectos purgados
     if (Array.isArray(appState.consecutivo)) {
         appState.consecutivo = appState.consecutivo.filter(row => {
             if (!row) return false;
             const ref = row.referenciaOp ? String(row.referenciaOp).trim() : '';
             if (purgedIds.has(ref)) return false;
-            // Si tiene referenciaOp pero no existe ningún proyecto con ese código en Operaciones, eliminarla
-            if (ref && !validOpSet.has(ref.toLowerCase())) return false;
             return true;
         });
+
+        // Auto-bridging bidireccional: si hay filas en Consecutivo con referenciaOp que no existan aún en Operaciones, crearlas
+        let opChanged = false;
+        if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
+        appState.consecutivo.forEach(row => {
+            if (!row || !row.referenciaOp) return;
+            const ref = String(row.referenciaOp).trim();
+            if (purgedIds.has(ref)) return;
+            const refLower = ref.toLowerCase();
+            const exists = appState.operacionesProyectos.some(p => 
+                [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].some(k => k && String(k).trim().toLowerCase() === refLower)
+            );
+            if (!exists) {
+                const subVal = Number(row.subtotal) || 0;
+                const ivaVal = (row.iva !== undefined && row.iva !== null && row.iva !== '') ? Number(row.iva) : (subVal > 0 ? Math.round(subVal * 0.16 * 100) / 100 : 0);
+                const totVal = (row.total !== undefined && row.total !== null && row.total !== '') ? Number(row.total) : (subVal + ivaVal);
+                const isLavado = (row.servicio && row.servicio.toLowerCase().includes('lavado')) || ref.includes('-L');
+                const newOp = {
+                    id: ref,
+                    consecutivo: ref,
+                    numConsecutivo: ref,
+                    numProyecto: ref,
+                    fechaInicio: row.fechaEmision || new Date().toISOString().split('T')[0],
+                    fechaInicioDisplay: row.fechaEmision ? row.fechaEmision.split('-').reverse().join('/') : new Date().toLocaleDateString('es-MX'),
+                    cliente: row.cliente || '',
+                    nombreCliente: row.cliente || '',
+                    numOC: row.folioCliente || '',
+                    numFactura: row.factura || '',
+                    subtotal: subVal,
+                    iva: ivaVal,
+                    total: totVal,
+                    estatus: (String(row.st || '').toUpperCase() === 'C' ? 'CERRADO' : 'PENDIENTE'),
+                    generado: true,
+                    isDraft: false,
+                    isNewProject: false,
+                    currentStep: 4,
+                    tipoProyecto: isLavado ? 'lavado_contenedores' : 'movimientos_foraneos',
+                    servicioName: row.servicio || (isLavado ? 'Lavado de Contenedores' : 'Movimientos Foráneos'),
+                    infoViaje: { terminal: '', mblMawb: '', destino: '', observaciones: '' },
+                    infoLavado: { sitioServicio: '', clienteFacturar: '', hbl: '', mbl: '', naviera: '', totalContenedores: 1, observaciones: '' },
+                    contenedores: [
+                        { id: 1, label: 'Contenedor 1', numContenedor: '', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
+                    ],
+                    partidasConceptos: [
+                        { servicio: row.servicio || 'Movimientos Foráneos', num: 1, concepto: `Flete / ${row.servicio || 'Movimientos Foráneos'} OC ${row.folioCliente || ''}`, cantidad: 1, unitario: subVal, subtotal: subVal, iva: ivaVal, retencion: 0, total: totVal }
+                    ],
+                    proveedoresClaves: [
+                        { proveedor: '', facturaNum: '', num: 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: 0, retencionIsr: 0, total: 0 }
+                    ],
+                    documentos: {}
+                };
+                appState.operacionesProyectos.unshift(newOp);
+                opChanged = true;
+            }
+        });
+        if (opChanged) {
+            try {
+                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+            } catch (e) {}
+        }
 
         // Reenumerar consecutivamente
         appState.consecutivo.forEach((row, idx) => {
@@ -8506,6 +8592,10 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
     try {
         localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
     } catch (e) {}
+
+    if (typeof window.syncConsecutivoToCloud === 'function') {
+        window.syncConsecutivoToCloud(false);
+    }
 
     if (shouldRender && typeof window.renderConsecutivo === 'function' && appState.currentAdminFicha === 'consecutivo') {
         window.renderConsecutivo();
@@ -8628,6 +8718,119 @@ function syncOperacionesToCloud(forceImmediate = false) {
         _syncOperacionesTimer = setTimeout(doSync, 600);
     }
 };
+
+let _syncConsecutivoTimer = null;
+function syncConsecutivoToCloud(forceImmediate = false) {
+    window.syncConsecutivoToCloud = syncConsecutivoToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    const list = appState.consecutivo || [];
+
+    // 1. Broadcast instantáneo por WebSockets (sub-50ms) a otros dispositivos activos
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'consecutivo_update',
+                payload: {
+                    consecutivo: list,
+                    sender: appState.currentUser?.email || 'consecutivo',
+                    timestamp: new Date().toISOString()
+                }
+            });
+        } catch (e) {
+            console.warn("Error broadcasting consecutivo:", e);
+        }
+    }
+
+    const doSync = async () => {
+        try {
+            const dataToSave = appState.consecutivo || [];
+            // Guardar snapshot en tabla messages con chat_id __cloud_sync_consecutivo__
+            await client.from('messages').insert({
+                chat_id: '__cloud_sync_consecutivo__',
+                contenido: JSON.stringify(dataToSave),
+                emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                emisor_role: 'sistema'
+            });
+        } catch (errSnap) {
+            console.warn("⚠️ Error saving consecutivo snapshot to Supabase:", errSnap);
+        }
+    };
+
+    if (_syncConsecutivoTimer) clearTimeout(_syncConsecutivoTimer);
+    if (forceImmediate) {
+        doSync();
+    } else {
+        _syncConsecutivoTimer = setTimeout(doSync, 400);
+    }
+}
+window.syncConsecutivoToCloud = syncConsecutivoToCloud;
+
+async function fetchConsecutivoFromCloud() {
+    window.fetchConsecutivoFromCloud = fetchConsecutivoFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    try {
+        const { data: snapMsgs, error: snapErr } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_consecutivo__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (snapMsgs && snapMsgs.length > 0 && snapMsgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(snapMsgs[0].contenido);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    mergeConsecutivoFromCloud(parsed);
+                }
+            } catch (e) {}
+        }
+    } catch (err) {
+        console.warn("⚠️ Error fetching consecutivo from cloud:", err);
+    }
+}
+window.fetchConsecutivoFromCloud = fetchConsecutivoFromCloud;
+
+function mergeConsecutivoFromCloud(cloudList) {
+    window.mergeConsecutivoFromCloud = mergeConsecutivoFromCloud;
+    if (!Array.isArray(cloudList)) return;
+    const purgedIds = window.purgedProjectIds || new Set();
+
+    const validList = cloudList.filter(row => {
+        if (!row) return false;
+        const ref = row.referenciaOp ? String(row.referenciaOp).trim() : '';
+        if (purgedIds.has(ref)) return false;
+        return true;
+    });
+
+    if (validList.length > 0) {
+        appState.consecutivo = validList;
+        appState.consecutivo.forEach((row, idx) => {
+            row.consecutivo = idx + 1;
+        });
+        try {
+            localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
+        } catch (e) {}
+
+        // Sincronizar automáticamente hacia Operaciones
+        if (typeof window.syncAllOperacionesToConsecutivo === 'function') {
+            window.syncAllOperacionesToConsecutivo();
+        }
+
+        if (appState.currentAdminFicha === 'consecutivo' && typeof window.renderConsecutivo === 'function') {
+            window.renderConsecutivo();
+        }
+        if (appState.currentAdminFicha === 'operaciones' && typeof window.renderOperaciones === 'function') {
+            window.renderOperaciones();
+        }
+    }
+}
+window.mergeConsecutivoFromCloud = mergeConsecutivoFromCloud;
 
 async function fetchOperacionesFromCloud() {
     window.fetchOperacionesFromCloud = fetchOperacionesFromCloud;
