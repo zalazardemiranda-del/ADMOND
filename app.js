@@ -5343,19 +5343,30 @@ function setupRealtimeSubscriptions() {
         const data = payload.payload;
         if (!data || !Array.isArray(data.proyectos)) return;
         if (typeof window.mergeOperacionesProjects === 'function') {
-            window.mergeOperacionesProjects(data.proyectos);
+            window.mergeOperacionesProjects(data.proyectos, true);
             try {
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             } catch (e) {}
-            if (appState.currentAdminFicha === 'operaciones' && typeof window.renderOperaciones === 'function') {
-                window.renderOperaciones();
+            if (typeof window.syncAllOperacionesToProveedores === 'function') {
+                window.syncAllOperacionesToProveedores();
+            }
+            if (appState.currentAdminFicha === 'operaciones') {
+                if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
                 if (appState.activeOperacionesProjectId) {
                     const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
                     if (activeP) {
                         if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
+                        if (typeof window.renderProveedorClavesTable === 'function') window.renderProveedorClavesTable(activeP);
+                        if (typeof window.renderPartidasTable === 'function') window.renderPartidasTable(activeP);
                         if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
                     }
                 }
+            } else if (appState.currentAdminFicha === 'proveedores') {
+                if (typeof window.updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
+                if (typeof window.renderProveedoresTable === 'function') renderProveedoresTable();
+                if (typeof window.renderProveedores === 'function') renderProveedores();
+            } else if (appState.currentAdminFicha === 'consecutivo') {
+                if (typeof window.renderConsecutivoTable === 'function') renderConsecutivoTable();
             }
         }
     });
@@ -5365,33 +5376,13 @@ function setupRealtimeSubscriptions() {
         const data = payload.payload;
         if (!data || !Array.isArray(data.proveedores)) return;
         if (data.proveedores.length > 0) {
-            const statusMap = new Map();
-            data.proveedores.forEach(r => {
-                if (!r) return;
-                const st = r.p || r.estatus;
-                if (!st) return;
-                if (r.opRefId) statusMap.set(r.opRefId, st);
-                if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
-                if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
-                if (r.op && r.proveedor) statusMap.set(`${String(r.op).trim().toLowerCase()}_${String(r.proveedor).trim().toLowerCase()}`, st);
-            });
-
-            (appState.proveedores || []).forEach(localR => {
-                const key = localR.opRefId || (localR.projectId && localR.opRowIndex !== undefined ? `${localR.projectId}_${localR.opRowIndex}` : null) || (localR.op ? `${String(localR.op).trim().toLowerCase()}_${localR.opRowIndex}` : null);
-                const provKey = (localR.op && localR.proveedor) ? `${String(localR.op).trim().toLowerCase()}_${String(localR.proveedor).trim().toLowerCase()}` : null;
-                if (key && statusMap.has(key)) {
-                    localR.p = statusMap.get(key);
-                    localR.estatus = statusMap.get(key);
-                } else if (provKey && statusMap.has(provKey)) {
-                    localR.p = statusMap.get(provKey);
-                    localR.estatus = statusMap.get(provKey);
-                }
-            });
-        }
-        saveToStorage();
-        if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
-            updateProveedorStatusCounts();
-            renderProveedores();
+            appState.proveedores = data.proveedores;
+            saveToStorage();
+            if (appState.currentAdminFicha === 'proveedores') {
+                if (typeof window.updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
+                if (typeof window.renderProveedoresTable === 'function') renderProveedoresTable();
+                if (typeof window.renderProveedores === 'function') renderProveedores();
+            }
         }
     });
 
@@ -9027,7 +9018,7 @@ async function fetchOperacionesFromCloud() {
     }
 };
 
-function mergeOperacionesProjects(cloudList) {
+function mergeOperacionesProjects(cloudList, forceRealtime = false) {
     window.mergeOperacionesProjects = mergeOperacionesProjects;
     if (!Array.isArray(cloudList)) return;
     if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
@@ -9035,7 +9026,6 @@ function mergeOperacionesProjects(cloudList) {
     const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F']);
 
     if (cloudList.length === 0) {
-        // La nube reporta que no hay proyectos activos generados: purgar fantasmas locales
         appState.operacionesProyectos = (appState.operacionesProyectos || []).filter(p => 
             p && isProjectGenerado(p) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(p)) && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numProyecto)
         );
@@ -9070,7 +9060,6 @@ function mergeOperacionesProjects(cloudList) {
     }
 
     const cloudKeys = new Set(validCloudList.map(c => String(c.id || c.consecutivo || c.numProyecto).toLowerCase()));
-    // Eliminar locales que no estén en la nube
     appState.operacionesProyectos = appState.operacionesProyectos.filter(p => {
         if (!p || !isProjectGenerado(p) || (typeof isAccidentalEmptyProject === 'function' && isAccidentalEmptyProject(p)) || fakeOpIds.has(p.id) || fakeOpIds.has(p.consecutivo) || fakeOpIds.has(p.numProyecto)) return false;
         const k = String(p.id || p.consecutivo || p.numProyecto).toLowerCase();
@@ -9084,41 +9073,47 @@ function mergeOperacionesProjects(cloudList) {
             appState.operacionesProyectos.push(cp);
         } else {
             const local = appState.operacionesProyectos[idx];
-            // Preservar datos locales que ya tengan información ingresada
-            const merged = Object.assign({}, cp, local);
+            // Si es broadcast en tiempo real, priorizar el cambio entrante del otro usuario
+            const merged = forceRealtime ? Object.assign({}, local, cp) : Object.assign({}, cp, local);
             
-            // Para partidasConceptos y proveedoresClaves, preferir las que contengan datos reales
             const hasLocalPartidas = local.partidasConceptos && local.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
             const hasCloudPartidas = cp.partidasConceptos && cp.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
-            if (hasLocalPartidas) {
-                merged.partidasConceptos = local.partidasConceptos;
+            if (forceRealtime && hasCloudPartidas) {
+                merged.partidasConceptos = cp.partidasConceptos;
             } else if (hasCloudPartidas) {
                 merged.partidasConceptos = cp.partidasConceptos;
+            } else if (hasLocalPartidas) {
+                merged.partidasConceptos = local.partidasConceptos;
             }
 
             const hasLocalProv = local.proveedoresClaves && local.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
             const hasCloudProv = cp.proveedoresClaves && cp.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
-            if (hasLocalProv) {
-                merged.proveedoresClaves = local.proveedoresClaves;
+            if (forceRealtime && hasCloudProv) {
+                merged.proveedoresClaves = cp.proveedoresClaves;
             } else if (hasCloudProv) {
                 merged.proveedoresClaves = cp.proveedoresClaves;
+            } else if (hasLocalProv) {
+                merged.proveedoresClaves = local.proveedoresClaves;
             }
 
-            // Fusión inteligente de documentos: NUNCA sobreescribir ni perder documentos cargados
+            // Fusión de documentos: dar prioridad a documentos reales (> 3000 caracteres)
             const localDocs = local.documentos || {};
             const cloudDocs = cp.documentos || {};
-            const mergedDocs = Object.assign({}, cloudDocs, localDocs);
+            const mergedDocs = Object.assign({}, localDocs, cloudDocs);
 
             ['factura1', 'factura2', 'factura3', 'pod1', 'pod2'].forEach(k => {
                 const lDoc = localDocs[k];
                 const cDoc = cloudDocs[k];
-                if (lDoc && lDoc.uploaded && (!cDoc || !cDoc.uploaded)) {
-                    mergedDocs[k] = lDoc;
-                } else if (cDoc && cDoc.uploaded && (!lDoc || !lDoc.uploaded)) {
+                const lIsReal = lDoc && lDoc.dataUrl && lDoc.dataUrl.length > 3000;
+                const cIsReal = cDoc && cDoc.dataUrl && cDoc.dataUrl.length > 3000;
+                if (cIsReal) {
                     mergedDocs[k] = cDoc;
-                } else if (lDoc && lDoc.uploaded && cDoc && cDoc.uploaded) {
-                    // Ambos están cargados: preferir el que tenga dataUrl o más reciente
-                    mergedDocs[k] = (lDoc.dataUrl || !cDoc.dataUrl) ? lDoc : cDoc;
+                } else if (lIsReal) {
+                    mergedDocs[k] = lDoc;
+                } else if (cDoc && cDoc.uploaded) {
+                    mergedDocs[k] = cDoc;
+                } else if (lDoc && lDoc.uploaded) {
+                    mergedDocs[k] = lDoc;
                 }
             });
             merged.documentos = mergedDocs;
@@ -9131,7 +9126,7 @@ function mergeOperacionesProjects(cloudList) {
                     merged.proveedoresClaves = [
                         {
                             proveedor: 'Jennufer Marylin Gonzales Franco',
-                            facturaNum: '-',
+                            facturaNum: '',
                             num: 1,
                             concepto: 'Logistic',
                             fecha: '2026-10-03',
@@ -9139,12 +9134,12 @@ function mergeOperacionesProjects(cloudList) {
                             unitario: 48300,
                             subtotal: 48300,
                             iva: 7728,
-                            retencionIvaPct: 4,
-                            retencionIva: 1932,
-                            retencion4: 1932,
+                            retencionIvaPct: 1,
+                            retencionIva: 483,
+                            retencion4: 483,
                             retencionIsr: 0,
                             retencionIsrPct: 0,
-                            total: 54096
+                            total: 55545
                         }
                     ];
                 }
@@ -9162,6 +9157,8 @@ function mergeOperacionesProjects(cloudList) {
         const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
         if (activeP) {
             if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
+            if (typeof window.renderProveedorClavesTable === 'function') window.renderProveedorClavesTable(activeP);
+            if (typeof window.renderPartidasTable === 'function') window.renderPartidasTable(activeP);
             if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
         }
     }
@@ -11545,6 +11542,9 @@ function updatePartidaFieldFast(idx, key, val) {
     }
     recalcPartidasTotals(p);
     saveOperacionesStorage();
+    if (typeof window.debouncedRealtimeSync === 'function') {
+        window.debouncedRealtimeSync(false);
+    }
 };
 window.updatePartidaField = window.updatePartidaFieldFast;
 
@@ -11775,6 +11775,22 @@ function addPartidaConceptoRow() {
     saveOperacionesStorage();
 };
 
+let _realtimeSyncTimer = null;
+function debouncedRealtimeSync(forceImmediate = false) {
+    window.debouncedRealtimeSync = debouncedRealtimeSync;
+    if (_realtimeSyncTimer) clearTimeout(_realtimeSyncTimer);
+    if (forceImmediate) {
+        if (typeof window.syncOperacionesToCloud === 'function') window.syncOperacionesToCloud(true);
+        if (typeof window.broadcastProveedoresUpdate === 'function') window.broadcastProveedoresUpdate();
+    } else {
+        _realtimeSyncTimer = setTimeout(() => {
+            if (typeof window.syncOperacionesToCloud === 'function') window.syncOperacionesToCloud(false);
+            if (typeof window.broadcastProveedoresUpdate === 'function') window.broadcastProveedoresUpdate();
+        }, 120);
+    }
+}
+window.debouncedRealtimeSync = debouncedRealtimeSync;
+
 function updateProveedorClavesFieldFast(idx, key, val) {
     window.updateProveedorClavesFieldFast = updateProveedorClavesFieldFast;
     const p = (typeof getActiveOperacionesProject === 'function') 
@@ -11805,6 +11821,9 @@ function updateProveedorClavesFieldFast(idx, key, val) {
     saveOperacionesStorage();
     if (typeof window.syncAllOperacionesToProveedores === 'function') {
         window.syncAllOperacionesToProveedores();
+    }
+    if (typeof window.debouncedRealtimeSync === 'function') {
+        window.debouncedRealtimeSync(false);
     }
 };
 window.updateProveedorClavesField = window.updateProveedorClavesFieldFast;
@@ -12063,6 +12082,22 @@ function addProveedorClavesRow() {
 /* ==============================================================================
    ALMACENAMIENTO PERMANENTE DE DOCUMENTOS (IndexedDB Vault + Base64 Cloud Sync)
    ============================================================================== */
+function isFakeDummyPdf(dataUrl) {
+    if (!dataUrl || typeof dataUrl !== 'string') return false;
+    try {
+        if (dataUrl.length < 6000) {
+            const commaIdx = dataUrl.indexOf(',');
+            const base64Part = commaIdx !== -1 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+            const raw = atob(base64Part);
+            if (raw.includes('COMPROBANTE DIGITAL') || raw.includes('RODIPACK LOGISTICS - EXPEDIENTE') || raw.includes('EXPEDIENTE OPERATIVO DIGITAL')) {
+                return true;
+            }
+        }
+    } catch(e) {}
+    return false;
+}
+window.isFakeDummyPdf = isFakeDummyPdf;
+
 window.DocStorage = {
     _db: null,
     async getDB() {
@@ -12106,10 +12141,18 @@ window.DocStorage = {
             const db = await this.getDB();
             if (!db) return null;
             return new Promise((resolve) => {
-                const tx = db.transaction('docs', 'readonly');
+                const tx = db.transaction('docs', 'readwrite');
                 const store = tx.objectStore('docs');
                 const req = store.get(`${projId}__${docKey}`);
-                req.onsuccess = () => resolve(req.result ? req.result.data : null);
+                req.onsuccess = () => {
+                    const res = req.result ? req.result.data : null;
+                    if (res && res.dataUrl && isFakeDummyPdf(res.dataUrl)) {
+                        store.delete(`${projId}__${docKey}`);
+                        resolve(null);
+                    } else {
+                        resolve(res);
+                    }
+                };
                 req.onerror = () => resolve(null);
             });
         } catch (e) { return null; }
@@ -12135,9 +12178,13 @@ window.DocStorage = {
         const keys = ['factura1', 'factura2', 'factura3', 'pod1', 'pod2'];
         for (const k of keys) {
             const cur = p.documentos[k];
+            if (cur && cur.dataUrl && isFakeDummyPdf(cur.dataUrl)) {
+                cur.dataUrl = '';
+                await this.deleteDoc(p.id, k);
+            }
             if (!cur || !cur.dataUrl) {
                 const stored = await this.getDoc(p.id, k);
-                if (stored && stored.uploaded && stored.dataUrl) {
+                if (stored && stored.uploaded && stored.dataUrl && !isFakeDummyPdf(stored.dataUrl)) {
                     p.documentos[k] = Object.assign({}, cur || {}, stored);
                     restoredAny = true;
                 }
@@ -12152,6 +12199,49 @@ window.DocStorage = {
         return restoredAny;
     }
 };
+
+// Purgar automáticamente cualquier comprobante sintético viejo de IndexedDB y almacenamiento local
+(async function purgeOldDummyPdfsStartup() {
+    try {
+        if (window.DocStorage) {
+            const db = await window.DocStorage.getDB();
+            if (db) {
+                const tx = db.transaction('docs', 'readwrite');
+                const store = tx.objectStore('docs');
+                const req = store.openCursor();
+                req.onsuccess = e => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        const val = cursor.value;
+                        if (val && val.data && isFakeDummyPdf(val.data.dataUrl)) {
+                            console.warn("Purged fake dummy PDF from IndexedDB:", cursor.key);
+                            cursor.delete();
+                        }
+                        cursor.continue();
+                    }
+                };
+            }
+        }
+        if (typeof appState !== 'undefined' && Array.isArray(appState.operacionesProyectos)) {
+            let changed = false;
+            appState.operacionesProyectos.forEach(p => {
+                if (p && p.documentos) {
+                    ['factura1', 'factura2', 'factura3', 'pod1', 'pod2'].forEach(k => {
+                        const d = p.documentos[k];
+                        if (d && isFakeDummyPdf(d.dataUrl)) {
+                            console.warn("Purged fake dummy PDF from project doc:", p.id, k);
+                            d.dataUrl = '';
+                            changed = true;
+                        }
+                    });
+                }
+            });
+            if (changed && typeof saveOperacionesStorage === 'function') {
+                saveOperacionesStorage();
+            }
+        }
+    } catch(e) {}
+})();
 
 function renderDocumentosStatus(p) {
     window.renderDocumentosStatus = renderDocumentosStatus;
@@ -12296,16 +12386,22 @@ async function viewDocItem(docKey) {
     let doc = p.documentos[docKey];
 
     let dataUrl = doc.dataUrl;
+    if (dataUrl && isFakeDummyPdf(dataUrl)) {
+        if (window.DocStorage && p.id) await window.DocStorage.deleteDoc(p.id, docKey);
+        doc.dataUrl = '';
+        dataUrl = '';
+    }
+
     if (!dataUrl && window.DocStorage && p.id) {
         const stored = await window.DocStorage.getDoc(p.id, docKey);
-        if (stored && stored.dataUrl) {
+        if (stored && stored.dataUrl && !isFakeDummyPdf(stored.dataUrl)) {
             dataUrl = stored.dataUrl;
             doc.dataUrl = dataUrl;
         }
     }
 
-    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
-        alert(`El archivo original "${doc.fileName || docKey}" fue cargado por tu compañero en su dispositivo.\n\nPara visualizarlo y descargarlo en esta computadora:\n1. Pídele a tu compañero que abra el proyecto en su iPad/equipo para que se transfiera el archivo original a la nube automáticamente, o\n2. Si tienes el archivo en esta computadora, cárgalo directamente pulsando "Subir / Vincular".`);
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:') || isFakeDummyPdf(dataUrl)) {
+        alert(`El archivo original "${doc.fileName || docKey}" fue cargado por tu compañero en su dispositivo.\n\nPara visualizarlo y descargarlo en esta computadora:\n1. Pídele a tu compañero que abra el proyecto en su iPad/equipo para que se transfiera el archivo original auténtico a la nube automáticamente, o\n2. Si tienes el archivo en esta computadora, cárgalo directamente pulsando "Subir / Vincular".`);
         return;
     }
 
