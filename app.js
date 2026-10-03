@@ -5351,7 +5351,10 @@ function setupRealtimeSubscriptions() {
                 window.syncAllOperacionesToProveedores();
             }
             if (appState.currentAdminFicha === 'operaciones') {
-                if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
+                const detailPane = document.getElementById("operaciones-view-detail");
+                if (!detailPane || detailPane.style.display === "none") {
+                    if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
+                }
                 if (appState.activeOperacionesProjectId) {
                     const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
                     if (activeP) {
@@ -9021,7 +9024,10 @@ function mergeConsecutivoFromCloud(cloudList) {
             window.renderConsecutivo();
         }
         if (appState.currentAdminFicha === 'operaciones' && typeof window.renderOperaciones === 'function') {
-            window.renderOperaciones();
+            const detailPane = document.getElementById("operaciones-view-detail");
+            if (!detailPane || detailPane.style.display === "none") {
+                window.renderOperaciones();
+            }
         }
     }
 }
@@ -9077,7 +9083,10 @@ async function fetchOperacionesFromCloud() {
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             } catch (e) {}
             if (appState.currentAdminFicha === 'operaciones') {
-                if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
+                const detailPane = document.getElementById("operaciones-view-detail");
+                if (!detailPane || detailPane.style.display === "none") {
+                    if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
+                }
                 if (appState.activeOperacionesProjectId) {
                     const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
                     if (activeP) {
@@ -9107,7 +9116,10 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
             localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
         } catch (e) {}
         if (typeof window.renderOperaciones === 'function') {
-            window.renderOperaciones();
+            const detailPane = document.getElementById("operaciones-view-detail");
+            if (!detailPane || detailPane.style.display === "none") {
+                window.renderOperaciones();
+            }
         }
         if (typeof window.syncAllOperacionesToConsecutivo === 'function') {
             window.syncAllOperacionesToConsecutivo();
@@ -9125,7 +9137,10 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
             localStorage.setItem('rp_operaciones_proyectos', JSON.stringify([]));
         } catch (e) {}
         if (typeof window.renderOperaciones === 'function') {
-            window.renderOperaciones();
+            const detailPane = document.getElementById("operaciones-view-detail");
+            if (!detailPane || detailPane.style.display === "none") {
+                window.renderOperaciones();
+            }
         }
         if (typeof window.syncAllOperacionesToConsecutivo === 'function') {
             window.syncAllOperacionesToConsecutivo();
@@ -9480,6 +9495,10 @@ function renderOperaciones() {
     window.renderOperaciones = renderOperaciones;
     const listPane = document.getElementById("operaciones-view-list");
     if (!listPane) return;
+    const detailPane = document.getElementById("operaciones-view-detail");
+    if (detailPane && detailPane.style.display !== "none" && listPane.style.display === "none") {
+        return;
+    }
 
     // Purga automática inicial si existen datos fantasma guardados previamente en LocalStorage
     if (!localStorage.getItem('rp_purge_accidental_oct_v5')) {
@@ -9614,28 +9633,53 @@ function renderOperaciones() {
         const emptyMsg = isExpedienteMode 
             ? "No hay expedientes archivados por el momento. Puedes archivar un expediente desde el Paso 4 (Documentos)."
             : "No se encontraron proyectos activos registrados.";
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: #64748B;">${emptyMsg}</td></tr>`;
+        const emptyHtml = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: #64748B;">${emptyMsg}</td></tr>`;
+        if (tbody.dataset.lastRenderedHtml !== emptyHtml) {
+            tbody.dataset.lastRenderedHtml = emptyHtml;
+            tbody.innerHTML = emptyHtml;
+        }
         return;
     }
 
-    tbody.innerHTML = filtered.map(p => {
-        const consecutivoDisplay = p.consecutivo || p.numConsecutivo || p.numProyecto;
-        const pId = p.id || consecutivoDisplay;
+    const rowsHtml = filtered.map(p => {
+        const consecutivoDisplay = p.consecutivo || p.numConsecutivo || p.numProyecto || '-';
+        const pId = String(p.id || consecutivoDisplay).trim();
         const isArchivado = p.archivado === true || p.estatus === 'CERRADO';
         return `
-        <tr>
+        <tr data-op-id="${pId}">
             <td><strong>${consecutivoDisplay}</strong></td>
             <td>${p.fechaInicioDisplay || p.fechaInicio || '-'}</td>
             <td>${p.factura || p.numFactura || '-'}</td>
             <td><span class="op-status-badge ${p.estatus}">${p.estatus}</span></td>
             <td style="white-space: nowrap;">
-                <button class="btn-op-abrir" onclick="openOperacionesDetail('${pId}')" title="Abrir y revisar expediente">
+                <button type="button" class="btn-op-abrir" data-project-id="${pId}" onclick="event.stopPropagation(); openOperacionesDetail('${pId}')" title="Abrir y revisar expediente">
                     <span class="material-symbols-outlined" style="font-size: 16px;">folder_open</span> ABRIR
                 </button>
             </td>
         </tr>
     `;
     }).join('');
+
+    // Prevenir destrucción del DOM y parpadeo si el HTML de la tabla no ha cambiado
+    if (tbody.dataset.lastRenderedHtml !== rowsHtml) {
+        tbody.dataset.lastRenderedHtml = rowsHtml;
+        tbody.innerHTML = rowsHtml;
+    }
+
+    if (!tbody.dataset.clickBound) {
+        tbody.dataset.clickBound = "true";
+        tbody.addEventListener("click", function(e) {
+            const btn = e.target.closest(".btn-op-abrir");
+            if (btn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const pid = btn.dataset.projectId || btn.getAttribute("data-project-id");
+                if (pid && typeof window.openOperacionesDetail === 'function') {
+                    window.openOperacionesDetail(pid);
+                }
+            }
+        });
+    }
 };
 
 function toggleOperacionesExpedientesView() {
@@ -9859,75 +9903,124 @@ window.updateGenerarProyectoButton = updateGenerarProyectoButton;
 
 function openOperacionesDetail(projectId) {
     window.openOperacionesDetail = openOperacionesDetail;
-    if (!appState.operacionesProyectos || appState.operacionesProyectos.length === 0) {
-        try {
-            const stored = localStorage.getItem('rp_operaciones_proyectos');
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    appState.operacionesProyectos = parsed.filter(p => isProjectGenerado(p));
-                }
-            }
-        } catch(e) {}
-    }
-    const proyectos = (appState.operacionesProyectos && appState.operacionesProyectos.length > 0)
-        ? appState.operacionesProyectos
-        : (appState.draftOperacionesProject ? [appState.draftOperacionesProject] : defaultOperacionesProyectos);
-    let p = (appState.draftOperacionesProject && (appState.draftOperacionesProject.id === projectId || !projectId))
-        ? appState.draftOperacionesProject
-        : proyectos.find(x => x && (x.id === projectId || x.numProyecto === projectId || x.consecutivo === projectId));
-    if (!p) {
-        p = proyectos[0];
-    }
-    if (!p) return;
-
-    appState.activeOperacionesProjectId = p.id;
     try {
-        localStorage.setItem('rp_active_operaciones_project_id', p.id);
-    } catch(e) {}
-    appState.contenedoresPage = 0;
-    appState.prefacturaPage = 0;
+        if (!projectId) {
+            projectId = appState.activeOperacionesProjectId;
+        }
+        const cleanTargetId = String(projectId || '').trim().toLowerCase();
 
-    const listPane = document.getElementById("operaciones-view-list");
-    const detailPane = document.getElementById("operaciones-view-detail");
-    const topbarBack = document.getElementById("op-detail-topbar");
+        if (!appState.operacionesProyectos || appState.operacionesProyectos.length === 0) {
+            try {
+                const stored = localStorage.getItem('rp_operaciones_proyectos');
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        appState.operacionesProyectos = parsed.filter(p => isProjectGenerado(p));
+                    }
+                }
+            } catch(e) {}
+        }
 
-    if (listPane) listPane.style.display = "none";
-    if (detailPane) detailPane.style.display = "block";
-    if (topbarBack) topbarBack.style.display = "none"; // Eliminado de la parte superior
+        const proyectos = (appState.operacionesProyectos && appState.operacionesProyectos.length > 0)
+            ? appState.operacionesProyectos
+            : (appState.draftOperacionesProject ? [appState.draftOperacionesProject] : defaultOperacionesProyectos);
 
-    // Configuración del botón inferior en Paso 4: GENERAR PROYECTO (si es nuevo) o REGRESAR A OPERACIONES (si ya fue generado)
-    updateGenerarProyectoButton(p);
+        let p = null;
+        if (appState.draftOperacionesProject && (!cleanTargetId || String(appState.draftOperacionesProject.id || '').trim().toLowerCase() === cleanTargetId)) {
+            p = appState.draftOperacionesProject;
+        }
 
-    // Populate Step 1 (Datos de proyecto - Factura, OC, Tipo de Proyecto y Formularios)
-    renderStep1View(p);
+        if (!p && cleanTargetId) {
+            p = proyectos.find(x => {
+                if (!x) return false;
+                const idMatch = String(x.id || '').trim().toLowerCase() === cleanTargetId;
+                const consecutivoMatch = String(x.consecutivo || '').trim().toLowerCase() === cleanTargetId;
+                const numConsecutivoMatch = String(x.numConsecutivo || '').trim().toLowerCase() === cleanTargetId;
+                const numProyectoMatch = String(x.numProyecto || '').trim().toLowerCase() === cleanTargetId;
+                return idMatch || consecutivoMatch || numConsecutivoMatch || numProyectoMatch;
+            });
+        }
 
-    // Populate Steps 3, 4, 5 Badges (Mostrando el consecutivo en Número de Proyecto)
-    const consecutivoDisplay = p.consecutivo || p.numConsecutivo || p.numProyecto;
-    document.querySelectorAll("#op-step3-num-proyecto, #op-step4-num-proyecto, #op-step5-num-proyecto").forEach(el => el.innerText = consecutivoDisplay);
-    document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = p.numFactura || "-");
-    document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = p.numOC || "-");
-    document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = consecutivoDisplay);
+        if (!p && proyectos.length > 0) {
+            p = proyectos[0];
+        }
 
-    // Populate Nombre del Cliente en Prefactura
-    const clienteInput = document.getElementById("op-cliente-input");
-    if (clienteInput) {
-        clienteInput.value = p.cliente || p.nombreCliente || (p.infoLavado && p.infoLavado.clienteFacturar) || '';
+        if (!p) {
+            console.warn("No project found to open in Operaciones detail for id:", projectId);
+            return;
+        }
+
+        appState.activeOperacionesProjectId = p.id;
+        try {
+            localStorage.setItem('rp_active_operaciones_project_id', p.id);
+        } catch(e) {}
+        appState.contenedoresPage = 0;
+        appState.prefacturaPage = 0;
+
+        const listPane = document.getElementById("operaciones-view-list");
+        const detailPane = document.getElementById("operaciones-view-detail");
+        const topbarBack = document.getElementById("op-detail-topbar");
+
+        if (listPane) {
+            listPane.style.display = "none";
+            listPane.classList.remove("active");
+        }
+        if (detailPane) {
+            detailPane.style.display = "block";
+            detailPane.classList.add("active");
+        }
+        if (topbarBack) topbarBack.style.display = "none";
+
+        // Configuración del botón inferior en Paso 4: GENERAR PROYECTO (si es nuevo) o REGRESAR A OPERACIONES (si ya fue generado)
+        if (typeof updateGenerarProyectoButton === 'function') {
+            updateGenerarProyectoButton(p);
+        }
+
+        // Populate Step 1 (Datos de proyecto - Factura, OC, Tipo de Proyecto y Formularios)
+        if (typeof renderStep1View === 'function') {
+            renderStep1View(p);
+        }
+
+        // Populate Steps 3, 4, 5 Badges (Mostrando el consecutivo en Número de Proyecto)
+        const consecutivoDisplay = p.consecutivo || p.numConsecutivo || p.numProyecto || '-';
+        document.querySelectorAll("#op-step3-num-proyecto, #op-step4-num-proyecto, #op-step5-num-proyecto").forEach(el => el.innerText = consecutivoDisplay);
+        document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = p.numFactura || "-");
+        document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = p.numOC || "-");
+        document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = consecutivoDisplay);
+
+        // Populate Nombre del Cliente en Prefactura
+        const clienteInput = document.getElementById("op-cliente-input");
+        if (clienteInput) {
+            clienteInput.value = p.cliente || p.nombreCliente || (p.infoLavado && p.infoLavado.clienteFacturar) || '';
+        }
+
+        if (typeof renderPartidasTable === 'function') {
+            renderPartidasTable(p);
+        }
+        if (typeof renderProveedorClavesTable === 'function') {
+            renderProveedorClavesTable(p);
+        }
+        if (typeof renderPrefacturaSlider === 'function') {
+            renderPrefacturaSlider();
+        }
+
+        // Populate Step 4 (Documentos)
+        if (typeof renderDocumentosStatus === 'function') {
+            renderDocumentosStatus(p);
+        }
+        if (window.DocStorage && p.id) {
+            window.DocStorage.restoreProjectDocs(p).then(changed => {
+                if (changed && typeof renderDocumentosStatus === 'function') renderDocumentosStatus(p);
+            }).catch(e => console.warn("Error restoring project docs:", e));
+        }
+
+        const targetStep = (p.currentStep && p.currentStep >= 1 && p.currentStep <= 4) ? p.currentStep : 1;
+        if (typeof goToOperacionesStep === 'function') {
+            goToOperacionesStep(targetStep);
+        }
+    } catch (err) {
+        console.error("Error opening operaciones detail:", err);
     }
-
-    renderPartidasTable(p);
-    renderProveedorClavesTable(p);
-    renderPrefacturaSlider();
-
-    // Populate Step 4 (Documentos)
-    renderDocumentosStatus(p);
-    if (window.DocStorage && p.id) {
-        window.DocStorage.restoreProjectDocs(p).then(changed => {
-            if (changed) renderDocumentosStatus(p);
-        });
-    }
-
-    goToOperacionesStep(p.currentStep || 1);
 };
 
 function selectProjectTipo(tipo) {
@@ -10116,7 +10209,8 @@ function goToOperacionesStep(stepNum) {
     window.goToOperacionesStep = goToOperacionesStep;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
 
-    if (stepNum > 4) return;
+    if (stepNum > 4) stepNum = 4;
+    if (stepNum < 1) stepNum = 1;
 
     document.querySelectorAll(".stepper-step").forEach((el, idx) => {
         const sNum = idx + 1;
