@@ -221,7 +221,7 @@ const runInitialAppSetup = async () => {
         'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
         'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
-        'RDP2610173', 'RDP2610174', 'RDP2610175', 'RDP2610176', 'RDP2610177', 'RDP2610178', 'RDP2610179',
+        'RDP2610172', 'RDP2610173', 'RDP2610174', 'RDP2610175', 'RDP2610176', 'RDP2610177', 'RDP2610178', 'RDP2610179',
         'RDP2610180', 'RDP2610181', 'RDP2610182', 'RDP2610183', 'RDP2610184', 'RDP2610185'
     ]);
     window.purgedProjectIds = purgedProjectIds;
@@ -8394,7 +8394,7 @@ function syncAllOperacionesToConsecutivo() {
     const purgedIds = window.purgedProjectIds || new Set([
         'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
-        'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F'
+        'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F', 'RDP2610172'
     ]);
 
     if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos) || appState.operacionesProyectos.length === 0) {
