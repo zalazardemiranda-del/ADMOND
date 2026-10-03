@@ -195,11 +195,32 @@ const runInitialAppSetup = async () => {
     }
     window.isProjectGenerado = isProjectGenerado;
 
-    // Load Operaciones Data (con purga de consecutivos antiguos y proyectos no generados)
+    // Detectar si un proyecto es un borrador vacío generado accidentalmente por clics repetidos
+    function isAccidentalEmptyProject(p) {
+        if (!p) return false;
+        const cid = String(p.id || p.consecutivo || p.numProyecto || p.numConsecutivo || '').trim();
+        if (window.purgedProjectIds && (window.purgedProjectIds.has(cid) || window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo) || window.purgedProjectIds.has(p.numProyecto))) return true;
+        if (/^RDP261017[2-9]$/i.test(cid) || /^RDP261018[0-9]$/i.test(cid)) {
+            const hasRealData = Boolean(
+                (p.cliente && p.cliente.trim()) ||
+                (p.nombreCliente && p.nombreCliente.trim()) ||
+                (p.numFactura && p.numFactura.trim() && p.numFactura !== '-') ||
+                (p.numOC && p.numOC.trim() && p.numOC !== '-') ||
+                (p.partidasConceptos && p.partidasConceptos.some(item => item && (item.servicio || item.concepto || item.total > 0)))
+            );
+            if (!hasRealData) return true;
+        }
+        return false;
+    }
+    window.isAccidentalEmptyProject = isAccidentalEmptyProject;
+
+    // Load Operaciones Data (con purga de consecutivos antiguos y proyectos accidentales como RDP2610179)
     const purgedProjectIds = new Set([
         'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
-        'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F'
+        'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
+        'RDP2610173', 'RDP2610174', 'RDP2610175', 'RDP2610176', 'RDP2610177', 'RDP2610178', 'RDP2610179',
+        'RDP2610180', 'RDP2610181', 'RDP2610182', 'RDP2610183', 'RDP2610184', 'RDP2610185'
     ]);
     window.purgedProjectIds = purgedProjectIds;
 
@@ -208,8 +229,8 @@ const runInitialAppSetup = async () => {
         if (storedOps) {
             const parsed = JSON.parse(storedOps);
             if (Array.isArray(parsed)) {
-                // Conservar ÚNICAMENTE los proyectos que hayan sido oficialmente generados
-                appState.operacionesProyectos = parsed.filter(p => p && isProjectGenerado(p) && !purgedProjectIds.has(p.id) && !purgedProjectIds.has(p.numProyecto) && !purgedProjectIds.has(p.consecutivo) && !purgedProjectIds.has(p.numConsecutivo));
+                // Conservar ÚNICAMENTE los proyectos que hayan sido oficialmente generados y no sean accidentales
+                appState.operacionesProyectos = parsed.filter(p => p && isProjectGenerado(p) && !isAccidentalEmptyProject(p) && !purgedProjectIds.has(p.id) && !purgedProjectIds.has(p.numProyecto) && !purgedProjectIds.has(p.consecutivo) && !purgedProjectIds.has(p.numConsecutivo));
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             }
         }
@@ -8668,14 +8689,55 @@ async function fetchOperacionesFromCloud() {
 
 function mergeOperacionesProjects(cloudList) {
     window.mergeOperacionesProjects = mergeOperacionesProjects;
-    if (!Array.isArray(cloudList) || cloudList.length === 0) return;
+    if (!Array.isArray(cloudList)) return;
     if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
 
     const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F']);
 
-    cloudList.forEach(cp => {
-        if (!cp || fakeOpIds.has(cp.id) || fakeOpIds.has(cp.consecutivo) || fakeOpIds.has(cp.numProyecto)) return;
-        if (typeof isProjectGenerado === 'function' && !isProjectGenerado(cp)) return;
+    if (cloudList.length === 0) {
+        // La nube reporta que no hay proyectos activos generados: purgar fantasmas locales
+        appState.operacionesProyectos = (appState.operacionesProyectos || []).filter(p => 
+            p && isProjectGenerado(p) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(p)) && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numProyecto)
+        );
+        try {
+            localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+        } catch (e) {}
+        if (typeof window.renderOperaciones === 'function') {
+            window.renderOperaciones();
+        }
+        if (typeof window.syncAllOperacionesToConsecutivo === 'function') {
+            window.syncAllOperacionesToConsecutivo();
+        }
+        return;
+    }
+
+    const validCloudList = cloudList.filter(cp => 
+        cp && isProjectGenerado(cp) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(cp)) && !fakeOpIds.has(cp.id) && !fakeOpIds.has(cp.consecutivo) && !fakeOpIds.has(cp.numProyecto)
+    );
+
+    if (validCloudList.length === 0) {
+        appState.operacionesProyectos = [];
+        try {
+            localStorage.setItem('rp_operaciones_proyectos', JSON.stringify([]));
+        } catch (e) {}
+        if (typeof window.renderOperaciones === 'function') {
+            window.renderOperaciones();
+        }
+        if (typeof window.syncAllOperacionesToConsecutivo === 'function') {
+            window.syncAllOperacionesToConsecutivo();
+        }
+        return;
+    }
+
+    const cloudKeys = new Set(validCloudList.map(c => String(c.id || c.consecutivo || c.numProyecto).toLowerCase()));
+    // Eliminar locales que no estén en la nube
+    appState.operacionesProyectos = appState.operacionesProyectos.filter(p => {
+        if (!p || !isProjectGenerado(p) || (typeof isAccidentalEmptyProject === 'function' && isAccidentalEmptyProject(p)) || fakeOpIds.has(p.id) || fakeOpIds.has(p.consecutivo) || fakeOpIds.has(p.numProyecto)) return false;
+        const k = String(p.id || p.consecutivo || p.numProyecto).toLowerCase();
+        return cloudKeys.has(k);
+    });
+
+    validCloudList.forEach(cp => {
         const key = cp.id || cp.consecutivo || cp.numProyecto;
         const idx = appState.operacionesProyectos.findIndex(p => (p.id || p.consecutivo || p.numProyecto) === key);
         if (idx === -1) {
@@ -8972,8 +9034,19 @@ function renderOperaciones() {
     if (!listPane) return;
 
     // Purga automática inicial si existen datos fantasma guardados previamente en LocalStorage
-    if (!localStorage.getItem('rp_ghost_purged_v2')) {
-        window.clearGhostData();
+    if (!localStorage.getItem('rp_purge_accidental_oct_v5')) {
+        try {
+            const storedInitial = localStorage.getItem('rp_operaciones_proyectos');
+            if (storedInitial) {
+                let parsed = JSON.parse(storedInitial);
+                if (Array.isArray(parsed)) {
+                    parsed = parsed.filter(p => p && isProjectGenerado(p) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(p)));
+                    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(parsed));
+                    appState.operacionesProyectos = parsed;
+                }
+            }
+            localStorage.setItem('rp_purge_accidental_oct_v5', 'true');
+        } catch(e) {}
     }
 
     const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F']);
@@ -8982,7 +9055,7 @@ function renderOperaciones() {
         try {
             let parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
-                parsed = parsed.filter(p => p && isProjectGenerado(p) && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
+                parsed = parsed.filter(p => p && isProjectGenerado(p) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(p)) && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
                 appState.operacionesProyectos = parsed;
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(parsed));
             }
