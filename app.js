@@ -9785,9 +9785,14 @@ function renderContenedoresCards(p) {
                     <div class="contenedor-num-badge">${c.id}</div>
                     <span class="contenedor-card-title">${c.label || ('Lavado Contenedor ' + c.id)}</span>
                     <input type="text" class="contenedor-header-input" value="${c.numContenedor || ''}" placeholder="Escribe número o matrícula..." oninput="updateContenedorField(${c.id}, 'numContenedor', this.value); const el = document.getElementById('lavado-mat-'+${c.id}); if(el) el.value=this.value;" />
-                    <button type="button" class="btn-delete-contenedor" onclick="deleteContenedor(${c.id})" title="Eliminar contenedor">
-                        <span class="material-symbols-outlined">delete</span>
-                    </button>
+                    <div class="contenedor-header-actions">
+                        <button type="button" class="btn-duplicate-contenedor" onclick="duplicateContenedor(${c.id})" title="Duplicar información de este contenedor">
+                            <span class="material-symbols-outlined">content_copy</span> Duplicar
+                        </button>
+                        <button type="button" class="btn-delete-contenedor" onclick="deleteContenedor(${c.id})" title="Eliminar contenedor">
+                            <span class="material-symbols-outlined">delete</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="contenedor-fields-grid lavado-fields-grid">
                     <div class="field-wide">
@@ -9815,9 +9820,14 @@ function renderContenedoresCards(p) {
                     <div class="contenedor-num-badge">${c.id}</div>
                     <span class="contenedor-card-title">${c.label || ('Contenedor ' + c.id)}</span>
                     <input type="text" class="contenedor-header-input" value="${c.numContenedor || ''}" placeholder="Escribe número o matrícula..." oninput="updateContenedorField(${c.id}, 'numContenedor', this.value)" />
-                    <button type="button" class="btn-delete-contenedor" onclick="deleteContenedor(${c.id})" title="Eliminar contenedor">
-                        <span class="material-symbols-outlined">delete</span>
-                    </button>
+                    <div class="contenedor-header-actions">
+                        <button type="button" class="btn-duplicate-contenedor" onclick="duplicateContenedor(${c.id})" title="Duplicar información de este contenedor">
+                            <span class="material-symbols-outlined">content_copy</span> Duplicar
+                        </button>
+                        <button type="button" class="btn-delete-contenedor" onclick="deleteContenedor(${c.id})" title="Eliminar contenedor">
+                            <span class="material-symbols-outlined">delete</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="contenedor-fields-grid">
                     <div>
@@ -9862,10 +9872,57 @@ function renderContenedoresCards(p) {
     }
 }
 
+function duplicateContenedor(cId) {
+    window.duplicateContenedor = duplicateContenedor;
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
+    if (!p || !p.contenedores) return;
+
+    const sourceIdx = p.contenedores.findIndex(c => c.id === cId);
+    if (sourceIdx === -1) return;
+
+    const source = p.contenedores[sourceIdx];
+    // Clonar toda la información del contenedor actual
+    const clone = JSON.parse(JSON.stringify(source));
+
+    // Insertar el duplicado inmediatamente después del contenedor de origen
+    p.contenedores.splice(sourceIdx + 1, 0, clone);
+
+    // Re-enumerar secuencialmente: el clon será Contenedor 2 (o correlativo siguiente)
+    p.contenedores.forEach((c, idx) => {
+        c.id = idx + 1;
+        if (p.tipoProyecto === 'lavado_contenedores') {
+            c.label = `Lavado Contenedor ${c.id}`;
+        } else {
+            c.label = `Contenedor ${c.id}`;
+        }
+    });
+
+    if (p.infoLavado) {
+        p.infoLavado.totalContenedores = p.contenedores.length;
+        const totalEl = document.getElementById("op-step1-lavado-total");
+        if (totalEl) totalEl.value = `${p.contenedores.length} contenedor(es)`;
+    }
+
+    // Navegar a la página donde se ubica el contenedor duplicado
+    const itemsPerPage = 2;
+    appState.contenedoresPage = Math.floor((sourceIdx + 1) / itemsPerPage);
+
+    renderContenedoresCards(p);
+    if (typeof isProjectGenerado === 'function' && isProjectGenerado(p)) {
+        saveOperacionesStorage();
+    }
+}
+window.duplicateContenedor = duplicateContenedor;
+
 function deleteContenedor(cId) {
     window.deleteContenedor = deleteContenedor;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p || !p.contenedores) return;
+
+    if (p.contenedores.length <= 1) {
+        alert("El proyecto debe contener al menos un contenedor.");
+        return;
+    }
 
     p.contenedores = p.contenedores.filter(c => c.id !== cId);
 
@@ -9879,7 +9936,15 @@ function deleteContenedor(cId) {
         }
     });
 
-    saveOperacionesStorage();
+    if (p.infoLavado) {
+        p.infoLavado.totalContenedores = p.contenedores.length;
+        const totalEl = document.getElementById("op-step1-lavado-total");
+        if (totalEl) totalEl.value = `${p.contenedores.length} contenedor(es)`;
+    }
+
+    if (typeof isProjectGenerado === 'function' && isProjectGenerado(p)) {
+        saveOperacionesStorage();
+    }
     renderContenedoresCards(p);
 };
 

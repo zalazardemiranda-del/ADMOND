@@ -7164,8 +7164,43 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     font-size: 10.5px;
 }
 
-.btn-delete-contenedor {
+.contenedor-header-actions {
     margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-duplicate-contenedor {
+    background: #FFFFFF;
+    border: 1px solid #BFDBFE;
+    color: #1D4ED8;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.08);
+}
+
+.btn-duplicate-contenedor:hover {
+    background: #EFF6FF;
+    border-color: #3B82F6;
+    color: #1E40AF;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15);
+}
+
+.btn-duplicate-contenedor .material-symbols-outlined {
+    font-size: 15px;
+    color: #2563EB;
+}
+
+.btn-delete-contenedor {
     background: transparent;
     border: none;
     color: #94A3B8;
@@ -7783,6 +7818,16 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     font-size: 11px;
     padding: 2px 7px;
     max-width: 200px;
+}
+
+#op-step-pane-2 .btn-duplicate-contenedor {
+    height: 24px;
+    font-size: 10px;
+    padding: 1px 7px;
+}
+
+#op-step-pane-2 .btn-duplicate-contenedor .material-symbols-outlined {
+    font-size: 14px;
 }
 
 #op-step-pane-2 .btn-delete-contenedor {
