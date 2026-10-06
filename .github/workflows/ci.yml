@@ -1,0 +1,43 @@
+name: CI (pruebas)
+
+# Se ejecuta en cada Pull Request y en cada push a master.
+# Si falla, NO debes fusionar (merge) el cambio: asi un bug no llega a produccion.
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Analisis estatico (ESLint)
+        run: npm run lint
+
+      - name: Instalar Chromium para Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Pruebas (estaticas + navegador con Supabase simulado)
+        run: npm test
+
+      - name: Guardar reporte si falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

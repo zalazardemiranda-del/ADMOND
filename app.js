@@ -1,3 +1,21 @@
+// Notificacion tipo "toast". Antes se invocaba en varios flujos pero nunca estaba definida.
+window.showCustomNotification = function (message, type) {
+    try {
+        const colors = { success: '#16a34a', error: '#dc2626', info: '#2563eb', warning: '#d97706' };
+        const el = document.createElement('div');
+        el.className = 'rp-toast';
+        el.setAttribute('role', 'status');
+        el.textContent = String(message || '');
+        el.style.cssText = 'position:fixed;right:20px;bottom:20px;z-index:99999;max-width:360px;padding:12px 16px;' +
+            'border-radius:10px;color:#fff;font:600 13px/1.4 sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);' +
+            'background:' + (colors[type] || colors.info) + ';opacity:0;transition:opacity .25s;';
+        document.body.appendChild(el);
+        requestAnimationFrame(() => { el.style.opacity = '1'; });
+        setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3500);
+    } catch (e) { console.log('[notify]', message); }
+};
+window.showStatusMessage = window.showCustomNotification;
+
 // Default Application Data (Datos falsos e inventados eliminados)
 const defaultTasks = [];
 
@@ -5631,7 +5649,14 @@ async function fetchCloudData() {
         }
         
         // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)
-        const { data: msgs, error: mError } = await client.from('messages').select('*').order('created_at', { ascending: true });
+        // Se excluyen en el servidor las filas internas (chat_id que empieza con "__": snapshots y documentos)
+        // y se piden los 1000 mas RECIENTES (PostgREST limita a 1000 filas; antes se perdian los mensajes nuevos).
+        const { data: msgsDesc, error: mError } = await client.from('messages')
+            .select('*')
+            .not('chat_id', 'like', '\\_\\_%')
+            .order('created_at', { ascending: false })
+            .limit(1000);
+        const msgs = msgsDesc ? msgsDesc.slice().reverse() : null;
         if (msgs) {
             const cleanChats = { general: [] };
             (appState.customChannels || []).forEach(c => {
@@ -6152,7 +6177,7 @@ async function handleSupabaseLogin(event) {
                         nombre: 'Diego Miranda',
                         rol: 'administrativo',
                         departamento: 'Administración'
-                    }, { onConflict: 'email' }).catch(() => {});
+                    }, { onConflict: 'email' }).then(() => {}, () => {});
                 } catch (e) {}
             }
         }
@@ -6499,9 +6524,11 @@ async function handleGlobalLoginSubmit(event) {
     btnSubmit.disabled = true;
     btnSubmit.innerHTML = "<span class='material-symbols-outlined'>hourglass_empty</span> Validando...";
     
+    // Declaradas fuera del try para que el catch pueda usarlas (antes causaba ReferenceError)
+    const isDiego = email.toLowerCase() === 'diego@rodipack.com';
+    const isDiegoValidPass = isDiego && (password === 'FoxMiranda30' || password === 'Diego5011');
+
     try {
-        const isDiego = email.toLowerCase() === 'diego@rodipack.com';
-        const isDiegoValidPass = isDiego && (password === 'FoxMiranda30' || password === 'Diego5011');
 
         if (window.isSupabaseActive()) {
             const client = window.SUPABASE_CONFIG.client;
@@ -6521,7 +6548,7 @@ async function handleGlobalLoginSubmit(event) {
                             nombre: 'Diego Miranda',
                             rol: 'administrativo',
                             departamento: 'Administración'
-                        }, { onConflict: 'email' }).catch(() => {});
+                        }, { onConflict: 'email' }).then(() => {}, () => {});
                     } catch (e) {}
 
                     const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
@@ -8820,6 +8847,7 @@ function saveOperacionesStorage(skipProveedoresSync = false) {
     }
 };
 
+let _syncOperacionesTimer = null;
 function syncOperacionesToCloud(forceImmediate = false) {
     window.syncOperacionesToCloud = syncOperacionesToCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
@@ -9775,7 +9803,7 @@ function eliminarProyectoOperaciones(projectId, event) {
 
     if (window.isSupabaseActive && window.isSupabaseActive()) {
         try {
-            window.SUPABASE_CONFIG?.client?.from('operaciones')?.delete()?.eq('id', projectId);
+            window.SUPABASE_CONFIG?.client?.from('operaciones')?.delete()?.eq('id', projectId)?.then(() => {}, () => {});
         } catch (e) {}
     }
 

@@ -1,0 +1,32 @@
+{
+  "name": "central",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "lint": "eslint app.js schema.js supabase_config.js consecutivo_data.js --quiet",
+    "test": "playwright test",
+    "test:static": "playwright test tests/static.spec.js",
+    "check": "npm run lint && npm test",
+    "serve": "node tests/serve.js",
+    "bump": "node tools/bump-version.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zalazardemiranda-del/ADMOND.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/zalazardemiranda-del/ADMOND/issues"
+  },
+  "homepage": "https://github.com/zalazardemiranda-del/ADMOND#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0"
+  }
+}
