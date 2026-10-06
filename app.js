@@ -1205,6 +1205,7 @@ function updateNominaCell(index, key, val) {
     if (list[index]) {
         list[index][key] = val;
         saveToStorage();
+        if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
     }
 };
 
@@ -1216,6 +1217,7 @@ function updateNominaManualTotal(index, val) {
         recalculateNominasTableTotals();
         saveToStorage();
         renderVisualizacion();
+        if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
     }
 };
 
@@ -1243,6 +1245,7 @@ function liveUpdateNominaTotals(index) {
     recalculateNominasTableTotals();
     saveToStorage();
     renderVisualizacion();
+    if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
 };
 
 function recalculateNominasTableTotals() {
@@ -1294,6 +1297,7 @@ function addNewNominaRow() {
     saveToStorage();
     renderNominas();
     renderVisualizacion();
+    if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
 };
 
 function deleteNominaRecord(index) {
@@ -1303,8 +1307,101 @@ function deleteNominaRecord(index) {
         saveToStorage();
         renderNominas();
         renderVisualizacion();
+        if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
     }
 };
+
+// Sincronización en tiempo real y persistencia en la nube de Nóminas Quincenales y Archivos Digitales
+let _syncNominasTimer = null;
+function syncNominasToCloud(forceImmediate = false) {
+    window.syncNominasToCloud = syncNominasToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    const doSync = async () => {
+        try {
+            const payload = {
+                nominas: appState.nominas || [],
+                archivosQuincenales: appState.archivosQuincenales || [],
+                updatedAt: new Date().toISOString()
+            };
+            await client.from('messages').insert({
+                chat_id: '__cloud_sync_nominas__',
+                contenido: JSON.stringify(payload),
+                emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                emisor_role: 'sistema'
+            });
+        } catch (e) {
+            console.warn("⚠️ Error persisting nominas to Supabase:", e);
+        }
+    };
+
+    if (_syncNominasTimer) clearTimeout(_syncNominasTimer);
+    if (forceImmediate) {
+        doSync();
+    } else {
+        _syncNominasTimer = setTimeout(doSync, 600);
+    }
+}
+window.syncNominasToCloud = syncNominasToCloud;
+
+function broadcastNominasUpdate() {
+    window.broadcastNominasUpdate = broadcastNominasUpdate;
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'nominas_update',
+                payload: {
+                    nominas: appState.nominas || [],
+                    archivosQuincenales: appState.archivosQuincenales || [],
+                    sender: appState.currentUser?.email || 'admin',
+                    timestamp: new Date().toISOString()
+                }
+            });
+        } catch (e) {
+            console.warn("⚠️ Error broadcasting nominas update:", e);
+        }
+    }
+    syncNominasToCloud();
+}
+window.broadcastNominasUpdate = broadcastNominasUpdate;
+
+async function fetchNominasFromCloud() {
+    window.fetchNominasFromCloud = fetchNominasFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    try {
+        const { data: msgs, error } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_nominas__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                if (parsed && Array.isArray(parsed.nominas)) {
+                    appState.nominas = parsed.nominas;
+                    if (Array.isArray(parsed.archivosQuincenales)) {
+                        appState.archivosQuincenales = parsed.archivosQuincenales;
+                    }
+                    saveToStorage();
+                    if (appState.currentTab === 'admin') {
+                        renderNominas();
+                        renderVisualizacion();
+                    }
+                }
+            } catch (e) {}
+        }
+    } catch (err) {
+        console.warn("⚠️ Error fetching nominas from cloud:", err);
+    }
+}
+window.fetchNominasFromCloud = fetchNominasFromCloud;
 
 // ---------------------------------------------------------------------------------
 // 6. FICHA 3: PROVEEDORES CON CHIPS (IMAGEN 4)
@@ -4874,11 +4971,19 @@ function getAvailableAssignees() {
         seenNames.add(defaultName.toLowerCase());
     }
 
-    // 2. Colaboradores registrados en el sistema
+    // 2. Colaboradores registrados en el sistema + equipo predeterminado garantizado
+    const defaultTeam = [
+        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración" },
+        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT" },
+        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas" },
+        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO" }
+    ];
+
     const allProfiles = [
         ...(window.cachedProfilesList || []),
         ...(window.cloudProfilesCache || []),
-        ...(JSON.parse(localStorage.getItem('rp_local_profiles') || '[]'))
+        ...(JSON.parse(localStorage.getItem('rp_local_profiles') || '[]')),
+        ...defaultTeam
     ];
 
     allProfiles.forEach(p => {
@@ -5074,6 +5179,7 @@ function archivarQuincenaActual() {
     saveToStorage();
     renderNominas();
     renderVisualizacion();
+    if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
     
     // Animate success
     const btn = document.getElementById("btn-archivar-quincena");
@@ -5484,6 +5590,23 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 4g. Actualización en tiempo real de nóminas quincenales por broadcast
+    window.chatRealtimeChannel.on('broadcast', { event: 'nominas_update' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        if (Array.isArray(data.nominas)) {
+            appState.nominas = data.nominas;
+            if (Array.isArray(data.archivosQuincenales)) {
+                appState.archivosQuincenales = data.archivosQuincenales;
+            }
+            saveToStorage();
+            if (appState.currentTab === 'admin') {
+                renderNominas();
+                renderVisualizacion();
+            }
+        }
+    });
+
     // 4f. Documento listo transferido desde la nube o par
     window.chatRealtimeChannel.on('broadcast', { event: 'document_ready' }, async payload => {
         const data = payload.payload;
@@ -5540,6 +5663,9 @@ function setupRealtimeSubscriptions() {
             }
             if (channelKey === '__cloud_sync_proveedores_data__' && typeof window.fetchProveedoresDataFromCloud === 'function') {
                 window.fetchProveedoresDataFromCloud();
+            }
+            if (channelKey === '__cloud_sync_nominas__' && typeof window.fetchNominasFromCloud === 'function') {
+                window.fetchNominasFromCloud();
             }
             return;
         }
@@ -5646,6 +5772,11 @@ async function fetchCloudData() {
         }
         if (typeof window.fetchProveedoresDataFromCloud === 'function') {
             await window.fetchProveedoresDataFromCloud();
+        }
+
+        // Sincronizar registros de Nóminas Quincenales (nube <-> local para todos los dispositivos)
+        if (typeof window.fetchNominasFromCloud === 'function') {
+            await window.fetchNominasFromCloud();
         }
         
         // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)
