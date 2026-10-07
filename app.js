@@ -4823,9 +4823,11 @@ document.addEventListener("click", function(event) {
             globalProvMenu.style.display = "none";
         }
     }
-    const assigneeWrapper = document.querySelector(".assignee-autocomplete-wrapper");
-    if (assigneeWrapper && !assigneeWrapper.contains(event.target)) {
+    if (!event.target.closest(".assignee-autocomplete-wrapper")) {
         if (typeof closeAssigneeDropdown === 'function') closeAssigneeDropdown();
+        if (window.schemaEngine && typeof window.schemaEngine.closeSchemaAssigneeDropdown === 'function') {
+            window.schemaEngine.closeSchemaAssigneeDropdown();
+        }
     }
 });
 
@@ -4948,16 +4950,17 @@ function getAvailableAssignees() {
     // 1. Usuario actual en sesión ("Tú / Asignarme a mí") destacado en 1er lugar
     const current = appState.currentUser;
     if (current && (current.nombre || current.email)) {
+        const selfName = current.nombre || (current.email ? current.email.split('@')[0] : 'Mi Usuario');
         list.push({
-            id: current.id,
-            nombre: current.nombre || (current.email ? current.email.split('@')[0] : 'Mi Usuario'),
+            id: current.id || 'self-user',
+            nombre: selfName,
             email: current.email || '',
-            rol: current.rol || 'gerente',
+            rol: current.rol || appState.currentRole || 'gerente',
             departamento: current.departamento || 'General',
             isSelf: true
         });
-        if (current.email) seenEmails.add(current.email.toLowerCase());
-        if (current.nombre) seenNames.add(current.nombre.toLowerCase());
+        if (current.email) seenEmails.add(current.email.toLowerCase().trim());
+        if (selfName) seenNames.add(selfName.toLowerCase().trim());
     } else {
         const defaultName = appState.currentRole === 'gerente' ? 'Gerente Principal' : 'Colaborador';
         list.push({
@@ -4971,33 +4974,45 @@ function getAvailableAssignees() {
         seenNames.add(defaultName.toLowerCase());
     }
 
-    // 2. Colaboradores registrados en el sistema + equipo predeterminado garantizado
+    // 2. Equipo base garantizado de Rodipack (todos los perfiles clave)
     const defaultTeam = [
         { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración" },
         { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT" },
+        { nombre: "Roberto Miranda", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Operaciones" },
         { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas" },
-        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO" }
+        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO" },
+        { nombre: "Manuel Morales", email: "", rol: "colaborador", departamento: "Logística" }
     ];
+
+    // 3. Colaboradores registrados en el sistema, nube y almacenamiento local
+    let localProfilesList = [];
+    try {
+        localProfilesList = JSON.parse(localStorage.getItem('rp_local_profiles') || '[]');
+    } catch (e) {
+        localProfilesList = [];
+    }
 
     const allProfiles = [
         ...(window.cachedProfilesList || []),
         ...(window.cloudProfilesCache || []),
-        ...(JSON.parse(localStorage.getItem('rp_local_profiles') || '[]')),
+        ...localProfilesList,
         ...defaultTeam
     ];
 
     allProfiles.forEach(p => {
         if (!p || (!p.nombre && !p.email)) return;
-        const emailLower = (p.email || '').toLowerCase();
-        const nameLower = (p.nombre || '').toLowerCase();
-        if (emailLower && seenEmails.has(emailLower)) return;
+        const pName = (p.nombre || (p.email ? p.email.split('@')[0] : '')).trim();
+        const pEmail = (p.email || '').trim().toLowerCase();
+        const nameLower = pName.toLowerCase();
+
+        if (pEmail && seenEmails.has(pEmail)) return;
         if (nameLower && seenNames.has(nameLower)) return;
-        if (emailLower) seenEmails.add(emailLower);
+        if (pEmail) seenEmails.add(pEmail);
         if (nameLower) seenNames.add(nameLower);
 
         list.push({
-            id: p.id,
-            nombre: p.nombre || (p.email ? p.email.split('@')[0] : 'Colaborador'),
+            id: p.id || ('profile-' + list.length),
+            nombre: pName || 'Colaborador',
             email: p.email || '',
             rol: p.rol || 'colaborador',
             departamento: p.departamento || 'Operaciones',
@@ -5005,24 +5020,87 @@ function getAvailableAssignees() {
         });
     });
 
+    // 4. Incorporar cualquier colaborador asignado en tareas existentes de appState.tasks
+    const ignoredNames = new Set(['sin asignar', 'sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
+    (appState.tasks || []).forEach(t => {
+        const a = (t.assignee || '').trim();
+        if (a && !ignoredNames.has(a.toLowerCase())) {
+            const aLower = a.toLowerCase();
+            if (!seenNames.has(aLower)) {
+                seenNames.add(aLower);
+                list.push({
+                    id: 'task-assignee-' + list.length,
+                    nombre: a,
+                    email: '',
+                    rol: 'colaborador',
+                    departamento: 'Equipo Rodipack',
+                    isSelf: false
+                });
+            }
+        }
+    });
+
+    // 5. Incorporar colaboradores de Esquematización si están definidos
+    if (window.schemaEngine && typeof window.schemaEngine.getSchemaCollaborators === 'function') {
+        try {
+            const schemaCollabs = window.schemaEngine.getSchemaCollaborators();
+            if (Array.isArray(schemaCollabs)) {
+                schemaCollabs.forEach(u => {
+                    const scName = (u.nombre || '').trim();
+                    if (scName && !seenNames.has(scName.toLowerCase())) {
+                        seenNames.add(scName.toLowerCase());
+                        list.push({
+                            id: u.id || ('schema-collab-' + list.length),
+                            nombre: scName,
+                            email: u.email || '',
+                            rol: u.rol || 'colaborador',
+                            departamento: u.departamento || 'General',
+                            isSelf: false
+                        });
+                    }
+                });
+            }
+        } catch (e) {}
+    }
+
     return list;
 }
-window.getAvailableAssignees = getAvailableAssignees;
 
 function openAssigneeDropdown() {
-    window.openAssigneeDropdown = openAssigneeDropdown;
     const input = document.getElementById("task-assignee");
-    window.filterAssigneeDropdown(input ? input.value : '');
-};
+    const wrapper = input ? input.closest(".assignee-autocomplete-wrapper") : null;
+    if (wrapper) wrapper.classList.add("open");
+    filterAssigneeDropdown(input ? input.value : '');
+}
 
 function closeAssigneeDropdown() {
-    window.closeAssigneeDropdown = closeAssigneeDropdown;
     const menu = document.getElementById("task-assignee-dropdown");
-    if (menu) menu.classList.remove("open");
-};
+    if (menu) {
+        menu.classList.remove("open");
+        menu.style.display = "none";
+    }
+    const input = document.getElementById("task-assignee");
+    const wrapper = input ? input.closest(".assignee-autocomplete-wrapper") : null;
+    if (wrapper) wrapper.classList.remove("open");
+}
+
+function toggleAssigneeDropdown(event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const menu = document.getElementById("task-assignee-dropdown");
+    const isOpen = menu && (menu.classList.contains("open") || menu.style.display === "block");
+    if (isOpen) {
+        closeAssigneeDropdown();
+    } else {
+        openAssigneeDropdown();
+        const input = document.getElementById("task-assignee");
+        if (input) input.focus();
+    }
+}
 
 function filterAssigneeDropdown(query) {
-    window.filterAssigneeDropdown = filterAssigneeDropdown;
     const menu = document.getElementById("task-assignee-dropdown");
     if (!menu) return;
 
@@ -5038,53 +5116,93 @@ function filterAssigneeDropdown(query) {
                (u.isSelf && ('yo'.includes(q) || 'mi'.includes(q) || 'mismo'.includes(q) || 'tu'.includes(q)));
     });
 
+    let itemsHtml = '';
+
     if (filtered.length === 0) {
-        menu.innerHTML = `<li class="assignee-dropdown-empty">No se encontraron colaboradores para "${query}"</li>`;
-        menu.classList.add("open");
-        return;
-    }
-
-    menu.innerHTML = filtered.map(u => {
-        const initial = (u.nombre || u.email || 'U').charAt(0).toUpperCase();
-        const r = (u.rol || '').toLowerCase();
-        const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
-        const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
-        const roleColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
-        const roleBg = isGerente ? 'rgba(37, 99, 235, 0.1)' : (isAdmin ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)');
-        const roleLabel = isGerente ? 'Gerente' : (isAdmin ? 'Admin' : 'Colaborador');
-        const escapedName = (u.nombre || '').replace(/'/g, "\\'");
-
-        const badgeHtml = u.isSelf 
-            ? `<span class="assignee-badge-self">⭐ Tú (Asignarme a mí)</span>`
-            : `<span class="assignee-badge-role" style="background: ${roleBg}; color: ${roleColor};">${roleLabel}</span>`;
-
-        return `
-            <li class="assignee-dropdown-item" onmousedown="selectTaskAssignee('${escapedName}')">
+        const cleanQuery = (query || '').trim();
+        itemsHtml = `
+            <li class="assignee-dropdown-item custom-add" onmousedown="event.preventDefault(); selectTaskAssignee('${cleanQuery.replace(/'/g, "\\'")}')">
                 <div class="assignee-item-user">
-                    <div class="assignee-item-avatar" style="background: ${roleBg}; color: ${roleColor}; border-color: ${roleColor};">
-                        ${initial}
-                    </div>
+                    <div class="assignee-item-avatar" style="background: rgba(37, 99, 235, 0.1); color: #2563EB;">➕</div>
                     <div class="assignee-item-details">
-                        <span class="assignee-item-name">${u.nombre}</span>
-                        <span class="assignee-item-sub">${u.email || u.departamento}</span>
+                        <span class="assignee-item-name">Asignar a "${cleanQuery.replace(/'/g, "\\'")}"</span>
+                        <span class="assignee-item-sub">Usar este colaborador</span>
                     </div>
                 </div>
-                ${badgeHtml}
             </li>
         `;
-    }).join('');
+    } else {
+        itemsHtml = filtered.map(u => {
+            const initial = (u.nombre || u.email || 'U').charAt(0).toUpperCase();
+            const r = (u.rol || '').toLowerCase();
+            const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
+            const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
+            const roleColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
+            const roleBg = isGerente ? 'rgba(37, 99, 235, 0.1)' : (isAdmin ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)');
+            const roleLabel = isGerente ? 'Gerente' : (isAdmin ? 'Admin' : (u.departamento || 'Colaborador'));
+            const escapedName = (u.nombre || '').replace(/'/g, "\\'");
 
+            const badgeHtml = u.isSelf 
+                ? `<span class="assignee-badge-self">⭐ Tú (Asignarme a mí)</span>`
+                : `<span class="assignee-badge-role" style="background: ${roleBg}; color: ${roleColor};">${roleLabel}</span>`;
+
+            return `
+                <li class="assignee-dropdown-item" onmousedown="event.preventDefault(); selectTaskAssignee('${escapedName}')">
+                    <div class="assignee-item-user">
+                        <div class="assignee-item-avatar" style="background: ${roleBg}; color: ${roleColor}; border-color: ${roleColor};">
+                            ${initial}
+                        </div>
+                        <div class="assignee-item-details">
+                            <span class="assignee-item-name">${u.nombre}</span>
+                            <span class="assignee-item-sub">${u.email || u.departamento || 'Equipo Rodipack'}</span>
+                        </div>
+                    </div>
+                    ${badgeHtml}
+                </li>
+            `;
+        }).join('');
+
+        if (q && !assignees.some(u => (u.nombre || '').toLowerCase() === q)) {
+            const cleanQuery = (query || '').trim();
+            itemsHtml += `
+                <li class="assignee-dropdown-item custom-add" onmousedown="event.preventDefault(); selectTaskAssignee('${cleanQuery.replace(/'/g, "\\'")}')" style="border-top: 1px dashed #E2E8F0; margin-top: 4px; padding-top: 8px;">
+                    <div class="assignee-item-user">
+                        <div class="assignee-item-avatar" style="background: rgba(37, 99, 235, 0.1); color: #2563EB;">➕</div>
+                        <div class="assignee-item-details">
+                            <span class="assignee-item-name">Asignar a "${cleanQuery.replace(/'/g, "\\'")}"</span>
+                            <span class="assignee-item-sub">Usar nuevo colaborador personalizado</span>
+                        </div>
+                    </div>
+                </li>
+            `;
+        }
+    }
+
+    menu.innerHTML = itemsHtml;
+    menu.style.display = "block";
     menu.classList.add("open");
-};
+    const input = document.getElementById("task-assignee");
+    const wrapper = input ? input.closest(".assignee-autocomplete-wrapper") : null;
+    if (wrapper) wrapper.classList.add("open");
+}
 
 function selectTaskAssignee(name) {
-    window.selectTaskAssignee = selectTaskAssignee;
     const input = document.getElementById("task-assignee");
     if (input) {
         input.value = name;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    window.closeAssigneeDropdown();
-};
+    closeAssigneeDropdown();
+}
+
+// Registro global garantizado en window
+window.getAvailableAssignees = getAvailableAssignees;
+window.openAssigneeDropdown = openAssigneeDropdown;
+window.closeAssigneeDropdown = closeAssigneeDropdown;
+window.toggleAssigneeDropdown = toggleAssigneeDropdown;
+window.filterAssigneeDropdown = filterAssigneeDropdown;
+window.selectTaskAssignee = selectTaskAssignee;
 
 function setTaskPrioritySegment(priority) {
     window.setTaskPrioritySegment = setTaskPrioritySegment;
