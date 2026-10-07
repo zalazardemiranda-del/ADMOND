@@ -4311,6 +4311,29 @@ select.custom-excel-select option {
     width: 100%;
 }
 
+.assignee-autocomplete-wrapper input {
+    padding-right: 38px !important;
+    cursor: pointer;
+}
+
+.assignee-dropdown-arrow {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748B;
+    font-size: 20px;
+    cursor: pointer;
+    transition: transform 0.2s ease, color 0.2s ease;
+    user-select: none;
+    pointer-events: auto;
+}
+
+.assignee-autocomplete-wrapper.open .assignee-dropdown-arrow {
+    transform: translateY(-50%) rotate(180deg);
+    color: #2563EB;
+}
+
 .assignee-dropdown-menu {
     position: absolute;
     top: calc(100% + 6px);
@@ -4343,7 +4366,7 @@ select.custom-excel-select option {
 }
 
 .assignee-dropdown-menu.open {
-    display: block;
+    display: block !important;
     animation: dropdownOpenFade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 

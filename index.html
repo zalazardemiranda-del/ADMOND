@@ -542,11 +542,9 @@
                                         <label for="task-assignee">Asignar a (Responsable / Colaborador)</label>
 
                                         <div class="assignee-autocomplete-wrapper">
-
-                                            <input type="text" id="task-assignee" required placeholder="Escribe o selecciona un colaborador..." autocomplete="off" onfocus="openAssigneeDropdown()" onclick="openAssigneeDropdown()" oninput="filterAssigneeDropdown(this.value)" style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; background: #fff;">
-
+                                            <input type="text" id="task-assignee" required placeholder="Escribe o selecciona un colaborador..." autocomplete="off" onfocus="openAssigneeDropdown()" onclick="openAssigneeDropdown()" oninput="filterAssigneeDropdown(this.value)" style="width: 100%; padding: 10px 14px; padding-right: 38px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; background: #fff; box-sizing: border-box;">
+                                            <span class="material-symbols-outlined assignee-dropdown-arrow" onclick="toggleAssigneeDropdown(event)" title="Ver lista de colaboradores">expand_more</span>
                                             <ul id="task-assignee-dropdown" class="assignee-dropdown-menu"></ul>
-
                                         </div>
 
                                     </div>
@@ -4928,7 +4926,8 @@
                 <div class="form-group" style="margin-bottom: 16px; position: relative;">
                     <label for="schema-form-assignee" style="display: block; font-size: 13px; font-weight: 700; color: #1E293B; margin-bottom: 6px;">Asignar a (Responsable / Colaborador)</label>
                     <div class="assignee-autocomplete-wrapper">
-                        <input type="text" id="schema-form-assignee" required placeholder="Escribe o selecciona un colaborador..." autocomplete="off" onfocus="window.schemaEngine.openSchemaAssigneeDropdown()" onclick="window.schemaEngine.openSchemaAssigneeDropdown()" oninput="window.schemaEngine.filterSchemaAssigneeDropdown(this.value)" style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; background: #fff; box-sizing: border-box;">
+                        <input type="text" id="schema-form-assignee" required placeholder="Escribe o selecciona un colaborador..." autocomplete="off" onfocus="window.schemaEngine.openSchemaAssigneeDropdown()" onclick="window.schemaEngine.openSchemaAssigneeDropdown()" oninput="window.schemaEngine.filterSchemaAssigneeDropdown(this.value)" style="width: 100%; padding: 10px 14px; padding-right: 38px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; background: #fff; box-sizing: border-box;">
+                        <span class="material-symbols-outlined assignee-dropdown-arrow" onclick="window.schemaEngine.openSchemaAssigneeDropdown()" title="Ver lista de colaboradores">expand_more</span>
                         <ul id="schema-task-assignee-dropdown" class="assignee-dropdown-menu"></ul>
                     </div>
                 </div>
