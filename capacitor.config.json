@@ -1,0 +1,9 @@
+{
+  "appId": "com.rodipack.gestion",
+  "appName": "Rodipack",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "ios": {
+    "contentInset": "always"
+  }
+}

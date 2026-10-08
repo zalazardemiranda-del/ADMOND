@@ -1,0 +1,63 @@
+name: Compilar y Enviar a TestFlight (iOS)
+
+on:
+  workflow_dispatch: # Permite ejecutarlo manualmente con un clic en GitHub
+  push:
+    branches: [master, main]
+    paths:
+      - 'app.js'
+      - 'index.html'
+      - 'styles.css'
+      - 'ios/**'
+      - 'capacitor.config.json'
+
+concurrency:
+  group: ios-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compilar-ios:
+    name: Compilar iOS en Mac de GitHub y Subir a TestFlight
+    runs-on: macos-14
+    timeout-minutes: 40
+
+    steps:
+      - name: Descargar código del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Preparar archivos web para Capacitor
+        run: npm run build:app
+
+      - name: Sincronizar proyecto nativo de iOS
+        run: npx cap sync ios
+
+      - name: Configurar Ruby para Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: false
+
+      - name: Instalar Fastlane
+        run: gem install fastlane --no-document
+
+      - name: Compilar y Subir a TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APP_STORE_CONNECT_API_KEY_KEY" ]; then
+            echo "ℹ️ Sincronización de Capacitor completada exitosamente."
+            echo "⚠️ Falta configurar los 3 Secretos en GitHub (APP_STORE_KEY_ID, APP_STORE_ISSUER_ID, APP_STORE_PRIVATE_KEY) para subir automáticamente a TestFlight."
+            exit 0
+          fi
+          fastlane ios beta
