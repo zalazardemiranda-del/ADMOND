@@ -205,11 +205,50 @@ const runInitialAppSetup = async () => {
     appState.customChannels = JSON.parse(localStorage.getItem('rp_custom_channels')) || [];
     appState.meetings = JSON.parse(localStorage.getItem('rp_meetings')) || [];
     
+    function hasProjectData(p) {
+        if (!p) return false;
+        if (p.generado === true) return true;
+        if (p.numFactura && p.numFactura.trim() && p.numFactura !== '-') return true;
+        if (p.numOC && p.numOC.trim() && p.numOC !== '-') return true;
+        if (p.cliente && p.cliente.trim()) return true;
+        if (p.nombreCliente && p.nombreCliente.trim()) return true;
+        if (p.infoViaje && Boolean(
+            (p.infoViaje.terminal && p.infoViaje.terminal.trim()) ||
+            (p.infoViaje.mblMawb && p.infoViaje.mblMawb.trim()) ||
+            (p.infoViaje.destino && p.infoViaje.destino.trim()) ||
+            (p.infoViaje.observaciones && p.infoViaje.observaciones.trim())
+        )) return true;
+        if (p.infoLavado && Boolean(
+            (p.infoLavado.sitioServicio && p.infoLavado.sitioServicio.trim()) ||
+            (p.infoLavado.clienteFacturar && p.infoLavado.clienteFacturar.trim()) ||
+            (p.infoLavado.hbl && p.infoLavado.hbl.trim()) ||
+            (p.infoLavado.mbl && p.infoLavado.mbl.trim()) ||
+            (p.infoLavado.observaciones && p.infoLavado.observaciones.trim())
+        )) return true;
+        if (p.contenedores && Array.isArray(p.contenedores) && p.contenedores.some(c => c && Boolean(
+            (c.numContenedor && c.numContenedor.trim()) ||
+            (c.fechaDespacho && c.fechaDespacho.trim()) ||
+            (c.horarioTerminal && c.horarioTerminal.trim()) ||
+            (c.fechaEntrega && c.fechaEntrega.trim()) ||
+            (c.eirImpreso && c.eirImpreso.trim()) ||
+            (c.podSellado && c.podSellado.trim()) ||
+            (c.entregaVacio && c.entregaVacio.trim()) ||
+            (c.observaciones && c.observaciones.trim())
+        ))) return true;
+        if (p.partidasConceptos && Array.isArray(p.partidasConceptos) && p.partidasConceptos.some(item => item && (item.servicio || item.concepto || item.total > 0 || item.subtotal > 0))) return true;
+        if (p.proveedoresClaves && Array.isArray(p.proveedoresClaves) && p.proveedoresClaves.some(item => item && (item.proveedor || item.facturaNum || item.total > 0 || item.subtotal > 0))) return true;
+        return false;
+    }
+    window.hasProjectData = hasProjectData;
+
     function isProjectGenerado(p) {
         if (!p) return false;
-        if (p.generado !== true) return false;
-        if (p.isDraft === true || p.isNewProject === true) return false;
-        return true;
+        if (p.generado === true) return true;
+        if (hasProjectData(p)) return true;
+        if (typeof appState !== 'undefined' && appState.activeOperacionesProjectId && (p.id === appState.activeOperacionesProjectId || p.consecutivo === appState.activeOperacionesProjectId)) {
+            return true;
+        }
+        return false;
     }
     window.isProjectGenerado = isProjectGenerado;
 
@@ -218,29 +257,17 @@ const runInitialAppSetup = async () => {
         if (!p) return false;
         const cid = String(p.id || p.consecutivo || p.numProyecto || p.numConsecutivo || '').trim();
         if (window.purgedProjectIds && (window.purgedProjectIds.has(cid) || window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo) || window.purgedProjectIds.has(p.numProyecto))) return true;
-        if (/^RDP261017[2-9]$/i.test(cid) || /^RDP261018[0-9]$/i.test(cid)) {
-            const hasRealData = Boolean(
-                (p.cliente && p.cliente.trim()) ||
-                (p.nombreCliente && p.nombreCliente.trim()) ||
-                (p.numFactura && p.numFactura.trim() && p.numFactura !== '-') ||
-                (p.numOC && p.numOC.trim() && p.numOC !== '-') ||
-                (p.subtotal && Number(p.subtotal) > 0) ||
-                (p.total && Number(p.total) > 0) ||
-                (p.partidasConceptos && p.partidasConceptos.some(item => item && (item.servicio || item.concepto || item.total > 0 || item.subtotal > 0)))
-            );
-            if (!hasRealData) return true;
-        }
+        if (hasProjectData(p)) return false;
+        if (p.isDraft && typeof appState !== 'undefined' && (!appState.activeOperacionesProjectId || (p.id !== appState.activeOperacionesProjectId && p.consecutivo !== appState.activeOperacionesProjectId))) return true;
         return false;
     }
     window.isAccidentalEmptyProject = isAccidentalEmptyProject;
 
-    // Load Operaciones Data (con purga de consecutivos antiguos y proyectos accidentales como RDP2610179)
+    // Load Operaciones Data (con purga de consecutivos antiguos legítimamente obsoletos)
     const purgedProjectIds = new Set([
         'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
-        'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
-        'RDP2610172', 'RDP2610173', 'RDP2610174', 'RDP2610175', 'RDP2610176', 'RDP2610177', 'RDP2610178', 'RDP2610179',
-        'RDP2610180', 'RDP2610181', 'RDP2610182', 'RDP2610183', 'RDP2610184', 'RDP2610185'
+        'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F'
     ]);
     window.purgedProjectIds = purgedProjectIds;
 
@@ -249,7 +276,7 @@ const runInitialAppSetup = async () => {
         if (storedOps) {
             const parsed = JSON.parse(storedOps);
             if (Array.isArray(parsed)) {
-                // Conservar ÚNICAMENTE los proyectos que hayan sido oficialmente generados y no sean accidentales
+                // Conservar ÚNICAMENTE los proyectos válidos que tengan datos o hayan sido generados
                 appState.operacionesProyectos = parsed.filter(p => p && isProjectGenerado(p) && !isAccidentalEmptyProject(p) && !purgedProjectIds.has(p.id) && !purgedProjectIds.has(p.numProyecto) && !purgedProjectIds.has(p.consecutivo) && !purgedProjectIds.has(p.numConsecutivo));
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             }
@@ -5602,19 +5629,13 @@ function setupRealtimeSubscriptions() {
                     if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
                 }
                 if (appState.activeOperacionesProjectId) {
-                    const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+                    const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId || x.consecutivo === appState.activeOperacionesProjectId || x.numProyecto === appState.activeOperacionesProjectId);
                     if (activeP) {
-                        const isUserEditingInWizard = document.activeElement && (
-                            document.activeElement.closest('#tbody-partidas-conceptos') || 
-                            document.activeElement.closest('#tbody-proveedor-claves') ||
-                            document.activeElement.closest('#operaciones-view-detail input') ||
-                            document.activeElement.closest('#operaciones-view-detail select')
-                        );
-                        if (!isUserEditingInWizard) {
-                            if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
-                            if (typeof window.renderProveedorClavesTable === 'function') window.renderProveedorClavesTable(activeP);
-                            if (typeof window.renderPartidasTable === 'function') window.renderPartidasTable(activeP);
-                        }
+                        if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
+                        const isUserInPartidas = document.activeElement && document.activeElement.closest('#tbody-partidas-conceptos');
+                        const isUserInProv = document.activeElement && document.activeElement.closest('#tbody-proveedor-claves');
+                        if (!isUserInProv && typeof window.renderProveedorClavesTable === 'function') window.renderProveedorClavesTable(activeP);
+                        if (!isUserInPartidas && typeof window.renderPartidasTable === 'function') window.renderPartidasTable(activeP);
                         if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
                     }
                 }
@@ -5850,12 +5871,52 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    let _reconnectRealtimeTimer = null;
     window.chatRealtimeChannel.subscribe((status) => {
         console.log("⚡ [Realtime Hub Subscripción]:", status);
         if (status === 'SUBSCRIBED') {
             updateCloudStatusUI(true, appState.currentUser);
+            if (typeof fetchCloudData === 'function') fetchCloudData();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            console.warn("⚠️ Realtime Hub canal desconectado o con error:", status);
+            updateCloudStatusUI(false, null);
+            if (_reconnectRealtimeTimer) clearTimeout(_reconnectRealtimeTimer);
+            _reconnectRealtimeTimer = setTimeout(() => {
+                console.log("🔄 Reintentando reconectar Realtime Hub...");
+                if (typeof setupRealtimeSubscriptions === 'function') {
+                    setupRealtimeSubscriptions();
+                }
+            }, 3000);
         }
     });
+
+    if (!window._realtimeVisibilityBound) {
+        window._realtimeVisibilityBound = true;
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                if (typeof fetchCloudData === 'function') fetchCloudData();
+                if (window.chatRealtimeChannel && window.chatRealtimeChannel.state !== 'joined') {
+                    if (typeof setupRealtimeSubscriptions === 'function') setupRealtimeSubscriptions();
+                }
+            }
+        });
+        window.addEventListener('online', () => {
+            if (typeof fetchCloudData === 'function') fetchCloudData();
+            if (typeof setupRealtimeSubscriptions === 'function') setupRealtimeSubscriptions();
+        });
+    }
+
+    if (!window._operacionesHeartbeatInterval) {
+        window._operacionesHeartbeatInterval = setInterval(() => {
+            try {
+                if (window.isSupabaseActive && window.isSupabaseActive() && appState.currentAdminFicha === 'operaciones') {
+                    if (typeof window.fetchOperacionesFromCloud === 'function') {
+                        window.fetchOperacionesFromCloud();
+                    }
+                }
+            } catch (e) {}
+        }, 4000);
+    }
 }
 
 async function fetchCloudData() {
@@ -8841,7 +8902,7 @@ function syncAllOperacionesToConsecutivo() {
     const purgedIds = window.purgedProjectIds || new Set([
         'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
-        'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F', 'RDP2610172'
+        'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F'
     ]);
 
     if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos) || appState.operacionesProyectos.length === 0) {
@@ -9463,10 +9524,94 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
             const local = appState.operacionesProyectos[idx];
             const isCurrentlyActive = (appState.activeOperacionesProjectId === local.id || appState.activeOperacionesProjectId === key);
             
-            // Si es broadcast en tiempo real, priorizar el cambio entrante del otro usuario
-            const merged = forceRealtime ? Object.assign({}, local, cp) : Object.assign({}, cp, local);
+            // Fusión inteligente campo a campo: NO sobreescribir datos válidos locales con vacíos entrantes, ni viceversa
+            const merged = Object.assign({}, local, cp);
+
+            // 1. Campos de cabecera (Factura, OC, Consecutivo, Cliente)
+            ['numFactura', 'factura', 'numOC', 'cliente', 'nombreCliente', 'tipoProyecto', 'servicioName', 'fechaInicio', 'fechaInicioDisplay', 'estatus'].forEach(f => {
+                const lVal = (local[f] !== undefined && local[f] !== null) ? String(local[f]).trim() : '';
+                const cVal = (cp[f] !== undefined && cp[f] !== null) ? String(cp[f]).trim() : '';
+                if (cVal && !lVal) {
+                    merged[f] = cp[f];
+                } else if (lVal && !cVal) {
+                    merged[f] = local[f];
+                } else if (cVal && lVal) {
+                    merged[f] = (forceRealtime && !isCurrentlyActive) ? cp[f] : (cVal || local[f]);
+                }
+            });
+
+            // Preservar consecutivo más específico (por ej. si tiene sufijo -F)
+            const lCons = (local.consecutivo || local.numConsecutivo || '').trim();
+            const cCons = (cp.consecutivo || cp.numConsecutivo || '').trim();
+            if (cCons && (!lCons || cCons.length >= lCons.length)) {
+                merged.consecutivo = cCons;
+                merged.numConsecutivo = cCons;
+                merged.numProyecto = cCons;
+            } else if (lCons) {
+                merged.consecutivo = lCons;
+                merged.numConsecutivo = lCons;
+                merged.numProyecto = lCons;
+            }
+            if (local.generado === true || cp.generado === true) {
+                merged.generado = true;
+                merged.isDraft = false;
+                merged.isNewProject = false;
+            }
+
+            // 2. Fusión campo a campo de Datos Generales (infoViaje: Terminal, MBL, Destino, Observaciones)
+            const localViaje = local.infoViaje || {};
+            const cloudViaje = cp.infoViaje || {};
+            const mergedViaje = Object.assign({}, localViaje, cloudViaje);
+            ['terminal', 'mblMawb', 'destino', 'observaciones'].forEach(k => {
+                const lVal = (localViaje[k] || '').trim();
+                const cVal = (cloudViaje[k] || '').trim();
+                if (cVal && !lVal) mergedViaje[k] = cVal;
+                else if (lVal && !cVal) mergedViaje[k] = lVal;
+                else if (cVal && lVal) mergedViaje[k] = (forceRealtime && !isCurrentlyActive) ? cVal : (cVal || lVal);
+            });
+            merged.infoViaje = mergedViaje;
+
+            // 3. Fusión campo a campo de Lavado de Contenedores (infoLavado)
+            const localLavado = local.infoLavado || {};
+            const cloudLavado = cp.infoLavado || {};
+            const mergedLavado = Object.assign({}, localLavado, cloudLavado);
+            ['sitioServicio', 'clienteFacturar', 'hbl', 'mbl', 'naviera', 'observaciones'].forEach(k => {
+                const lVal = (localLavado[k] || '').trim();
+                const cVal = (cloudLavado[k] || '').trim();
+                if (cVal && !lVal) mergedLavado[k] = cVal;
+                else if (lVal && !cVal) mergedLavado[k] = lVal;
+                else if (cVal && lVal) mergedLavado[k] = (forceRealtime && !isCurrentlyActive) ? cVal : (cVal || lVal);
+            });
+            merged.infoLavado = mergedLavado;
+
+            // 4. Fusión de Contenedores por ID individual sin perder matrículas ni fechas
+            const localContainers = Array.isArray(local.contenedores) ? local.contenedores : [];
+            const cloudContainers = Array.isArray(cp.contenedores) ? cp.contenedores : [];
+            const allContainerIds = Array.from(new Set([
+                ...localContainers.map(c => c && c.id),
+                ...cloudContainers.map(c => c && c.id)
+            ])).filter(id => id !== undefined && id !== null).sort((a, b) => Number(a) - Number(b));
+
+            if (allContainerIds.length > 0) {
+                const mergedContainers = allContainerIds.map(cid => {
+                    const lC = localContainers.find(c => c && c.id === cid) || {};
+                    const cC = cloudContainers.find(c => c && c.id === cid) || {};
+                    const mC = Object.assign({}, lC, cC);
+                    ['numContenedor', 'fechaDespacho', 'horarioTerminal', 'fechaEntrega', 'eirImpreso', 'podSellado', 'entregaVacio', 'evidenciaFecha', 'observaciones'].forEach(f => {
+                        const lVal = (lC[f] || '').toString().trim();
+                        const cVal = (cC[f] || '').toString().trim();
+                        if (cVal && !lVal) mC[f] = cVal;
+                        else if (lVal && !cVal) mC[f] = lVal;
+                        else if (cVal && lVal) mC[f] = (forceRealtime && !isCurrentlyActive) ? cVal : (cVal || lVal);
+                    });
+                    return mC;
+                });
+                merged.contenedores = mergedContainers;
+            } else {
+                merged.contenedores = cloudContainers.length > 0 ? cloudContainers : localContainers;
+            }
             
-            // Si este proyecto está siendo editado activamente en esta pantalla, NUNCA sobreescribir las tablas de partidas o proveedores con copias viejas de la nube
+            // 5. Partidas y Proveedores
             if (isCurrentlyActive) {
                 merged.partidasConceptos = (local.partidasConceptos && local.partidasConceptos.length > 0) ? local.partidasConceptos : cp.partidasConceptos;
                 merged.proveedoresClaves = (local.proveedoresClaves && local.proveedoresClaves.length > 0) ? local.proveedoresClaves : cp.proveedoresClaves;
@@ -9492,7 +9637,7 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
                 }
             }
 
-            // Fusión de documentos: dar prioridad a documentos reales (> 3000 caracteres)
+            // 6. Fusión de documentos: dar prioridad a documentos reales (> 3000 caracteres)
             const localDocs = local.documentos || {};
             const cloudDocs = cp.documentos || {};
             const mergedDocs = Object.assign({}, localDocs, cloudDocs);
@@ -9552,19 +9697,13 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
         window.syncAllOperacionesToProveedores();
     }
     if (appState.activeOperacionesProjectId) {
-        const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+        const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId || x.consecutivo === appState.activeOperacionesProjectId || x.numProyecto === appState.activeOperacionesProjectId);
         if (activeP) {
-            const isUserEditingInWizard = document.activeElement && (
-                document.activeElement.closest('#tbody-partidas-conceptos') || 
-                document.activeElement.closest('#tbody-proveedor-claves') ||
-                document.activeElement.closest('#operaciones-view-detail input') ||
-                document.activeElement.closest('#operaciones-view-detail select')
-            );
-            if (!isUserEditingInWizard) {
-                if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
-                if (typeof window.renderProveedorClavesTable === 'function') window.renderProveedorClavesTable(activeP);
-                if (typeof window.renderPartidasTable === 'function') window.renderPartidasTable(activeP);
-            }
+            if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
+            const isUserInPartidas = document.activeElement && document.activeElement.closest('#tbody-partidas-conceptos');
+            const isUserInProv = document.activeElement && document.activeElement.closest('#tbody-proveedor-claves');
+            if (!isUserInProv && typeof window.renderProveedorClavesTable === 'function') window.renderProveedorClavesTable(activeP);
+            if (!isUserInPartidas && typeof window.renderPartidasTable === 'function') window.renderPartidasTable(activeP);
             if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
         }
     }
@@ -10223,16 +10362,19 @@ if (typeof window !== 'undefined' && !window._opCustomSelectListenersAdded) {
 
 function isProjectGenerado(p) {
     if (!p) return false;
-    if (p.generado !== true) return false;
-    if (p.isDraft === true || p.isNewProject === true) return false;
-    return true;
+    if (p.generado === true) return true;
+    if (typeof hasProjectData === 'function' && hasProjectData(p)) return true;
+    if (typeof appState !== 'undefined' && appState.activeOperacionesProjectId && (p.id === appState.activeOperacionesProjectId || p.consecutivo === appState.activeOperacionesProjectId)) {
+        return true;
+    }
+    return false;
 }
 window.isProjectGenerado = isProjectGenerado;
 
 function updateGenerarProyectoButton(p) {
     const btnGen = document.getElementById("op-btn-generar-proyecto");
     if (!btnGen) return;
-    if (isProjectGenerado(p)) {
+    if (p && p.generado === true) {
         btnGen.innerHTML = 'REGRESAR A OPERACIONES <span class="material-symbols-outlined">arrow_forward</span>';
         btnGen.className = "btn btn-primary btn-next-step op-btn-nav";
         btnGen.onclick = () => closeOperacionesDetail();
@@ -10418,7 +10560,7 @@ function toggleStep1GeneralInfo(section) {
 
 function updateProjectInfoViajeField(key, val) {
     window.updateProjectInfoViajeField = updateProjectInfoViajeField;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     if (!p.infoViaje) p.infoViaje = {};
     p.infoViaje[key] = val;
@@ -10426,11 +10568,16 @@ function updateProjectInfoViajeField(key, val) {
     if (typeof window.syncProjectToConsecutivo === 'function') {
         window.syncProjectToConsecutivo(p);
     }
+    if (typeof window.debouncedRealtimeSync === 'function') {
+        window.debouncedRealtimeSync(false);
+    } else if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(false);
+    }
 };
 
 function updateProjectInfoLavadoField(key, val) {
     window.updateProjectInfoLavadoField = updateProjectInfoLavadoField;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     if (!p.infoLavado) p.infoLavado = {};
     p.infoLavado[key] = val;
@@ -10442,12 +10589,23 @@ function updateProjectInfoLavadoField(key, val) {
     if (typeof window.syncProjectToConsecutivo === 'function') {
         window.syncProjectToConsecutivo(p);
     }
+    if (typeof window.debouncedRealtimeSync === 'function') {
+        window.debouncedRealtimeSync(false);
+    } else if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(false);
+    }
 };
 
 function renderStep1View(p) {
     window.renderStep1View = renderStep1View;
     if (!p) return;
     if (!p.tipoProyecto) p.tipoProyecto = 'servicio_local';
+
+    const setInputIfNotFocused = (el, val) => {
+        if (el && document.activeElement !== el) {
+            el.value = (val !== undefined && val !== null) ? val : "";
+        }
+    };
 
     // 1. Selector de tipo de proyecto
     ['servicio_local', 'movimientos_foraneos', 'lavado_contenedores'].forEach(t => {
@@ -10466,9 +10624,9 @@ function renderStep1View(p) {
     const facturaNumEl = document.getElementById("op-step1-factura-num");
     const ocNumEl = document.getElementById("op-step1-oc-num");
     const consecutivoNumEl = document.getElementById("op-step1-consecutivo-num");
-    if (facturaNumEl) facturaNumEl.value = p.numFactura || "";
-    if (ocNumEl) ocNumEl.value = p.numOC || "";
-    if (consecutivoNumEl) consecutivoNumEl.value = p.numConsecutivo || "";
+    setInputIfNotFocused(facturaNumEl, p.numFactura || "");
+    setInputIfNotFocused(ocNumEl, p.numOC || "");
+    setInputIfNotFocused(consecutivoNumEl, p.numConsecutivo || "");
     document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = p.numConsecutivo || "-");
 
     // 3. Tarjetas generales según tipo
@@ -10491,13 +10649,13 @@ function renderStep1View(p) {
         const totalEl = document.getElementById("op-step1-lavado-total");
         const obsEl = document.getElementById("op-step1-lavado-obs");
 
-        if (sitioEl) sitioEl.value = info.sitioServicio || "";
-        if (clienteEl) clienteEl.value = info.clienteFacturar || "";
-        if (hblEl) hblEl.value = info.hbl || "";
-        if (mblEl) mblEl.value = info.mbl || "";
-        if (navieraEl) navieraEl.value = info.naviera || "";
-        if (totalEl) totalEl.value = `${(p.contenedores || []).length} contenedor(es)`;
-        if (obsEl) obsEl.value = info.observaciones || "";
+        setInputIfNotFocused(sitioEl, info.sitioServicio || "");
+        setInputIfNotFocused(clienteEl, info.clienteFacturar || "");
+        setInputIfNotFocused(hblEl, info.hbl || "");
+        setInputIfNotFocused(mblEl, info.mbl || "");
+        setInputIfNotFocused(navieraEl, info.naviera || "");
+        setInputIfNotFocused(totalEl, `${(p.contenedores || []).length} contenedor(es)`);
+        setInputIfNotFocused(obsEl, info.observaciones || "");
     } else {
         if (localForaneoCard) localForaneoCard.style.display = 'block';
         if (lavadoCard) lavadoCard.style.display = 'none';
@@ -10515,10 +10673,10 @@ function renderStep1View(p) {
         const destEl = document.getElementById("op-step1-destino");
         const obsEl = document.getElementById("op-step1-obs");
 
-        if (termEl) termEl.value = viaje.terminal || "";
-        if (mblEl) mblEl.value = viaje.mblMawb || "";
-        if (destEl) destEl.value = viaje.destino || "";
-        if (obsEl) obsEl.value = viaje.observaciones || "";
+        setInputIfNotFocused(termEl, viaje.terminal || "");
+        setInputIfNotFocused(mblEl, viaje.mblMawb || "");
+        setInputIfNotFocused(destEl, viaje.destino || "");
+        setInputIfNotFocused(obsEl, viaje.observaciones || "");
     }
 
     renderContenedoresCards(p);
@@ -10589,6 +10747,9 @@ function goToOperacionesStep(stepNum) {
         if (isProjectGenerado(p)) {
             saveOperacionesStorage();
         }
+        if (typeof window.debouncedRealtimeSync === 'function') {
+            window.debouncedRealtimeSync(false);
+        }
     }
 };
 
@@ -10606,7 +10767,7 @@ function changeContenedoresPage(delta) {
 
 function updateProjectHeaderField(key, val) {
     window.updateProjectHeaderField = updateProjectHeaderField;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     p[key] = val;
 
@@ -10630,6 +10791,11 @@ function updateProjectHeaderField(key, val) {
     if (typeof window.syncProjectToProveedores === 'function') {
         window.syncProjectToProveedores(p);
     }
+    if (typeof window.debouncedRealtimeSync === 'function') {
+        window.debouncedRealtimeSync(false);
+    } else if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(false);
+    }
 };
 
 function renderContenedoresCards(p) {
@@ -10642,15 +10808,11 @@ function renderContenedoresCards(p) {
     if (!list || list.length === 0) {
         if (p.tipoProyecto === 'lavado_contenedores') {
             list = [
-                { id: 1, label: 'Lavado Contenedor 1', numContenedor: 'TNCU2312248', evidenciaFecha: '2026-09-14', observaciones: 'Lavado grado alimenticio completado' },
-                { id: 2, label: 'Lavado Contenedor 2', numContenedor: 'MSKU9981240', evidenciaFecha: '2026-09-14', observaciones: 'Evidencias fotográficas enviadas' }
+                { id: 1, label: 'Lavado Contenedor 1', numContenedor: '', evidenciaFecha: '', observaciones: '' }
             ];
         } else {
             list = [
-                { id: 1, label: 'Contenedor 1', fechaDespacho: '2027-03-21', horarioTerminal: '08:00 hrs', fechaEntrega: '2027-03-22', eirImpreso: 'EIR-8821', podSellado: 'Sí', entregaVacio: 'Pendiente' },
-                { id: 2, label: 'Contenedor 2', fechaDespacho: '2027-03-21', horarioTerminal: '10:00 hrs', fechaEntrega: '2027-03-22', eirImpreso: 'EIR-8822', podSellado: 'Sí', entregaVacio: 'Entregado' },
-                { id: 3, label: 'Contenedor 3', fechaDespacho: '2027-03-22', horarioTerminal: '12:30 hrs', fechaEntrega: '2027-03-23', eirImpreso: 'EIR-8823', podSellado: 'Pendiente', entregaVacio: 'Pendiente' },
-                { id: 4, label: 'Contenedor 4', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
+                { id: 1, label: 'Contenedor 1', numContenedor: '', fechaDespacho: '', horarioTerminal: '', fechaEntrega: '', eirImpreso: '', podSellado: '', entregaVacio: '' }
             ];
         }
         p.contenedores = list;
@@ -10662,6 +10824,38 @@ function renderContenedoresCards(p) {
 
     const startIdx = appState.contenedoresPage * itemsPerPage;
     const pageItems = list.slice(startIdx, startIdx + itemsPerPage);
+
+    // Si el usuario tiene el foco en un input de contenedor, actualizar solo los valores in-place sin destruir el foco
+    const isFocusInside = document.activeElement && container.contains(document.activeElement);
+    const existingCards = container.querySelectorAll('.contenedor-card');
+    if (isFocusInside && existingCards.length === pageItems.length) {
+        pageItems.forEach((c, idx) => {
+            const card = existingCards[idx];
+            if (!card) return;
+            const setVal = (sel, val) => {
+                const el = card.querySelector(sel);
+                if (el && document.activeElement !== el) el.value = val || '';
+            };
+            if (p.tipoProyecto === 'lavado_contenedores') {
+                setVal('.contenedor-header-input', c.numContenedor);
+                setVal(`#lavado-mat-${c.id}`, c.numContenedor);
+                setVal('input[type="date"]', c.evidenciaFecha);
+                setVal('.field-full input', c.observaciones);
+            } else {
+                setVal('.contenedor-header-input', c.numContenedor);
+                const inputs = card.querySelectorAll('.contenedor-fields-grid input');
+                if (inputs.length >= 6) {
+                    if (document.activeElement !== inputs[0]) inputs[0].value = c.fechaDespacho || '';
+                    if (document.activeElement !== inputs[1]) inputs[1].value = c.horarioTerminal || '';
+                    if (document.activeElement !== inputs[2]) inputs[2].value = c.fechaEntrega || '';
+                    if (document.activeElement !== inputs[3]) inputs[3].value = c.eirImpreso || '';
+                    if (document.activeElement !== inputs[4]) inputs[4].value = c.podSellado || '';
+                    if (document.activeElement !== inputs[5]) inputs[5].value = c.entregaVacio || '';
+                }
+            }
+        });
+        return;
+    }
 
     if (p.tipoProyecto === 'lavado_contenedores') {
         container.innerHTML = pageItems.map(c => `
@@ -10793,8 +10987,9 @@ function duplicateContenedor(cId) {
     appState.contenedoresPage = Math.floor((sourceIdx + 1) / itemsPerPage);
 
     renderContenedoresCards(p);
-    if (typeof isProjectGenerado === 'function' && isProjectGenerado(p)) {
-        saveOperacionesStorage();
+    saveOperacionesStorage();
+    if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(true);
     }
 }
 window.duplicateContenedor = duplicateContenedor;
@@ -10827,10 +11022,11 @@ function deleteContenedor(cId) {
         if (totalEl) totalEl.value = `${p.contenedores.length} contenedor(es)`;
     }
 
-    if (typeof isProjectGenerado === 'function' && isProjectGenerado(p)) {
-        saveOperacionesStorage();
-    }
     renderContenedoresCards(p);
+    saveOperacionesStorage();
+    if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(true);
+    }
 };
 
 /* Prefactura Lateral Slider (Step 2 - Imagen 2 y 3) */
@@ -10889,7 +11085,7 @@ function handlePrefacturaFooterPrev() {
 
 function updateContenedorField(cId, key, val) {
     window.updateContenedorField = updateContenedorField;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     if (!p.contenedores) p.contenedores = [];
     let item = p.contenedores.find(x => x.id === cId);
@@ -10899,11 +11095,16 @@ function updateContenedorField(cId, key, val) {
     }
     item[key] = val;
     saveOperacionesStorage();
+    if (typeof window.debouncedRealtimeSync === 'function') {
+        window.debouncedRealtimeSync(false);
+    } else if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(false);
+    }
 };
 
 function addContenedorToActiveProject() {
     window.addContenedorToActiveProject = addContenedorToActiveProject;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     if (!p.contenedores) p.contenedores = [];
     const nextId = p.contenedores.length + 1;
@@ -10917,6 +11118,9 @@ function addContenedorToActiveProject() {
     appState.contenedoresPage = Math.floor((p.contenedores.length - 1) / itemsPerPage);
     renderContenedoresCards(p);
     saveOperacionesStorage();
+    if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(true);
+    }
 };
 
 function convertirCaratulaPDF() {
@@ -12310,7 +12514,7 @@ function debouncedRealtimeSync(forceImmediate = false) {
         _realtimeSyncTimer = setTimeout(() => {
             if (typeof window.syncOperacionesToCloud === 'function') window.syncOperacionesToCloud(false);
             if (typeof window.broadcastProveedoresUpdate === 'function') window.broadcastProveedoresUpdate();
-        }, 1200);
+        }, 350);
     }
 }
 window.debouncedRealtimeSync = debouncedRealtimeSync;
