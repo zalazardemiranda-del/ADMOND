@@ -1,6 +1,6 @@
 {
-  "appId": "com.rodipack.gestion",
-  "appName": "Rodipack",
+  "appId": "com.rodilaw.admond",
+  "appName": "ADMOND",
   "webDir": "www",
   "bundledWebRuntime": false,
   "ios": {
