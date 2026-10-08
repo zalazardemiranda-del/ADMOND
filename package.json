@@ -2,7 +2,7 @@
   "name": "central",
   "version": "1.0.0",
   "description": "",
-  "main": "app.js",
+  "main": "electron-main.js",
   "scripts": {
     "lint": "eslint app.js schema.js supabase_config.js consecutivo_data.js --quiet",
     "test": "playwright test",
@@ -10,7 +10,11 @@
     "check": "npm run lint && npm test",
     "serve": "node tests/serve.js",
     "bump": "node tools/bump-version.js",
-    "build:app": "node tools/prepare-www.js"
+    "build:app": "node tools/prepare-www.js",
+    "electron:start": "electron .",
+    "electron:build:win": "electron-builder --win",
+    "electron:build:mac": "electron-builder --mac",
+    "electron:build": "electron-builder -mw"
   },
   "repository": {
     "type": "git",
@@ -27,6 +31,8 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@supabase/supabase-js": "^2.117.2",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.39.5",
     "globals": "^17.13.0"
   },
@@ -34,5 +40,45 @@
     "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3"
+  },
+  "build": {
+    "appId": "com.rodilaw.edmond",
+    "productName": "ADMOND",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "index.html",
+      "app.js",
+      "styles.css",
+      "schema.js",
+      "supabase_config.js",
+      "consecutivo_data.js",
+      "Logo interno.png",
+      "logo sin fondo.png",
+      "fondo sistema.png",
+      "electron-main.js"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "Logo interno.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ADMOND"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.business",
+      "icon": "Logo interno.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Instalador ADMOND"
+    }
   }
 }

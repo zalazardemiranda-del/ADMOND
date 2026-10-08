@@ -1,0 +1,61 @@
+name: Compilar Aplicación de Escritorio (Windows y Mac)
+
+on:
+  workflow_dispatch: # Permite ejecutar la compilación con un solo clic desde GitHub
+
+concurrency:
+  group: desktop-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    name: Compilar Instalador Windows (.exe)
+    runs-on: windows-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar instalador de Windows (.exe)
+        run: npm run electron:build:win
+
+      - name: Guardar archivo .exe descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ADMOND-Windows-Instalador
+          path: dist-electron/*.exe
+          retention-days: 14
+
+  build-mac:
+    name: Compilar Instalador Mac (.dmg)
+    runs-on: macos-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar instalador de Mac (.dmg)
+        run: npm run electron:build:mac
+
+      - name: Guardar archivo .dmg descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ADMOND-Mac-Instalador
+          path: dist-electron/*.dmg
+          retention-days: 14
