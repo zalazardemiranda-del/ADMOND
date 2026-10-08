@@ -3041,6 +3041,31 @@ input.excel-p-flag-x {
     text-align: right !important;
 }
 
+/* Excel percentage wrapper with percent symbol on the right */
+.excel-percent-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.excel-percent-wrap .percent-symbol {
+    position: absolute;
+    right: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+    pointer-events: none;
+    user-select: none;
+    z-index: 2;
+}
+
+.excel-percent-wrap input.excel-input {
+    width: 100%;
+    padding-right: 22px !important;
+    text-align: right !important;
+}
+
 /* -------------------------------------------------------------
    FICHA 4: CONSECUTIVO 2026 STYLES
 ------------------------------------------------------------- */

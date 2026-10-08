@@ -1165,7 +1165,32 @@ function renderNominas() {
         }
         item.nomina = nominaVal;
 
+        const ivaPct = item.ivaPct !== undefined && item.ivaPct !== null && item.ivaPct !== '' ? Number(item.ivaPct) : 0;
+        const retPct = item.retPct !== undefined && item.retPct !== null && item.retPct !== '' ? Number(item.retPct) : (item.ret4Pct !== undefined ? Number(item.ret4Pct) : 0);
+        const retIsrPct = item.retIsrPct !== undefined && item.retIsrPct !== null && item.retIsrPct !== '' ? Number(item.retIsrPct) : 0;
+
+        // Cálculo acumulativo secuencial según la fórmula requerida
+        const ivaAmount = nominaVal * (ivaPct / 100);
+        const subtotal1 = nominaVal + ivaAmount;
+        const retAmount = subtotal1 * (retPct / 100);
+        const subtotal2 = subtotal1 + retAmount;
+        const retIsrAmount = subtotal2 * (retIsrPct / 100);
+        const calculatedTotal = (ivaPct === 0 && retPct === 0 && retIsrPct === 0 && item.total && Number(item.total) > 0 && nominaVal === Number(item.total))
+            ? Number(item.total)
+            : Number((subtotal2 + retIsrAmount).toFixed(2));
+
+        item.ivaPct = ivaPct;
+        item.iva = Number(ivaAmount.toFixed(2));
+        item.retPct = retPct;
+        item.ret4Pct = retPct;
+        item.ret4 = Number(retAmount.toFixed(2));
+        item.retIsrPct = retIsrPct;
+        item.retIsr = Number(retIsrAmount.toFixed(2));
+        item.total = calculatedTotal;
+
         const tr = document.createElement("tr");
+        tr.setAttribute("oncontextmenu", `if(confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
+        tr.title = "Clic derecho para eliminar fila";
         tr.innerHTML = `
             <td>
                 <input type="text" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" style="text-align: center; font-weight: 700;">
@@ -1183,27 +1208,28 @@ function renderNominas() {
                 </div>
             </td>
             <td>
-                <input type="number" id="nom-iva-input-${index}" class="excel-input number-input readonly" value="${item.iva || 0}" readonly>
+                <div class="excel-percent-wrap">
+                    <input type="number" id="nom-iva-input-${index}" class="excel-input number-input" value="${ivaPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0">
+                    <span class="percent-symbol">%</span>
+                </div>
             </td>
             <td>
-                <input type="number" id="nom-ret4-input-${index}" class="excel-input number-input" value="${item.ret4 || 0}" step="any" oninput="liveUpdateNominaTotals(${index})">
+                <div class="excel-percent-wrap">
+                    <input type="number" id="nom-ret4-input-${index}" class="excel-input number-input" value="${retPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0">
+                    <span class="percent-symbol">%</span>
+                </div>
             </td>
             <td>
-                <input type="number" id="nom-retisr-input-${index}" class="excel-input number-input" value="${item.retIsr || 0}" step="any" oninput="liveUpdateNominaTotals(${index})">
+                <div class="excel-percent-wrap">
+                    <input type="number" id="nom-retisr-input-${index}" class="excel-input number-input" value="${retIsrPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0">
+                    <span class="percent-symbol">%</span>
+                </div>
             </td>
             <td>
                 <div class="excel-currency-wrap">
                     <span class="currency-symbol">$</span>
-                    <input type="number" id="nom-total-input-${index}" class="excel-input number-input" value="${item.total || nominaVal || 0}" step="any" oninput="updateNominaManualTotal(${index}, this.value)" style="font-weight: 800; background: rgba(31, 78, 120, 0.06);">
+                    <input type="number" id="nom-total-input-${index}" class="excel-input number-input readonly" value="${calculatedTotal || 0}" step="any" readonly style="font-weight: 800; background: rgba(31, 78, 120, 0.06);">
                 </div>
-            </td>
-            <td>
-                <input type="text" class="excel-input ${(item.p || '').trim().toUpperCase() === 'X' ? 'excel-p-flag-x' : ''}" value="${item.p || "P"}" oninput="handlePInputChange(this, ${index}, 'nomina')" style="text-align: center; font-weight: 700;">
-            </td>
-            <td>
-                <button class="btn-delete-task" onclick="deleteNominaRecord(${index})" title="Eliminar Empleado">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
-                </button>
             </td>
         `;
         tbody.appendChild(tr);
@@ -1231,7 +1257,7 @@ function handlePInputChange(inputEl, index, type) {
     
     if (type === 'nomina') {
         const list = window.getActiveNominasList();
-    if (list[index]) {
+        if (list[index]) {
             list[index].p = val;
             saveToStorage();
         }
@@ -1275,25 +1301,38 @@ function liveUpdateNominaTotals(index) {
 
     const nominaEl = document.getElementById(`nom-nomina-input-${index}`);
     const ivaEl = document.getElementById(`nom-iva-input-${index}`);
-    const ret4El = document.getElementById(`nom-ret4-input-${index}`);
+    const retEl = document.getElementById(`nom-ret4-input-${index}`);
     const retisrEl = document.getElementById(`nom-retisr-input-${index}`);
     const totalEl = document.getElementById(`nom-total-input-${index}`);
     
     const nomina = nominaEl ? (Number(nominaEl.value) || 0) : (Number(list[index].nomina) || 0);
-    const iva = ivaEl ? (Number(ivaEl.value) || 0) : 0;
-    const ret4 = ret4El ? (Number(ret4El.value) || 0) : 0;
-    const retisr = retisrEl ? (Number(retisrEl.value) || 0) : 0;
+    const ivaPct = ivaEl ? (Number(ivaEl.value) || 0) : 0;
+    const retPct = retEl ? (Number(retEl.value) || 0) : 0;
+    const retIsrPct = retisrEl ? (Number(retisrEl.value) || 0) : 0;
     
-    const calculatedTotal = nomina + iva - ret4 - retisr;
+    // Cálculo acumulativo secuencial según la fórmula requerida
+    const ivaAmount = nomina * (ivaPct / 100);
+    const subtotal1 = nomina + ivaAmount;
+    
+    const retAmount = subtotal1 * (retPct / 100);
+    const subtotal2 = subtotal1 + retAmount;
+    
+    const retIsrAmount = subtotal2 * (retIsrPct / 100);
+    const calculatedTotal = Number((subtotal2 + retIsrAmount).toFixed(2));
+    
     if (totalEl) {
         totalEl.value = calculatedTotal;
     }
     
     list[index].nomina = nomina;
     list[index].servicio = nomina;
-    list[index].iva = iva;
-    list[index].ret4 = ret4;
-    list[index].retIsr = retisr;
+    list[index].ivaPct = ivaPct;
+    list[index].iva = Number(ivaAmount.toFixed(2));
+    list[index].retPct = retPct;
+    list[index].ret4Pct = retPct;
+    list[index].ret4 = Number(retAmount.toFixed(2));
+    list[index].retIsrPct = retIsrPct;
+    list[index].retIsr = Number(retIsrAmount.toFixed(2));
     list[index].total = calculatedTotal;
     
     recalculateNominasTableTotals();
@@ -1306,18 +1345,28 @@ function recalculateNominasTableTotals() {
     window.recalculateNominasTableTotals = recalculateNominasTableTotals;
     let sumNomina = 0;
     let sumIva = 0;
-    let sumRet4 = 0;
+    let sumRet = 0;
     let sumRetIsr = 0;
     let sumTotal = 0;
     
     const list = window.getActiveNominasList();
     list.forEach(item => {
         const nomVal = Number(item.nomina !== undefined && item.nomina !== null && item.nomina !== '' ? item.nomina : (item.servicio && !isNaN(item.servicio) ? item.servicio : (item.total || 0))) || 0;
+        const ivaPct = Number(item.ivaPct) || 0;
+        const ivaVal = Number(item.iva !== undefined ? item.iva : (nomVal * (ivaPct / 100))) || 0;
+        const sub1 = nomVal + ivaVal;
+        const retPct = Number(item.retPct ?? item.ret4Pct) || 0;
+        const retVal = Number(item.ret4 !== undefined ? item.ret4 : (sub1 * (retPct / 100))) || 0;
+        const sub2 = sub1 + retVal;
+        const retIsrPct = Number(item.retIsrPct) || 0;
+        const retIsrVal = Number(item.retIsr !== undefined ? item.retIsr : (sub2 * (retIsrPct / 100))) || 0;
+        const totVal = Number(item.total) || (sub2 + retIsrVal);
+
         sumNomina += nomVal;
-        sumIva += Number(item.iva) || 0;
-        sumRet4 += Number(item.ret4) || 0;
-        sumRetIsr += Number(item.retIsr) || 0;
-        sumTotal += Number(item.total) || 0;
+        sumIva += ivaVal;
+        sumRet += retVal;
+        sumRetIsr += retIsrVal;
+        sumTotal += totVal;
     });
     
     const totalsRow = document.getElementById("excel-nominas-totals-row");
@@ -1328,11 +1377,9 @@ function recalculateNominasTableTotals() {
             <td></td>
             <td style="font-weight: 800; text-align: right;">${formatCurrency(sumNomina)}</td>
             <td style="font-weight: 800; text-align: right;">${formatCurrency(sumIva)}</td>
-            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumRet4)}</td>
+            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumRet)}</td>
             <td style="font-weight: 800; text-align: right;">${formatCurrency(sumRetIsr)}</td>
             <td style="font-weight: 800; text-align: right;">${formatCurrency(sumTotal)}</td>
-            <td></td>
-            <td><span class="material-symbols-outlined" style="font-size: 16px;">lock</span></td>
         `;
     }
 };
@@ -1346,11 +1393,14 @@ function addNewNominaRow() {
         fecha: new Date().toISOString().split('T')[0],
         nomina: 0,
         servicio: 0,
+        ivaPct: 0,
         iva: 0,
+        retPct: 0,
+        ret4Pct: 0,
         ret4: 0,
+        retIsrPct: 0,
         retIsr: 0,
-        total: 0,
-        p: "P"
+        total: 0
     });
     saveToStorage();
     renderNominas();
