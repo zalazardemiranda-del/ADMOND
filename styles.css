@@ -11569,3 +11569,35 @@ select.proveedor-concepto-select option {
     background: #DBEAFE;
 }
 
+/* =============================================================
+   COMPATIBILIDAD iOS & SAFARI (iPhone / iPad)
+   ============================================================= */
+/* Soporte de áreas seguras (Notch y Dynamic Island en iPhone) */
+body {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    -webkit-text-size-adjust: 100%;
+}
+
+/* Scroll táctil fluido y sin bloqueos en iOS */
+* {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Previene el auto-zoom no deseado de iOS Safari al tocar inputs */
+@supports (-webkit-touch-callout: none) {
+    @media screen and (max-width: 820px) {
+        input[type="text"],
+        input[type="number"],
+        input[type="date"],
+        input[type="email"],
+        input[type="password"],
+        select,
+        textarea {
+            font-size: 16px !important;
+        }
+    }
+}
+
