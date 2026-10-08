@@ -3016,6 +3016,31 @@ input.excel-p-flag-x {
     border-radius: 4px;
 }
 
+/* Excel currency wrapper with fixed dollar symbol */
+.excel-currency-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.excel-currency-wrap .currency-symbol {
+    position: absolute;
+    left: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
+    pointer-events: none;
+    user-select: none;
+    z-index: 2;
+}
+
+.excel-currency-wrap input.excel-input {
+    width: 100%;
+    padding-left: 18px !important;
+    text-align: right !important;
+}
+
 /* -------------------------------------------------------------
    FICHA 4: CONSECUTIVO 2026 STYLES
 ------------------------------------------------------------- */
