@@ -508,16 +508,15 @@ const runInitialAppSetup = async () => {
     }
 
     // Restaurar pestaña activa persistida o desde hash de URL
-    const isLocalhost = window.isLocalhostEnvironment();
     let hashTab = window.location.hash ? window.location.hash.replace('#', '').trim() : '';
     let storedTab = localStorage.getItem("rp_current_tab");
     if (hashTab === 'emails') hashTab = 'schema';
     if (storedTab === 'emails') storedTab = 'schema';
 
     if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'meetings', 'users', 'profile'].includes(hashTab)) {
-        appState.currentTab = (hashTab === 'schema' && !isLocalhost) ? 'tasks' : hashTab;
+        appState.currentTab = hashTab;
     } else if (storedTab) {
-        appState.currentTab = (storedTab === 'schema' && !isLocalhost) ? 'tasks' : storedTab;
+        appState.currentTab = storedTab;
     } else {
         appState.currentTab = 'tasks';
     }
@@ -528,8 +527,8 @@ const runInitialAppSetup = async () => {
         appState.currentAdminFicha = storedAdminFicha;
     }
 
-    // Inicializar Esquematización de Sistema ÚNICAMENTE en localhost
-    if (isLocalhost && typeof initSchemaEngine === 'function') {
+    // Inicializar Esquematización de Sistema
+    if (typeof initSchemaEngine === 'function') {
         initSchemaEngine();
     }
 
@@ -811,6 +810,9 @@ function updateUserSessionUI() {
         if (authNavIcon) authNavIcon.innerText = "login";
         if (authNavLabel) authNavLabel.innerText = "Iniciar Sesión";
     }
+    if (typeof updateUserProfileUI === 'function') {
+        updateUserProfileUI();
+    }
 };
 
 function handleAuthNavItemClick(e) {
@@ -832,10 +834,6 @@ function switchTab(tabName) {
     // Redirigir emails a schema
     if (tabName === 'emails') {
         tabName = 'schema';
-    }
-    // Si no está en localhost, bloquear Esquematización y redirigir a tareas
-    if (tabName === 'schema' && typeof window.isLocalhostEnvironment === 'function' && !window.isLocalhostEnvironment()) {
-        tabName = 'tasks';
     }
 
     const r = (appState.currentRole || '').toLowerCase();
@@ -7421,7 +7419,7 @@ async function handleSaveMyProfile(event) {
     }
 };
 
-function updateUserSessionUI() {
+function updateUserProfileUI() {
 
     if (!appState.currentUser) {
         const storedUser = localStorage.getItem("rp_logged_user");
@@ -13583,3 +13581,156 @@ function openNuevoProyectoModal() {
         }
     });
 })();
+
+// ---------------------------------------------------------------------------------
+// DESCARGA E INSTALACIÓN DEL SISTEMA EN ESCRITORIO (WINDOWS & MACOS)
+// ---------------------------------------------------------------------------------
+(function() {
+    window.deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.deferredInstallPrompt = e;
+    });
+
+    window.descargarSistemaWindows = function() {
+        // 1. Si el navegador soporta instalación PWA en Windows (Edge / Chrome)
+        if (window.deferredInstallPrompt) {
+            try {
+                window.deferredInstallPrompt.prompt();
+            } catch (err) {
+                console.log('PWA Prompt:', err);
+            }
+        }
+
+        // 2. Generar y descargar el acceso directo de escritorio para Windows (.url)
+        var origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'https://admond.rodilaw.com';
+        var shortcutContent = '[InternetShortcut]\r\nURL=' + origin + '/\r\nIconIndex=0\r\nHotKey=0\r\nIconFile=' + origin + '/Logo%20interno.png\r\n[{000214A0-0000-0000-C000-000000000046}]\r\nProp3=19,0\r\n[InternetShortcut.A]\r\nURL=' + origin + '/\r\n';
+        
+        var blob = new Blob([shortcutContent], { type: 'application/octet-stream' });
+        var dlLink = document.createElement('a');
+        dlLink.href = URL.createObjectURL(blob);
+        dlLink.download = 'ADMOND - Sistema Rodipack.url';
+        document.body.appendChild(dlLink);
+        dlLink.click();
+        setTimeout(function() {
+            if (dlLink.parentNode) {
+                dlLink.parentNode.removeChild(dlLink);
+            }
+            URL.revokeObjectURL(dlLink.href);
+        }, 1000);
+
+        // 3. Mostrar modal con instrucciones claras para el usuario de Windows
+        window.mostrarModalInstalacionSistema('windows');
+    };
+
+    window.descargarSistemaMac = function() {
+        // 1. Generar y descargar el acceso directo nativo para macOS (.webloc)
+        var origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'https://admond.rodilaw.com';
+        var weblocXml = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>URL</key>\n\t<string>' + origin + '/</string>\n</dict>\n</plist>';
+
+        var blob = new Blob([weblocXml], { type: 'application/x-apple-aspen-config;charset=utf-8' });
+        var dlLink = document.createElement('a');
+        dlLink.href = URL.createObjectURL(blob);
+        dlLink.download = 'ADMOND - Sistema Rodipack.webloc';
+        document.body.appendChild(dlLink);
+        dlLink.click();
+        setTimeout(function() {
+            if (dlLink.parentNode) {
+                dlLink.parentNode.removeChild(dlLink);
+            }
+            URL.revokeObjectURL(dlLink.href);
+        }, 1000);
+
+        // 2. Mostrar modal con instrucciones claras para el usuario de Mac
+        window.mostrarModalInstalacionSistema('mac');
+    };
+
+    window.mostrarModalInstalacionSistema = function(plataforma) {
+        var modal = document.getElementById('modal-download-system');
+        if (!modal) return;
+
+        var iconBox = document.getElementById('modal-download-icon-box');
+        var icon = document.getElementById('modal-download-icon');
+        var title = document.getElementById('modal-download-title');
+        var subtitle = document.getElementById('modal-download-subtitle');
+        var body = document.getElementById('modal-download-body');
+        var header = document.getElementById('modal-download-header');
+
+        if (plataforma === 'windows') {
+            if (header) header.style.background = 'linear-gradient(135deg, #1E3A8A, #1E293B)';
+            if (iconBox) iconBox.style.background = 'rgba(59, 130, 246, 0.3)';
+            if (icon) {
+                icon.textContent = 'desktop_windows';
+                icon.style.color = '#93C5FD';
+            }
+            if (title) title.textContent = 'Sistema para Windows';
+            if (subtitle) subtitle.textContent = 'Tu acceso directo se ha descargado a tu equipo';
+            if (body) {
+                body.innerHTML = 
+                    '<div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 12px; padding: 14px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 12px;">' +
+                        '<span class="material-symbols-outlined" style="color: #2563EB; font-size: 24px; flex-shrink: 0;">download_done</span>' +
+                        '<div>' +
+                            '<div style="font-weight: 700; color: #1E3A8A; font-size: 14px;">¡Archivo descargado con éxito!</div>' +
+                            '<div style="color: #1E40AF; font-size: 12.5px; margin-top: 2px;">Se guardó <b>ADMOND - Sistema Rodipack.url</b> en tu carpeta de Descargas.</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="display: flex; flex-direction: column; gap: 12px;">' +
+                        '<div style="display: flex; align-items: flex-start; gap: 10px;">' +
+                            '<div style="width: 24px; height: 24px; border-radius: 50%; background: #2563EB; color: #FFF; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">1</div>' +
+                            '<div style="font-size: 13px; color: #334155;"><b>Llévalo a tu Escritorio:</b> Abre tu carpeta de <i>Descargas</i> y arrastra o copia el archivo <b>ADMOND</b> directamente a tu Escritorio.</div>' +
+                        '</div>' +
+                        '<div style="display: flex; align-items: flex-start; gap: 10px;">' +
+                            '<div style="width: 24px; height: 24px; border-radius: 50%; background: #2563EB; color: #FFF; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">2</div>' +
+                            '<div style="font-size: 13px; color: #334155;"><b>Doble clic para entrar:</b> Al darle doble clic en tu escritorio se abrirá el sistema inmediatamente y seguro.</div>' +
+                        '</div>' +
+                        '<div style="display: flex; align-items: flex-start; gap: 10px;">' +
+                            '<div style="width: 24px; height: 24px; border-radius: 50%; background: #10B981; color: #FFF; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">★</div>' +
+                            '<div style="font-size: 13px; color: #334155;"><b>Tip Opcional (Ventana de App):</b> En Microsoft Edge o Chrome, puedes hacer clic en el botón <b>"Instalar ADMOND"</b> (ícono de pantalla 🖥️ arriba en la barra de direcciones) para tenerlo como aplicación de ventana independiente.</div>' +
+                        '</div>' +
+                    '</div>';
+            }
+        } else {
+            // macOS
+            if (header) header.style.background = 'linear-gradient(135deg, #312E81, #0F172A)';
+            if (iconBox) iconBox.style.background = 'rgba(129, 140, 248, 0.3)';
+            if (icon) {
+                icon.textContent = 'laptop_mac';
+                icon.style.color = '#C7D2FE';
+            }
+            if (title) title.textContent = 'Sistema para macOS (Apple)';
+            if (subtitle) subtitle.textContent = 'Tu acceso directo se ha descargado a tu Mac';
+            if (body) {
+                body.innerHTML = 
+                    '<div style="background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 12px; padding: 14px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 12px;">' +
+                        '<span class="material-symbols-outlined" style="color: #4F46E5; font-size: 24px; flex-shrink: 0;">download_done</span>' +
+                        '<div>' +
+                            '<div style="font-weight: 700; color: #312E81; font-size: 14px;">¡Acceso para Mac generado!</div>' +
+                            '<div style="color: #3730A3; font-size: 12.5px; margin-top: 2px;">Se guardó <b>ADMOND - Sistema Rodipack.webloc</b> en tus Descargas.</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="display: flex; flex-direction: column; gap: 12px;">' +
+                        '<div style="display: flex; align-items: flex-start; gap: 10px;">' +
+                            '<div style="width: 24px; height: 24px; border-radius: 50%; background: #4F46E5; color: #FFF; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">1</div>' +
+                            '<div style="font-size: 13px; color: #334155;"><b>Ponlo en tu Escritorio o Dock:</b> Ve a tu carpeta de <i>Descargas</i> y arrastra <b>ADMOND</b> a tu Escritorio o a la barra de Dock de tu Mac.</div>' +
+                        '</div>' +
+                        '<div style="display: flex; align-items: flex-start; gap: 10px;">' +
+                            '<div style="width: 24px; height: 24px; border-radius: 50%; background: #4F46E5; color: #FFF; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">2</div>' +
+                            '<div style="font-size: 13px; color: #334155;"><b>Como App nativa en Safari:</b> Si estás en Safari en tu Mac, ve al menú superior <b>Archivo</b> ➔ <b>Agregar al Dock...</b>. ¡Se creará la App nativa en tu Mac en 1 segundo!</div>' +
+                        '</div>' +
+                        '<div style="display: flex; align-items: flex-start; gap: 10px;">' +
+                            '<div style="width: 24px; height: 24px; border-radius: 50%; background: #10B981; color: #FFF; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">★</div>' +
+                            '<div style="font-size: 13px; color: #334155;"><b>En Chrome para Mac:</b> Haz clic en el ícono de instalación 🖥️ en la barra de direcciones o Menú ➔ <i>"Instalar ADMOND"</i>.</div>' +
+                        '</div>' +
+                    '</div>';
+            }
+        }
+
+        modal.style.display = 'flex';
+    };
+
+    window.cerrarModalInstalacion = function() {
+        var modal = document.getElementById('modal-download-system');
+        if (modal) modal.style.display = 'none';
+    };
+})();
+

@@ -704,15 +704,11 @@ select option {
 }
 
 /* ==============================================================================
-   FEATURE VISIBILITY: EMAIL CENTER & ESQUEMATIZACIÓN (SOLO LOCALHOST)
+   FEATURE VISIBILITY: EMAIL CENTER (SOLO LOCALHOST)
    ============================================================================== */
 .hide-emails-feature #sidebar-item-emails,
 .hide-emails-feature #tab-emails,
-.hide-emails-feature #modal-compose-email,
-.hide-emails-feature #sidebar-item-schema,
-.hide-emails-feature #tab-schema,
-.hide-schema-feature #sidebar-item-schema,
-.hide-schema-feature #tab-schema {
+.hide-emails-feature #modal-compose-email {
     display: none !important;
 }
 
@@ -11600,4 +11596,46 @@ body {
         }
     }
 }
+
+/* =============================================================
+   TARJETAS DE DESCARGA DE SISTEMA (WINDOWS / MACOS)
+   ============================================================= */
+.profile-app-download-card {
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    user-select: none;
+    cursor: pointer;
+}
+
+.profile-app-download-card:hover {
+    transform: translateY(-2px);
+    border-color: #3B82F6 !important;
+    background: #FFFFFF !important;
+    box-shadow: 0 8px 20px -4px rgba(37, 99, 235, 0.12), 0 4px 6px -2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.profile-app-download-card:active {
+    transform: translateY(0);
+}
+
+.profile-app-download-card:hover .download-action-pill {
+    background: #2563EB !important;
+    color: #FFFFFF !important;
+    transform: scale(1.06);
+}
+
+.profile-app-download-card-mac:hover {
+    border-color: #6366F1 !important;
+    box-shadow: 0 8px 20px -4px rgba(99, 102, 241, 0.14), 0 4px 6px -2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.profile-app-download-card-mac:hover .download-action-pill {
+    background: #4F46E5 !important;
+    color: #FFFFFF !important;
+    transform: scale(1.06);
+}
+
+.download-action-pill {
+    transition: all 0.2s ease;
+}
+
 

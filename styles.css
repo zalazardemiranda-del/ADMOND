@@ -704,15 +704,11 @@ select option {
 }
 
 /* ==============================================================================
-   FEATURE VISIBILITY: EMAIL CENTER & ESQUEMATIZACIÓN (SOLO LOCALHOST)
+   FEATURE VISIBILITY: EMAIL CENTER (SOLO LOCALHOST)
    ============================================================================== */
 .hide-emails-feature #sidebar-item-emails,
 .hide-emails-feature #tab-emails,
-.hide-emails-feature #modal-compose-email,
-.hide-emails-feature #sidebar-item-schema,
-.hide-emails-feature #tab-schema,
-.hide-schema-feature #sidebar-item-schema,
-.hide-schema-feature #tab-schema {
+.hide-emails-feature #modal-compose-email {
     display: none !important;
 }
 

@@ -508,16 +508,15 @@ const runInitialAppSetup = async () => {
     }
 
     // Restaurar pestaña activa persistida o desde hash de URL
-    const isLocalhost = window.isLocalhostEnvironment();
     let hashTab = window.location.hash ? window.location.hash.replace('#', '').trim() : '';
     let storedTab = localStorage.getItem("rp_current_tab");
     if (hashTab === 'emails') hashTab = 'schema';
     if (storedTab === 'emails') storedTab = 'schema';
 
     if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'meetings', 'users', 'profile'].includes(hashTab)) {
-        appState.currentTab = (hashTab === 'schema' && !isLocalhost) ? 'tasks' : hashTab;
+        appState.currentTab = hashTab;
     } else if (storedTab) {
-        appState.currentTab = (storedTab === 'schema' && !isLocalhost) ? 'tasks' : storedTab;
+        appState.currentTab = storedTab;
     } else {
         appState.currentTab = 'tasks';
     }
@@ -528,8 +527,8 @@ const runInitialAppSetup = async () => {
         appState.currentAdminFicha = storedAdminFicha;
     }
 
-    // Inicializar Esquematización de Sistema ÚNICAMENTE en localhost
-    if (isLocalhost && typeof initSchemaEngine === 'function') {
+    // Inicializar Esquematización de Sistema
+    if (typeof initSchemaEngine === 'function') {
         initSchemaEngine();
     }
 
@@ -811,6 +810,9 @@ function updateUserSessionUI() {
         if (authNavIcon) authNavIcon.innerText = "login";
         if (authNavLabel) authNavLabel.innerText = "Iniciar Sesión";
     }
+    if (typeof updateUserProfileUI === 'function') {
+        updateUserProfileUI();
+    }
 };
 
 function handleAuthNavItemClick(e) {
@@ -832,10 +834,6 @@ function switchTab(tabName) {
     // Redirigir emails a schema
     if (tabName === 'emails') {
         tabName = 'schema';
-    }
-    // Si no está en localhost, bloquear Esquematización y redirigir a tareas
-    if (tabName === 'schema' && typeof window.isLocalhostEnvironment === 'function' && !window.isLocalhostEnvironment()) {
-        tabName = 'tasks';
     }
 
     const r = (appState.currentRole || '').toLowerCase();
@@ -7421,7 +7419,7 @@ async function handleSaveMyProfile(event) {
     }
 };
 
-function updateUserSessionUI() {
+function updateUserProfileUI() {
 
     if (!appState.currentUser) {
         const storedUser = localStorage.getItem("rp_logged_user");
