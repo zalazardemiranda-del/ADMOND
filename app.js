@@ -283,6 +283,7 @@ const runInitialAppSetup = async () => {
             if (Array.isArray(parsed)) {
                 // Conservar ÚNICAMENTE los proyectos válidos que tengan datos o hayan sido generados
                 appState.operacionesProyectos = parsed.filter(p => p && isProjectGenerado(p) && !isAccidentalEmptyProject(p) && !purgedProjectIds.has(p.id) && !purgedProjectIds.has(p.numProyecto) && !purgedProjectIds.has(p.consecutivo) && !purgedProjectIds.has(p.numConsecutivo));
+                cleanOperacionesLegacyData(appState.operacionesProyectos);
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             }
         }
@@ -9033,21 +9034,30 @@ function syncAllOperacionesToConsecutivo() {
             const ref = String(row.referenciaOp).trim();
             if (purgedIds.has(ref) || ref.endsWith('-')) return;
             const refLower = ref.toLowerCase();
-            const exists = appState.operacionesProyectos.some(p => 
-                [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].some(k => k && String(k).trim().toLowerCase() === refLower)
-            );
+            const exists = appState.operacionesProyectos.some(p => {
+                if (!p) return false;
+                if (typeof areProjectsSame === 'function') {
+                    if (areProjectsSame(p, { id: ref, consecutivo: ref, numConsecutivo: ref, numProyecto: ref })) return true;
+                }
+                return [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].some(k => k && String(k).trim().toLowerCase() === refLower);
+            });
             if (!exists) {
                 const subVal = Number(row.subtotal) || 0;
                 const ivaVal = (row.iva !== undefined && row.iva !== null && row.iva !== '') ? Number(row.iva) : (subVal > 0 ? Math.round(subVal * 0.16 * 100) / 100 : 0);
                 const totVal = (row.total !== undefined && row.total !== null && row.total !== '') ? Number(row.total) : (subVal + ivaVal);
                 const isLavado = (row.servicio && row.servicio.toLowerCase().includes('lavado')) || ref.includes('-L');
+                const defDisplay = (() => {
+                    const d = new Date();
+                    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+                })();
+                const inicioDisplay = row.fechaEmision ? row.fechaEmision.split('-').reverse().map(x => x.padStart(2, '0')).join('/') : defDisplay;
                 const newOp = {
                     id: ref,
                     consecutivo: ref,
                     numConsecutivo: ref,
                     numProyecto: ref,
                     fechaInicio: row.fechaEmision || new Date().toISOString().split('T')[0],
-                    fechaInicioDisplay: row.fechaEmision ? row.fechaEmision.split('-').reverse().join('/') : new Date().toLocaleDateString('es-MX'),
+                    fechaInicioDisplay: inicioDisplay,
                     cliente: row.cliente || '',
                     nombreCliente: row.cliente || '',
                     numOC: row.folioCliente || '',
@@ -9080,6 +9090,7 @@ function syncAllOperacionesToConsecutivo() {
             }
         });
         if (opChanged) {
+            cleanOperacionesLegacyData(appState.operacionesProyectos);
             try {
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             } catch (e) {}
@@ -9595,12 +9606,18 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
 
     validCloudList.forEach(cp => {
         const key = cp.id || cp.consecutivo || cp.numProyecto;
-        const idx = appState.operacionesProyectos.findIndex(p => (p.id || p.consecutivo || p.numProyecto) === key);
+        const idx = appState.operacionesProyectos.findIndex(p => {
+            if (!p) return false;
+            if (typeof areProjectsSame === 'function') return areProjectsSame(p, cp);
+            const pIds = [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean).map(x => String(x).trim().toUpperCase());
+            const cIds = [cp.id, cp.consecutivo, cp.numConsecutivo, cp.numProyecto].filter(Boolean).map(x => String(x).trim().toUpperCase());
+            return pIds.some(x => cIds.includes(x));
+        });
         if (idx === -1) {
             appState.operacionesProyectos.push(cp);
         } else {
             const local = appState.operacionesProyectos[idx];
-            const isCurrentlyActive = (appState.activeOperacionesProjectId === local.id || appState.activeOperacionesProjectId === key);
+            const isCurrentlyActive = (appState.activeOperacionesProjectId === local.id || appState.activeOperacionesProjectId === key || (typeof areProjectsSame === 'function' && areProjectsSame(local, { id: appState.activeOperacionesProjectId, consecutivo: appState.activeOperacionesProjectId })));
             
             // Fusión inteligente campo a campo: NO sobreescribir datos válidos locales con vacíos entrantes, ni viceversa
             const merged = Object.assign({}, local, cp);
@@ -9906,36 +9923,137 @@ function renderMonthEndWarning(proyectos) {
     bannerWrap.style.display = "none";
 };
 
+function areProjectsSame(p1, p2) {
+    if (!p1 || !p2) return false;
+    if (p1 === p2) return true;
+    const getIds = p => [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto]
+        .filter(Boolean)
+        .map(x => String(x).trim().toUpperCase());
+    const ids1 = getIds(p1);
+    const ids2 = getIds(p2);
+    if (ids1.some(id => ids2.includes(id))) return true;
+
+    // Check base consecutivo without suffix, avoiding conflicts (e.g. -F vs -L)
+    const s1 = (String(p1.consecutivo || p1.id || '').trim().toUpperCase().match(/[-_]?([A-Z])$/) || [])[1];
+    const s2 = (String(p2.consecutivo || p2.id || '').trim().toUpperCase().match(/[-_]?([A-Z])$/) || [])[1];
+    if (s1 && s2 && s1 !== s2) return false;
+
+    const getBase = p => {
+        const raw = String(p.consecutivo || p.numConsecutivo || p.numProyecto || p.id || '').trim().toUpperCase();
+        return raw.replace(/[-_]?[A-Z]$/, '');
+    };
+    const b1 = getBase(p1);
+    const b2 = getBase(p2);
+    if (b1 && b2 && b1 === b2 && b1.startsWith('RDP')) return true;
+
+    return false;
+}
+window.areProjectsSame = areProjectsSame;
+
 function cleanOperacionesLegacyData(proyectos) {
     if (!Array.isArray(proyectos)) return;
 
     // Purga y deduplicación de proyectos que terminan en guion '-' (ej: RDP261074-, RDP261075-)
     const purgedIds = window.purgedProjectIds || new Set();
-    const toRemoveIndices = new Set();
-    proyectos.forEach((p, idx) => {
-        if (!p) { toRemoveIndices.add(idx); return; }
+
+    // 1. Filtrar proyectos inválidos, purgados o incompletos con guión colgante
+    for (let i = proyectos.length - 1; i >= 0; i--) {
+        const p = proyectos[i];
+        if (!p) {
+            proyectos.splice(i, 1);
+            continue;
+        }
         const cid = String(p.consecutivo || p.numConsecutivo || p.numProyecto || p.id || '').trim();
         if (purgedIds.has(cid) || purgedIds.has(p.id) || purgedIds.has(p.consecutivo) || cid.endsWith('-')) {
-            toRemoveIndices.add(idx);
-            return;
+            proyectos.splice(i, 1);
         }
-        // Si existe una versión más específica con sufijo (por ejemplo, existe RDP261074-F y este es RDP261074)
-        const hasSpecific = proyectos.some((other, oIdx) => {
-            if (oIdx === idx || !other) return false;
-            const ocid = String(other.consecutivo || other.numConsecutivo || other.numProyecto || other.id || '').trim();
-            return (ocid === `${cid}-F` || ocid === `${cid}-L` || (ocid.startsWith(`${cid}-`) && ocid.length > cid.length));
-        });
-        if (hasSpecific && !cid.includes('-')) {
-            toRemoveIndices.add(idx);
-            return;
+    }
+
+    // 2. Normalizar fechaInicioDisplay en formato estándar DD/MM/YYYY
+    const normalizeFechaDisplay = (p) => {
+        if (!p) return;
+        if (p.fechaInicio) {
+            const parts = String(p.fechaInicio).split('-');
+            if (parts.length === 3) {
+                p.fechaInicioDisplay = `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+                return;
+            }
+        }
+        if (p.fechaInicioDisplay) {
+            const parts = String(p.fechaInicioDisplay).split('/');
+            if (parts.length === 3) {
+                p.fechaInicioDisplay = `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2]}`;
+            }
+        }
+    };
+
+    // 3. Deduplicación y fusión estricta: si hay dos objetos para el mismo proyecto (mismo ID o consecutivo), fusionar sus datos en uno solo
+    const deduplicated = [];
+    proyectos.forEach(p => {
+        normalizeFechaDisplay(p);
+        const existingIdx = deduplicated.findIndex(ex => areProjectsSame(ex, p));
+        if (existingIdx === -1) {
+            deduplicated.push(p);
+        } else {
+            const existing = deduplicated[existingIdx];
+            const pCid = String(p.consecutivo || p.numConsecutivo || p.numProyecto || p.id || '').trim();
+            const exCid = String(existing.consecutivo || existing.numConsecutivo || existing.numProyecto || existing.id || '').trim();
+            const pHasSuffix = /-[A-Z]$/i.test(pCid);
+            const exHasSuffix = /-[A-Z]$/i.test(exCid);
+
+            let canonical = exCid;
+            if (pHasSuffix && (!exHasSuffix || pCid.length >= exCid.length)) {
+                canonical = pCid;
+            }
+
+            const merged = Object.assign({}, existing, p);
+            merged.id = canonical;
+            merged.consecutivo = canonical;
+            merged.numConsecutivo = canonical;
+            merged.numProyecto = canonical;
+
+            ['numFactura', 'factura', 'numOC', 'cliente', 'nombreCliente', 'tipoProyecto', 'servicioName', 'fechaInicio', 'fechaInicioDisplay', 'estatus'].forEach(f => {
+                const exVal = (existing[f] !== undefined && existing[f] !== null) ? String(existing[f]).trim() : '';
+                const pVal = (p[f] !== undefined && p[f] !== null) ? String(p[f]).trim() : '';
+                if (exVal && (!pVal || pVal === '-')) merged[f] = existing[f];
+                else if (pVal && (!exVal || exVal === '-')) merged[f] = p[f];
+                else merged[f] = pVal || exVal;
+            });
+
+            merged.infoViaje = Object.assign({}, existing.infoViaje || {}, p.infoViaje || {});
+            merged.infoLavado = Object.assign({}, existing.infoLavado || {}, p.infoLavado || {});
+
+            if (Array.isArray(existing.partidasConceptos) && existing.partidasConceptos.some(x => x && (x.concepto || x.unitario))) {
+                merged.partidasConceptos = existing.partidasConceptos;
+            } else if (Array.isArray(p.partidasConceptos) && p.partidasConceptos.some(x => x && (x.concepto || x.unitario))) {
+                merged.partidasConceptos = p.partidasConceptos;
+            }
+
+            if (Array.isArray(existing.proveedoresClaves) && existing.proveedoresClaves.some(x => x && (x.proveedor || x.total))) {
+                merged.proveedoresClaves = existing.proveedoresClaves;
+            } else if (Array.isArray(p.proveedoresClaves) && p.proveedoresClaves.some(x => x && (x.proveedor || x.total))) {
+                merged.proveedoresClaves = p.proveedoresClaves;
+            }
+
+            if (existing.documentos && Object.keys(existing.documentos).length > 0) {
+                merged.documentos = Object.assign({}, p.documentos || {}, existing.documentos);
+            } else if (p.documentos) {
+                merged.documentos = p.documentos;
+            }
+
+            if (existing.generado === true || p.generado === true) {
+                merged.generado = true;
+                merged.isDraft = false;
+                merged.isNewProject = false;
+            }
+
+            normalizeFechaDisplay(merged);
+            deduplicated[existingIdx] = merged;
         }
     });
 
-    if (toRemoveIndices.size > 0) {
-        for (let i = proyectos.length - 1; i >= 0; i--) {
-            if (toRemoveIndices.has(i)) proyectos.splice(i, 1);
-        }
-    }
+    proyectos.length = 0;
+    proyectos.push(...deduplicated);
 
     // Limpieza de referencias huérfanas en Consecutivo
     if (appState.consecutivo && Array.isArray(appState.consecutivo)) {
@@ -10235,6 +10353,15 @@ function renderOperaciones() {
     if (appState.operacionesTipoFilter && appState.operacionesTipoFilter !== 'all') {
         filtered = filtered.filter(p => (p.tipoProyecto || 'servicio_local') === appState.operacionesTipoFilter);
     }
+
+    // Deduplicación estricta de vista para garantizar que ningún proyecto se repita en la tabla
+    const seenDisplayIds = new Set();
+    filtered = filtered.filter(p => {
+        const key = String(p.consecutivo || p.numConsecutivo || p.numProyecto || p.id || '').trim().toUpperCase();
+        if (!key || seenDisplayIds.has(key)) return false;
+        seenDisplayIds.add(key);
+        return true;
+    });
 
     // 4. Renderizar Tabla
     const tbody = document.getElementById("tbody-operaciones-proyectos");
@@ -10829,6 +10956,13 @@ function closeOperacionesDetail() {
         appState.draftOperacionesProject = null;
     }
 
+    if (Array.isArray(appState.operacionesProyectos)) {
+        cleanOperacionesLegacyData(appState.operacionesProyectos);
+        try {
+            localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+        } catch (e) {}
+    }
+
     const listPane = document.getElementById("operaciones-view-list");
     const detailPane = document.getElementById("operaciones-view-detail");
     const topbarBack = document.getElementById("op-detail-topbar");
@@ -10917,11 +11051,9 @@ function updateProjectHeaderField(key, val) {
         p.numConsecutivo = cleanVal;
         p.consecutivo = cleanVal;
         p.numProyecto = cleanVal;
-        if (p.isDraft || !isProjectGenerado(p) || p.id === appState.activeOperacionesProjectId) {
-            if (cleanVal) {
-                p.id = cleanVal;
-                appState.activeOperacionesProjectId = cleanVal;
-            }
+        if (cleanVal) {
+            p.id = cleanVal;
+            appState.activeOperacionesProjectId = cleanVal;
         }
         document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = cleanVal || "-");
     }
@@ -13583,7 +13715,8 @@ function openNuevoProyectoModal() {
     }
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const todayDisplay = new Date().toLocaleDateString('es-MX');
+    const todayParts = todayStr.split('-');
+    const todayDisplay = `${todayParts[2].padStart(2, '0')}/${todayParts[1].padStart(2, '0')}/${todayParts[0]}`;
 
     const initTipo = 'servicio_local';
     const initConsecutivo = generateProjectConsecutivo(initTipo);
