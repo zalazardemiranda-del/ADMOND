@@ -377,13 +377,13 @@ const runInitialAppSetup = async () => {
         }
     }
     
-    // Por defecto todas las operaciones empiezan en "por cobrar" ('C') y cancelados en "Por programar" ('PROG')
+    // Por defecto todas las operaciones empiezan en "por cobrar" ('C') y cancelados en "Por programar" ('PP')
     if (appState.consecutivo && Array.isArray(appState.consecutivo)) {
         appState.consecutivo.forEach(item => {
             const stVal = String(item.st || '').trim().toUpperCase();
             const isCanceled = String(item.fechaEmision || '').toLowerCase().includes('cancel') || String(item.cliente || '').toLowerCase().includes('cancel') || stVal === 'CANCELADO';
-            if (isCanceled || stVal === 'CANCELADO' || stVal === 'PROG' || stVal === 'POR PROGRAMAR') {
-                item.st = 'PROG';
+            if (isCanceled || stVal === 'CANCELADO' || stVal === 'PROG' || stVal === 'POR PROGRAMAR' || stVal === 'PP') {
+                item.st = 'PP';
             } else if (stVal === 'P') {
                 item.st = 'P';
             } else if (item.referenciaOp || item.factura || item.subtotal || item.total) {
@@ -5431,15 +5431,15 @@ window.fetchConsecutivoLockFromCloud = fetchConsecutivoLockFromCloud;
 function getFilteredConsecutivoList() {
     let list = appState.consecutivo || [];
     
-    // 1. ST Filter (P = Pagados, C = Por Cobrar, PROG = Por programar)
+    // 1. ST Filter (P = Pagados, C = Por Cobrar, PP / PROG = Por programar)
     if (appState.consecutivoStFilter === 'P') {
         list = list.filter(item => (item.st || '').trim().toUpperCase() === 'P');
     } else if (appState.consecutivoStFilter === 'C') {
         list = list.filter(item => (item.st || '').trim().toUpperCase() === 'C');
-    } else if (appState.consecutivoStFilter === 'PROG' || appState.consecutivoStFilter === 'Cancelado') {
+    } else if (appState.consecutivoStFilter === 'PP' || appState.consecutivoStFilter === 'PROG' || appState.consecutivoStFilter === 'Cancelado') {
         list = list.filter(item => {
             const st = String(item.st || '').trim().toUpperCase();
-            return st === 'PROG' || st === 'POR PROGRAMAR' || st === 'CANCELADO' ||
+            return st === 'PP' || st === 'PROG' || st === 'POR PROGRAMAR' || st === 'CANCELADO' ||
                 String(item.fechaEmision || '').toLowerCase().includes('cancel') ||
                 String(item.cliente || '').toLowerCase().includes('cancel');
         });
@@ -5522,13 +5522,13 @@ function renderConsecutivo() {
             const isCanceled = String(item.fechaEmision || '').toLowerCase().includes('cancel') || String(item.cliente || '').toLowerCase().includes('cancel') || String(item.st || '').toLowerCase().includes('cancel');
             
             const stVal = String(item.st || '').trim().toUpperCase();
-            const isProg = stVal === 'PROG' || stVal === 'POR PROGRAMAR' || isCanceled || stVal === 'CANCELADO';
+            const isProg = stVal === 'PP' || stVal === 'PROG' || stVal === 'POR PROGRAMAR' || isCanceled || stVal === 'CANCELADO';
             
             let stBadgeClass = 'st-badge-empty';
             let stDisplay = '-';
             if (isProg) {
-                stBadgeClass = 'st-badge-prog';
-                stDisplay = 'Prog';
+                stBadgeClass = 'st-badge-pp';
+                stDisplay = 'PP';
             } else if (stVal === 'C') {
                 stBadgeClass = 'st-badge-c';
                 stDisplay = 'C';
@@ -5584,15 +5584,15 @@ function renderConsecutivo() {
                             </div>
                             <div class="st-dropdown-option ${stVal === 'P' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'P', event)">
                                 <span class="st-badge st-badge-p">P</span>
-                                <span class="option-name">Pagado</span>
+                                <span class="option-name">Pagado (P)</span>
                             </div>
                             <div class="st-dropdown-option ${stVal === 'C' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'C', event)">
                                 <span class="st-badge st-badge-c">C</span>
-                                <span class="option-name">Por Cobrar</span>
+                                <span class="option-name">Por Cobrar (C)</span>
                             </div>
-                            <div class="st-dropdown-option ${isProg ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'PROG', event)">
-                                <span class="st-badge st-badge-prog">Prog</span>
-                                <span class="option-name">Por programar</span>
+                            <div class="st-dropdown-option ${isProg ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'PP', event)">
+                                <span class="st-badge st-badge-pp">PP</span>
+                                <span class="option-name">Por programar (PP)</span>
                             </div>
                         </div>
                     </div>
@@ -5890,10 +5890,17 @@ function handleConsecutivoSearch(val) {
 
 function filterConsecutivoByST(st, btn) {
     window.filterConsecutivoByST = filterConsecutivoByST;
-    appState.consecutivoStFilter = st;
+    const normSt = (st === 'PROG' || st === 'Por programar') ? 'PP' : st;
+    appState.consecutivoStFilter = normSt;
     appState.consecutivoPage = 1;
     document.querySelectorAll(".consecutivo-filter-btn").forEach(b => b.classList.remove("active"));
-    if (btn) btn.classList.add("active");
+    if (btn && typeof btn.classList?.add === 'function') {
+        btn.classList.add("active");
+    } else {
+        const activeBtn = document.querySelector(`.consecutivo-filter-btn[data-st='${normSt}']`) ||
+                          document.querySelector(`.consecutivo-filter-btn[data-st='${st}']`);
+        if (activeBtn) activeBtn.classList.add("active");
+    }
     renderConsecutivo();
 };
 
@@ -6036,7 +6043,7 @@ document.addEventListener("click", function(event) {
     if (!event.target.closest(".custom-select-wrapper")) {
         document.querySelectorAll(".custom-select-wrapper").forEach(w => w.classList.remove("open"));
     }
-    if (!event.target.closest(".st-custom-dropdown-wrap")) {
+    if (!event.target.closest(".st-custom-dropdown-wrap") && !event.target.closest(".st-dropdown-menu")) {
         document.querySelectorAll(".st-custom-dropdown-wrap.open").forEach(w => w.classList.remove("open"));
     }
     const globalProvMenu = document.getElementById("global-prov-estatus-menu");
@@ -6054,13 +6061,14 @@ document.addEventListener("click", function(event) {
 });
 
 // Close dropdowns on scroll
-window.addEventListener("scroll", function() {
+window.addEventListener("scroll", function(e) {
+    if (e && e.target && e.target.closest && (e.target.closest(".st-dropdown-menu") || e.target.closest(".st-custom-dropdown-wrap"))) return;
     document.querySelectorAll(".st-custom-dropdown-wrap.open").forEach(w => w.classList.remove("open"));
     const globalProvMenu = document.getElementById("global-prov-estatus-menu");
     if (globalProvMenu && globalProvMenu.style.display === "block") {
         globalProvMenu.style.display = "none";
     }
-}, true);
+}, false);
 
 // Custom Dropdown Handlers for Consecutivo Cliente Filter & ST Badges
 function toggleConsecutivoClientDropdown(event) {
@@ -6156,8 +6164,8 @@ function selectStOption(index, value, event) {
     if (!row) return;
 
     let finalVal = value;
-    if (value === 'PROG' || value === 'Por programar' || String(value).toLowerCase().includes('cancel')) {
-        finalVal = 'PROG';
+    if (value === 'PROG' || value === 'Por programar' || String(value).toLowerCase().includes('cancel') || value === 'PP') {
+        finalVal = 'PP';
     }
 
     // 1 Pagados se activa el filtro de pagado y así mismo se añade la fecha , para que proceda a archivarse
@@ -6165,6 +6173,13 @@ function selectStOption(index, value, event) {
         if (!row.fechaPago || row.fechaPago === '-' || row.fechaPago === '') {
             row.fechaPago = new Date().toISOString().split('T')[0];
         }
+        // Activar el filtro de pagados de inmediato para que la fila continúe visible y no desaparezca la tabla
+        appState.consecutivoStFilter = 'P';
+        appState.consecutivoPage = 1;
+        document.querySelectorAll(".consecutivo-filter-btn").forEach(b => {
+            if (b.getAttribute("data-st") === 'P') b.classList.add("active");
+            else b.classList.remove("active");
+        });
     }
 
     row.st = finalVal;
@@ -6180,14 +6195,19 @@ function selectStOption(index, value, event) {
             String(p.numProyecto || p.consecutivo || p.numConsecutivo || p.id).trim().toLowerCase() === refId
         );
         if (proj) {
-            if (finalVal === 'PROG') {
+            if (finalVal === 'PP' || finalVal === 'PROG') {
                 proj.estatus = 'POR PROGRAMAR';
                 proj.cancelado = false;
             } else if (finalVal === 'P') {
                 proj.fechaPago = row.fechaPago;
                 proj.listoParaArchivar = true;
                 proj.cancelado = false;
-                proj.estatus = computeProjectStatus(proj);
+                proj.estatus = 'PAGADO';
+            } else if (finalVal === 'C') {
+                proj.cancelado = false;
+                if (proj.estatus === 'CANCELADO' || proj.estatus === 'POR PROGRAMAR') {
+                    proj.estatus = 'PENDIENTE';
+                }
             } else {
                 proj.cancelado = false;
                 proj.estatus = computeProjectStatus(proj);
@@ -6204,6 +6224,10 @@ function selectStOption(index, value, event) {
     if (finalVal === 'P') {
         if (typeof showCustomNotification === 'function') {
             showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Pagada con fecha ${formatProvTableDate(row.fechaPago)}. Lista para proceder al archivo.`, "success");
+        }
+    } else if (finalVal === 'PP') {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Por programar (PP).`, "info");
         }
     }
 
@@ -6972,6 +6996,8 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'consecutivo_update' }, payload => {
         const data = payload.payload;
         if (!data || !Array.isArray(data.consecutivo)) return;
+        if (data.sender && appState.currentUser?.email && data.sender === appState.currentUser.email) return;
+        if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
         if (typeof window.mergeConsecutivoFromCloud === 'function') {
             window.mergeConsecutivoFromCloud(data.consecutivo);
         }
@@ -7260,8 +7286,10 @@ function setupRealtimeSubscriptions() {
                             await window.fetchGastosIndirectosFromCloud();
                         }
                     } else if (appState.currentAdminFicha === 'consecutivo') {
-                        if (typeof window.fetchConsecutivoFromCloud === 'function') {
-                            await window.fetchConsecutivoFromCloud();
+                        if (!appState.isEditingConsecutivo && !document.querySelector(".st-custom-dropdown-wrap.open")) {
+                            if (typeof window.fetchConsecutivoFromCloud === 'function') {
+                                await window.fetchConsecutivoFromCloud();
+                            }
                         }
                         if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
                             await window.fetchConsecutivoLockFromCloud();
@@ -7407,8 +7435,10 @@ async function fetchCloudData() {
         }
 
         // Sincronizar registros de Consecutivo (nube <-> local para todos los usuarios)
-        if (typeof window.fetchConsecutivoFromCloud === 'function') {
-            await window.fetchConsecutivoFromCloud();
+        if (!appState.isEditingConsecutivo && !document.querySelector(".st-custom-dropdown-wrap.open")) {
+            if (typeof window.fetchConsecutivoFromCloud === 'function') {
+                await window.fetchConsecutivoFromCloud();
+            }
         }
         if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
             await window.fetchConsecutivoLockFromCloud();
@@ -10579,7 +10609,9 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
         row.total = tot;
     }
     if (p.cancelado || p.estatus === 'CANCELADO') {
-        row.st = 'PROG';
+        if (!row.st || row.st === 'PROG' || row.st === 'PP') {
+            row.st = 'PP';
+        }
     } else if (p.archivado || p.estatus === 'CERRADO') {
         if (!row.st) row.st = 'C';
     } else if (!row.st) {
@@ -10820,6 +10852,7 @@ window.syncConsecutivoToCloud = syncConsecutivoToCloud;
 async function fetchConsecutivoFromCloud() {
     window.fetchConsecutivoFromCloud = fetchConsecutivoFromCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
@@ -10846,7 +10879,8 @@ window.fetchConsecutivoFromCloud = fetchConsecutivoFromCloud;
 
 function mergeConsecutivoFromCloud(cloudList) {
     window.mergeConsecutivoFromCloud = mergeConsecutivoFromCloud;
-    if (!Array.isArray(cloudList)) return;
+    if (!Array.isArray(cloudList) || cloudList.length === 0) return;
+    if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
     const purgedIds = window.purgedProjectIds || new Set();
 
     const validList = cloudList.filter(row => {
@@ -10857,6 +10891,13 @@ function mergeConsecutivoFromCloud(cloudList) {
     });
 
     if (validList.length > 0) {
+        // Evitar re-renders destructivos si los datos no cambiaron
+        const currentDataStr = JSON.stringify(appState.consecutivo || []);
+        const newDataStr = JSON.stringify(validList);
+        if (currentDataStr === newDataStr) {
+            return;
+        }
+
         appState.consecutivo = validList;
         appState.consecutivo.forEach((row, idx) => {
             row.consecutivo = idx + 1;

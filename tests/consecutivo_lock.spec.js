@@ -211,13 +211,13 @@ test("5. Estatus Pagados (P) añade automáticamente la fecha de pago", async ({
   expect(item.fechaPago).toBeTruthy();
 });
 
-test("6. Filtro Cancelados ahora es 'Por programar' (PROG) y las operaciones empiezan en 'por cobrar' (C)", async ({ page }) => {
+test("6. Filtro Cancelados ahora es 'PP' (Por programar) y las operaciones empiezan en 'por cobrar' (C)", async ({ page }) => {
   await openAppAsAdmin(page);
 
-  // Verificar que el botón de filtro dice 'Por programar'
-  const progBtn = page.locator(".consecutivo-filter-btn[data-st='PROG']");
-  await expect(progBtn).toBeVisible();
-  await expect(progBtn).toContainText("Por programar");
+  // Verificar que el botón de filtro dice 'PP'
+  const ppBtn = page.locator(".consecutivo-filter-btn[data-st='PP']");
+  await expect(ppBtn).toBeVisible();
+  await expect(ppBtn).toContainText("PP");
 
   // Sincronizar un proyecto desde Operaciones a Consecutivo y verificar que empieza en 'C'
   await page.evaluate(() => {
@@ -247,3 +247,71 @@ test("6. Filtro Cancelados ahora es 'Por programar' (PROG) y las operaciones emp
   const kpiText = await kpiTotal.innerText();
   expect(kpiText).not.toBe("$0.00");
 });
+
+test("7. Cambiar estatus de PP a P mantiene la tabla visible, activa filtro Pagados y no se esfuma el dropdown", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  // Cargar registro de prueba con estatus PP
+  await page.evaluate(() => {
+    window.appState.consecutivo = [{
+      consecutivo: 1,
+      factura: 'FE-555',
+      fechaEmision: '2026-10-12',
+      cliente: 'CLIENTE PP TEST',
+      folioCliente: 'OC-555',
+      subtotal: 8000,
+      iva: 1280,
+      total: 9280,
+      st: 'PP',
+      fechaPago: '',
+      referenciaOp: 'RDP-555',
+      servicio: 'Flete Local'
+    }];
+    window.filterConsecutivoByST('PP');
+    window.startEditingConsecutivo();
+  });
+  await page.waitForTimeout(300);
+
+  // Verificar que la fila con badge PP es visible
+  const ppBadge = page.locator("#tbody-consecutivo .st-badge-trigger.st-badge-pp");
+  await expect(ppBadge).toBeVisible();
+  await expect(ppBadge).toContainText("PP");
+
+  // Abrir el menú dropdown de ST
+  await ppBadge.click();
+  await page.waitForTimeout(200);
+
+  // Verificar que el menú se abre y contiene la opción 'Pagado (P)' y 'Por programar (PP)'
+  const menu = page.locator("#st-menu-0");
+  await expect(menu).toBeVisible();
+  await expect(menu.locator(".option-name:has-text('Por programar (PP)')")).toBeVisible();
+  await expect(menu.locator(".option-name:has-text('Pagado (P)')")).toBeVisible();
+
+  // Simular que corre fetchConsecutivoFromCloud en segundo plano y verificar que NO cierra el dropdown
+  await page.evaluate(async () => {
+    if (typeof window.fetchConsecutivoFromCloud === 'function') {
+      await window.fetchConsecutivoFromCloud();
+    }
+  });
+  await page.waitForTimeout(300);
+  await expect(menu).toBeVisible();
+
+  // Seleccionar la opción 'Pagado (P)'
+  const optionP = menu.locator(".st-dropdown-option:has-text('Pagado (P)')");
+  await optionP.click();
+  await page.waitForTimeout(300);
+
+  // Verificar que el filtro de Pagados (P) se activó automáticamente y la fila sigue visible
+  const activeFilterBtn = page.locator(".consecutivo-filter-btn.active");
+  await expect(activeFilterBtn).toHaveAttribute("data-st", "P");
+
+  // La tabla NO se esfuma: la fila sigue visible en la tabla con el badge P y fecha asignada
+  const pBadge = page.locator("#tbody-consecutivo .st-badge-trigger.st-badge-p");
+  await expect(pBadge).toBeVisible();
+  await expect(pBadge).toContainText("P");
+
+  const row = await page.evaluate(() => window.appState.consecutivo[0]);
+  expect(row.st).toBe("P");
+  expect(row.fechaPago).toBeTruthy();
+});
+

@@ -3575,7 +3575,8 @@ input.excel-p-flag-x {
     color: #DC2626;
 }
 
-.st-badge-prog {
+.st-badge-prog,
+.st-badge-pp {
     background: rgba(245, 158, 11, 0.15);
     color: #D97706;
 }
