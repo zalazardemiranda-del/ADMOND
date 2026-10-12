@@ -1885,6 +1885,7 @@ function updateNominaCell(index, key, val) {
         // No guardar en localStorage ni nube hasta dar clic en "Guardar"
     }
 };
+window.updateNominaCell = updateNominaCell;
 
 function updateNominaManualTotal(index, val) {
     window.updateNominaManualTotal = updateNominaManualTotal;

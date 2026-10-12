@@ -883,7 +883,7 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
   // Editar un valor en Nóminas: no se guarda en localStorage hasta dar clic en Guardar
   const prevNominaVal = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_nominas_data') || '[]')[0]?.nomina || 2000);
   await page.evaluate(() => {
-    window.updateNominaValue(0, 'nomina', 3500);
+    window.updateNominaCell(0, 'nomina', 3500);
   });
   const storedBeforeSaveNomina = await page.evaluate(() => {
     const raw = localStorage.getItem('rp_nominas_data');
@@ -964,8 +964,10 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
 
   // Editar concepto y subtotal: verificar que no se guarda en localStorage hasta dar clic en Guardar
   await page.evaluate(() => {
-    window.updateGastoIndirectoField(0, 'concepto', 'Carga diésel unidades');
-    window.liveUpdateGastoIndirectoNumber(0, 'subtotal', '1000');
+    window.updateGastoIndirectoCell(0, 'concepto', 'Carga diésel unidades');
+    const subInput = document.getElementById('gi-subtotal-input-0');
+    if (subInput) subInput.value = '1000';
+    window.liveUpdateGastoIndirectoTotals(0);
   });
   const giStoredBeforeSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_gastos_indirectos') || '[]'));
   expect(giStoredBeforeSave.length).toBe(0);
