@@ -1133,7 +1133,7 @@
 
                                 <div class="ficha-text">
 
-                                    <h4>Administración Quincenal</h4>
+                                    <h4>Administración</h4>
 
                                 </div>
 
@@ -1491,11 +1491,23 @@
 
 
 
-                        <!-- SUB-FICHA 2: ADMINISTRACIÓN QUINCENAL (Nóminas - Imagen 3) -->
+                        <!-- SUB-FICHA 2: ADMINISTRACIÓN (Nóminas y Gastos Indirectos - Imagen 4) -->
 
                         <div class="admin-subpane" id="admin-subpane-quincenal">
 
-                            <div class="card table-card full-width-card">
+                            <!-- Selector de sub-sección: Cargar Quincenas vs Gastos Indirectos -->
+                            <div class="admin-tabs-segmented" style="display: flex; gap: 12px; margin-bottom: 20px;">
+                                <button type="button" class="btn-segmented active" id="btn-subtab-quincenas" onclick="switchAdminSubSection('quincenas')" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 14px; border: 1.5px solid #2563EB; background: #2563EB; color: #FFFFFF; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 6px rgba(37,99,235,0.25);">
+                                    <span class="material-symbols-outlined" style="font-size: 20px;">payments</span> Cargar Quincenas (Nóminas)
+                                </button>
+                                <button type="button" class="btn-segmented" id="btn-subtab-gastos-ind" onclick="switchAdminSubSection('gastos-indirectos')" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 14px; border: 1.5px solid rgba(15,23,42,0.15); background: #FFFFFF; color: #475569; cursor: pointer; transition: all 0.2s ease;">
+                                    <span class="material-symbols-outlined" style="font-size: 20px;">receipt_long</span> Gastos Indirectos
+                                </button>
+                            </div>
+
+                            <!-- SECCIÓN 1: CARGAR QUINCENAS / NÓMINAS -->
+                            <div id="admin-sec-quincenas" class="admin-section-block">
+                                <div class="card table-card full-width-card">
 
                                 <div class="table-card-header">
 
@@ -1576,6 +1588,45 @@
                                 </div>
 
                             </div>
+                            </div><!-- Fin admin-sec-quincenas -->
+
+                            <!-- SECCIÓN 2: GASTOS INDIRECTOS (Imagen 4) -->
+                            <div id="admin-sec-gastos-indirectos" class="admin-section-block" style="display: none;">
+                                <div class="card table-card full-width-card">
+                                    <div class="table-card-header">
+                                        <div class="table-title-area">
+                                            <h3>Gastos Indirectos</h3>
+                                            <p>Control, registro y cálculo de gastos indirectos y operativos</p>
+                                        </div>
+                                        <div class="table-actions" style="display: flex; gap: 10px; align-items: center;">
+                                            <button type="button" class="btn btn-primary" onclick="addNewGastoIndirectoRow()">
+                                                <span class="material-symbols-outlined">add_circle</span> + Añadir Gasto Indirecto
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="table-responsive">
+                                        <table class="admond-table excel-style-table" id="table-gastos-indirectos">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width: 7%; text-align: center;">Folio</th>
+                                                    <th style="width: 9%; text-align: center;">Fecha</th>
+                                                    <th style="width: 25%; text-align: left; padding-left: 8px;">Concepto / Descripción</th>
+                                                    <th style="width: 15%; text-align: left; padding-left: 8px;">Categoría</th>
+                                                    <th style="width: 9%; text-align: right; padding-right: 6px;">Subtotal</th>
+                                                    <th style="width: 8%; text-align: right; padding-right: 6px;">IVA</th>
+                                                    <th style="width: 10%; text-align: right; padding-right: 6px;">Total</th>
+                                                    <th style="width: 11%; text-align: center;">Factura / Ref</th>
+                                                    <th style="width: 6%; text-align: center;">Acción</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tbody-gastos-indirectos">
+                                                <!-- Dynamic Gastos Indirectos rows -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div><!-- Fin admin-sec-gastos-indirectos -->
 
                         </div>
 
@@ -1689,13 +1740,13 @@
 
 
 
-                                    <!-- Filtros de Estatus: P = Por pagar, C = Por cobrar (Imagen 5) -->
+                                    <!-- Filtros de Estatus: P = Por pagar, Programar a pago, Pagado, Cancelado (Imágenes 1 y 3) -->
 
                                     <div class="proveedor-status-filter-group" id="proveedor-status-filter-group">
 
                                         <span class="chips-label">Estatus:</span>
 
-                                        <button type="button" class="btn-status-filter active" id="btn-status-filter-all" onclick="filterProveedoresByStatus('all', this)">
+                                        <button type="button" class="btn-status-filter active" id="btn-status-filter-all" onclick="filterProveedoresByStatus('all', this)" title="Visualizar todos los documentos incluso archivados">
 
                                             Todos (<span id="count-status-all">0</span>)
 
@@ -1707,9 +1758,15 @@
 
                                         </button>
 
-                                        <button type="button" class="btn-status-filter btn-status-c" id="btn-status-filter-c" onclick="filterProveedoresByStatus('C', this)" title="Filtrar Por cobrar (C)">
+                                        <button type="button" class="btn-status-filter btn-status-prog" id="btn-status-filter-prog" onclick="filterProveedoresByStatus('PROG', this)" title="Filtrar Programar a pago">
 
-                                            C - Por cobrar (<span id="count-status-c">0</span>)
+                                            Programar a pago (<span id="count-status-prog">0</span>)
+
+                                        </button>
+
+                                        <button type="button" class="btn-status-filter btn-status-pagado" id="btn-status-filter-pagado" onclick="filterProveedoresByStatus('PAGADO', this)" title="Filtrar Pagado">
+
+                                            Pagado (<span id="count-status-pagado">0</span>)
 
                                         </button>
 
@@ -1733,27 +1790,29 @@
 
                                             <tr>
 
-                                                <th style="width: 7.5%; text-align: center;">Factura<br>proveedor</th>
+                                                <th style="width: 7%; text-align: center;">Factura<br>proveedor</th>
 
-                                                <th style="width: 20%; text-align: left; padding-left: 8px;">Proveedor</th>
+                                                <th style="width: 18%; text-align: left; padding-left: 8px;">Proveedor</th>
 
-                                                <th style="width: 8.5%; text-align: center;">Fecha</th>
+                                                <th style="width: 8%; text-align: center;">Fecha</th>
 
-                                                <th style="width: 11%; text-align: left; padding-left: 8px;">Servicio</th>
+                                                <th style="width: 10%; text-align: left; padding-left: 8px;">Servicio</th>
 
                                                 <th style="width: 7%; text-align: right; padding-right: 6px;">Sub total</th>
 
-                                                <th style="width: 6.5%; text-align: right; padding-right: 6px;">IVA</th>
+                                                <th style="width: 6%; text-align: right; padding-right: 6px;">IVA</th>
 
-                                                <th style="width: 7.5%; text-align: right; padding-right: 6px;">Retención<br>4%</th>
+                                                <th style="width: 6.5%; text-align: right; padding-right: 6px;">Retención<br>4%</th>
 
-                                                <th style="width: 7.5%; text-align: right; padding-right: 6px;">Retención<br>ISR</th>
+                                                <th style="width: 6.5%; text-align: right; padding-right: 6px;">Retención<br>ISR</th>
 
-                                                <th style="width: 7.5%; text-align: right; padding-right: 6px;">Total</th>
+                                                <th style="width: 7%; text-align: right; padding-right: 6px;">Total</th>
 
-                                                <th style="width: 5.5%; text-align: center;">Estatus</th>
+                                                <th style="width: 7.5%; text-align: center;">Estatus</th>
 
-                                                <th style="width: 7%; text-align: center;">Factura</th>
+                                                <th style="width: 8.5%; text-align: center;">Fecha de<br>pago</th>
+
+                                                <th style="width: 6.5%; text-align: center;">Factura</th>
 
                                                 <th style="width: 6.5%; text-align: center;">OP</th>
 

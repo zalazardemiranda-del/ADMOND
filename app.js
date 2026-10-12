@@ -91,6 +91,8 @@ let appState = {
     // Administration Data
     proveedores: [],
     nominas: [],
+    gastosIndirectos: [],
+    adminSubSection: 'quincenas', // 'quincenas' o 'gastos-indirectos'
     archivosQuincenales: [],
     viewingArchiveId: null,
     concepts: defaultConcepts,
@@ -299,22 +301,40 @@ const runInitialAppSetup = async () => {
     appState.proveedores = Array.isArray(storedProv) ? storedProv : [];
     appState.nominas = JSON.parse(localStorage.getItem('rp_nominas_data')) || defaultNominas;
     appState.archivosQuincenales = JSON.parse(localStorage.getItem('rp_archivos_quincenales')) || [];
+    try {
+        appState.gastosIndirectos = JSON.parse(localStorage.getItem('rp_gastos_indirectos')) || [];
+    } catch(e) {
+        appState.gastosIndirectos = [];
+    }
     appState.viewingArchiveId = null;
     let storedProvNames = [];
     try {
         storedProvNames = JSON.parse(localStorage.getItem('rp_proveedor_names')) || [];
     } catch(e) {}
-    // Purga definitiva de proveedores no deseados (Jennifer y Rama)
-    storedProvNames = storedProvNames.filter(n => {
+    // Purga y normalización de proveedores (corrección de errores tipográficos como TRASNPORTES RAMIRES -> TRANSPORTES RAMIREZ)
+    storedProvNames = storedProvNames.map(n => {
+        const s = String(n || '').trim();
+        if (s.toLowerCase() === 'trasnportes ramires' || s.toLowerCase() === 'transportes ramires') return 'TRANSPORTES RAMIREZ';
+        return s;
+    }).filter(n => {
         const lower = String(n || '').trim().toLowerCase();
-        return lower !== 'jennifer' && lower !== 'rama';
+        return lower !== 'jennifer' && lower !== 'rama' && !lower.includes('-- seleccionar') && lower !== '';
     });
-    defaultProveedorNames.forEach(n => {
-        if (!storedProvNames.some(s => s.toLowerCase() === n.toLowerCase())) {
-            storedProvNames.push(n);
+    const provSeen = new Set();
+    const dedupedProv = [];
+    storedProvNames.forEach(n => {
+        const low = n.toLowerCase();
+        if (!provSeen.has(low)) {
+            provSeen.add(low);
+            dedupedProv.push(n);
         }
     });
-    appState.proveedorNamesList = storedProvNames;
+    defaultProveedorNames.forEach(n => {
+        if (!dedupedProv.some(s => s.toLowerCase() === n.toLowerCase())) {
+            dedupedProv.push(n);
+        }
+    });
+    appState.proveedorNamesList = dedupedProv;
     try {
         localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
     } catch(e) {}
@@ -634,6 +654,7 @@ function saveToStorage() {
         if (appState.meetings) localStorage.setItem('rp_meetings', JSON.stringify(appState.meetings));
         if (appState.proveedores) localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
         if (appState.nominas) localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
+        if (appState.gastosIndirectos) localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos));
         if (appState.archivosQuincenales) localStorage.setItem('rp_archivos_quincenales', JSON.stringify(appState.archivosQuincenales));
         if (appState.concepts) localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts));
         if (appState.proveedorNamesList) localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
@@ -947,7 +968,11 @@ function renderAdministracion() {
     if (appState.currentAdminFicha === 'visualizacion') {
         renderVisualizacion();
     } else if (appState.currentAdminFicha === 'quincenal') {
-        renderNominas();
+        if (typeof window.switchAdminSubSection === 'function') {
+            window.switchAdminSubSection(appState.adminSubSection || 'quincenas');
+        } else {
+            renderNominas();
+        }
     } else if (appState.currentAdminFicha === 'proveedores') {
         if (typeof window.syncAllOperacionesToProveedores === 'function') {
             window.syncAllOperacionesToProveedores();
@@ -985,7 +1010,12 @@ function calculateAdminTotals() {
     });
     
     const subtotal2 = subtotal1 - totalGastosProveedores;
-    const gastosInd = Number(appState.concepts.gastosInd) || 670;
+    let gastosInd = Number(appState.concepts.gastosInd) || 670;
+    if (appState.gastosIndirectos && appState.gastosIndirectos.length > 0) {
+        let sumGI = 0;
+        appState.gastosIndirectos.forEach(g => { sumGI += Number(g.total) || 0; });
+        if (sumGI > 0) gastosInd = sumGI;
+    }
     const subtotal3 = subtotal2 - gastosInd;
     
     // Sum from nóminas table
@@ -1193,6 +1223,7 @@ function renderNominas() {
         item.total = calculatedTotal;
 
         const tr = document.createElement("tr");
+        tr.setAttribute("data-row-key", `nom_${index}`);
         tr.setAttribute("oncontextmenu", `if(confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
         tr.title = "Clic derecho para eliminar fila";
         tr.innerHTML = `
@@ -1516,6 +1547,358 @@ async function fetchNominasFromCloud() {
 window.fetchNominasFromCloud = fetchNominasFromCloud;
 
 // ---------------------------------------------------------------------------------
+// 5b. SUB-SECCIÓN: GASTOS INDIRECTOS (IMAGEN 4)
+// ---------------------------------------------------------------------------------
+let _syncGastosIndirectosTimer = null;
+function syncGastosIndirectosToCloud(forceImmediate = false) {
+    window.syncGastosIndirectosToCloud = syncGastosIndirectosToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    const doSync = async () => {
+        try {
+            const list = appState.gastosIndirectos || [];
+            await client.from('messages').insert({
+                chat_id: '__cloud_sync_gastos_indirectos__',
+                contenido: JSON.stringify(list),
+                emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                emisor_role: 'sistema'
+            });
+        } catch (e) {
+            console.warn("⚠️ Error persisting gastos indirectos to Supabase:", e);
+        }
+    };
+
+    if (_syncGastosIndirectosTimer) clearTimeout(_syncGastosIndirectosTimer);
+    if (forceImmediate) {
+        doSync();
+    } else {
+        _syncGastosIndirectosTimer = setTimeout(doSync, 500);
+    }
+}
+window.syncGastosIndirectosToCloud = syncGastosIndirectosToCloud;
+
+function broadcastGastosIndirectosUpdate() {
+    window.broadcastGastosIndirectosUpdate = broadcastGastosIndirectosUpdate;
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'gastos_indirectos_update',
+                payload: {
+                    gastosIndirectos: appState.gastosIndirectos || [],
+                    sender: appState.currentUser?.email || 'admin',
+                    timestamp: new Date().toISOString()
+                }
+            });
+        } catch (e) {
+            console.warn("⚠️ Error broadcasting gastos indirectos update:", e);
+        }
+    }
+    syncGastosIndirectosToCloud();
+}
+window.broadcastGastosIndirectosUpdate = broadcastGastosIndirectosUpdate;
+
+let _debouncedGastosIndTimer = null;
+function debouncedBroadcastGastosIndirectos() {
+    window.debouncedBroadcastGastosIndirectos = debouncedBroadcastGastosIndirectos;
+    if (_debouncedGastosIndTimer) clearTimeout(_debouncedGastosIndTimer);
+    _debouncedGastosIndTimer = setTimeout(() => {
+        broadcastGastosIndirectosUpdate();
+    }, 250);
+}
+window.debouncedBroadcastGastosIndirectos = debouncedBroadcastGastosIndirectos;
+
+async function fetchGastosIndirectosFromCloud() {
+    window.fetchGastosIndirectosFromCloud = fetchGastosIndirectosFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    try {
+        const { data: msgs, error } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_gastos_indirectos__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    appState.gastosIndirectos = parsed;
+                    saveToStorage();
+                    if (appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
+                        renderGastosIndirectos();
+                    }
+                    recalculateGastosIndirectosTotals();
+                }
+            } catch (e) {}
+        }
+    } catch (err) {
+        console.warn("⚠️ Error fetching gastos indirectos from cloud:", err);
+    }
+}
+window.fetchGastosIndirectosFromCloud = fetchGastosIndirectosFromCloud;
+
+function switchAdminSubSection(subSec) {
+    window.switchAdminSubSection = switchAdminSubSection;
+    appState.adminSubSection = subSec || 'quincenas';
+    const btnQuincenas = document.getElementById('btn-subtab-quincenas');
+    const btnGastosInd = document.getElementById('btn-subtab-gastos-ind');
+    const secQuincenas = document.getElementById('admin-sec-quincenas');
+    const secGastosInd = document.getElementById('admin-sec-gastos-indirectos');
+
+    if (subSec === 'gastos-indirectos') {
+        if (secQuincenas) secQuincenas.style.display = 'none';
+        if (secGastosInd) secGastosInd.style.display = 'block';
+
+        if (btnQuincenas) {
+            btnQuincenas.classList.remove('active');
+            btnQuincenas.style.background = '#FFFFFF';
+            btnQuincenas.style.color = '#475569';
+            btnQuincenas.style.borderColor = 'rgba(15,23,42,0.15)';
+            btnQuincenas.style.boxShadow = 'none';
+        }
+        if (btnGastosInd) {
+            btnGastosInd.classList.add('active');
+            btnGastosInd.style.background = '#2563EB';
+            btnGastosInd.style.color = '#FFFFFF';
+            btnGastosInd.style.borderColor = '#2563EB';
+            btnGastosInd.style.boxShadow = '0 2px 6px rgba(37,99,235,0.25)';
+        }
+        renderGastosIndirectos();
+    } else {
+        if (secQuincenas) secQuincenas.style.display = 'block';
+        if (secGastosInd) secGastosInd.style.display = 'none';
+
+        if (btnQuincenas) {
+            btnQuincenas.classList.add('active');
+            btnQuincenas.style.background = '#2563EB';
+            btnQuincenas.style.color = '#FFFFFF';
+            btnQuincenas.style.borderColor = '#2563EB';
+            btnQuincenas.style.boxShadow = '0 2px 6px rgba(37,99,235,0.25)';
+        }
+        if (btnGastosInd) {
+            btnGastosInd.classList.remove('active');
+            btnGastosInd.style.background = '#FFFFFF';
+            btnGastosInd.style.color = '#475569';
+            btnGastosInd.style.borderColor = 'rgba(15,23,42,0.15)';
+            btnGastosInd.style.boxShadow = 'none';
+        }
+        renderNominas();
+    }
+}
+window.switchAdminSubSection = switchAdminSubSection;
+
+function renderGastosIndirectos() {
+    window.renderGastosIndirectos = renderGastosIndirectos;
+    const tbody = document.getElementById('tbody-gastos-indirectos');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!appState.gastosIndirectos || !Array.isArray(appState.gastosIndirectos)) {
+        appState.gastosIndirectos = [];
+    }
+
+    if (appState.gastosIndirectos.length === 0) {
+        // Inicializar con un registro base alineado al balance si está completamente vacío
+        appState.gastosIndirectos = [
+            {
+                id: 'gi-1',
+                folio: 'GI-001',
+                fecha: new Date().toISOString().split('T')[0],
+                concepto: 'Papelería e insumos operativos',
+                categoria: 'Papelería',
+                subtotal: 577.59,
+                iva: 92.41,
+                total: 670.00,
+                factura: 'FAC-8821'
+            }
+        ];
+        saveToStorage();
+    }
+
+    appState.gastosIndirectos.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.id = `gi-row-${index}`;
+        tr.setAttribute('data-row-key', `gasto_ind_${index}`);
+        tr.innerHTML = `
+            <td style="text-align: center;">
+                <input type="text" class="excel-input" value="${item.folio || ('GI-' + String(index + 1).padStart(3, '0'))}" oninput="updateGastoIndirectoCell(${index}, 'folio', this.value)" style="text-align: center; font-weight: 700;">
+            </td>
+            <td style="text-align: center;">
+                <input type="date" class="excel-input" value="${item.fecha || ''}" oninput="updateGastoIndirectoCell(${index}, 'fecha', this.value)" style="text-align: center;">
+            </td>
+            <td>
+                <input type="text" class="excel-input" value="${item.concepto || ''}" oninput="updateGastoIndirectoCell(${index}, 'concepto', this.value)" placeholder="Descripción del gasto..." style="font-weight: 600;">
+            </td>
+            <td>
+                <select class="excel-input" onchange="updateGastoIndirectoCell(${index}, 'categoria', this.value)" style="font-size: 13px; font-weight: 600; cursor: pointer;">
+                    <option value="Servicios" ${item.categoria === 'Servicios' ? 'selected' : ''}>Servicios</option>
+                    <option value="Papelería" ${item.categoria === 'Papelería' ? 'selected' : ''}>Papelería</option>
+                    <option value="Combustible" ${item.categoria === 'Combustible' ? 'selected' : ''}>Combustible</option>
+                    <option value="Mantenimiento" ${item.categoria === 'Mantenimiento' ? 'selected' : ''}>Mantenimiento</option>
+                    <option value="Renta" ${item.categoria === 'Renta' ? 'selected' : ''}>Renta</option>
+                    <option value="Sistemas" ${item.categoria === 'Sistemas' ? 'selected' : ''}>Sistemas</option>
+                    <option value="Otros" ${item.categoria === 'Otros' ? 'selected' : ''}>Otros</option>
+                </select>
+            </td>
+            <td>
+                <div class="excel-currency-wrap">
+                    <span class="currency-symbol">$</span>
+                    <input type="number" id="gi-subtotal-input-${index}" class="excel-input number-input" value="${item.subtotal || 0}" step="any" oninput="liveUpdateGastoIndirectoTotals(${index})" placeholder="0.00" style="font-weight: 700;">
+                </div>
+            </td>
+            <td>
+                <div class="excel-currency-wrap">
+                    <span class="currency-symbol">$</span>
+                    <input type="number" id="gi-iva-input-${index}" class="excel-input number-input" value="${item.iva || 0}" step="any" oninput="liveUpdateGastoIndirectoTotals(${index})" placeholder="0.00">
+                </div>
+            </td>
+            <td>
+                <div class="excel-currency-wrap">
+                    <span class="currency-symbol">$</span>
+                    <input type="number" id="gi-total-input-${index}" class="excel-input number-input" value="${item.total || 0}" step="any" readonly style="font-weight: 800; background: #F8FAFC; color: #1E293B;">
+                </div>
+            </td>
+            <td>
+                <input type="text" class="excel-input" value="${item.factura || ''}" oninput="updateGastoIndirectoCell(${index}, 'factura', this.value)" placeholder="Folio/Factura" style="text-align: center;">
+            </td>
+            <td style="text-align: center;">
+                <button type="button" class="btn-icon text-danger" onclick="deleteGastoIndirectoRow(${index})" title="Eliminar este gasto indirecto" style="background: none; border: none; cursor: pointer; color: #EF4444;">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    const totalsRow = document.createElement('tr');
+    totalsRow.id = 'excel-gastos-indirectos-totals-row';
+    totalsRow.className = 'excel-totals-row';
+    totalsRow.style.background = '#F8FAFC';
+    totalsRow.style.borderTop = '2px solid #CBD5E1';
+    tbody.appendChild(totalsRow);
+
+    recalculateGastosIndirectosTotals();
+}
+window.renderGastosIndirectos = renderGastosIndirectos;
+
+function addNewGastoIndirectoRow() {
+    window.addNewGastoIndirectoRow = addNewGastoIndirectoRow;
+    if (!appState.gastosIndirectos) appState.gastosIndirectos = [];
+    const nextFolioNum = appState.gastosIndirectos.length + 1;
+    const newRow = {
+        id: `gi_${Date.now()}`,
+        folio: `GI-${String(nextFolioNum).padStart(3, '0')}`,
+        fecha: new Date().toISOString().split('T')[0],
+        concepto: '',
+        categoria: 'Servicios',
+        subtotal: 0,
+        iva: 0,
+        total: 0,
+        factura: ''
+    };
+    appState.gastosIndirectos.push(newRow);
+    saveToStorage();
+    renderGastosIndirectos();
+    broadcastGastosIndirectosUpdate();
+}
+window.addNewGastoIndirectoRow = addNewGastoIndirectoRow;
+
+function deleteGastoIndirectoRow(index) {
+    window.deleteGastoIndirectoRow = deleteGastoIndirectoRow;
+    if (confirm("¿Estás seguro de que deseas eliminar este gasto indirecto?")) {
+        appState.gastosIndirectos.splice(index, 1);
+        saveToStorage();
+        renderGastosIndirectos();
+        broadcastGastosIndirectosUpdate();
+    }
+}
+window.deleteGastoIndirectoRow = deleteGastoIndirectoRow;
+
+function updateGastoIndirectoCell(index, key, val) {
+    window.updateGastoIndirectoCell = updateGastoIndirectoCell;
+    if (appState.gastosIndirectos && appState.gastosIndirectos[index]) {
+        appState.gastosIndirectos[index][key] = val;
+        saveToStorage();
+        debouncedBroadcastGastosIndirectos();
+    }
+}
+window.updateGastoIndirectoCell = updateGastoIndirectoCell;
+
+function liveUpdateGastoIndirectoTotals(index) {
+    window.liveUpdateGastoIndirectoTotals = liveUpdateGastoIndirectoTotals;
+    const subtotalEl = document.getElementById(`gi-subtotal-input-${index}`);
+    const ivaEl = document.getElementById(`gi-iva-input-${index}`);
+    const totalEl = document.getElementById(`gi-total-input-${index}`);
+
+    if (subtotalEl && totalEl && appState.gastosIndirectos && appState.gastosIndirectos[index]) {
+        const subtotal = Number(subtotalEl.value) || 0;
+        let iva = 0;
+        if (ivaEl) {
+            if (document.activeElement === ivaEl) {
+                iva = Number(ivaEl.value) || 0;
+            } else {
+                iva = Number((subtotal * 0.16).toFixed(2));
+                ivaEl.value = iva;
+            }
+        }
+        const total = Number((subtotal + iva).toFixed(2));
+        totalEl.value = total;
+
+        appState.gastosIndirectos[index].subtotal = subtotal;
+        appState.gastosIndirectos[index].iva = iva;
+        appState.gastosIndirectos[index].total = total;
+
+        recalculateGastosIndirectosTotals();
+        saveToStorage();
+        debouncedBroadcastGastosIndirectos();
+    }
+}
+window.liveUpdateGastoIndirectoTotals = liveUpdateGastoIndirectoTotals;
+
+function recalculateGastosIndirectosTotals() {
+    window.recalculateGastosIndirectosTotals = recalculateGastosIndirectosTotals;
+    let sumSubtotal = 0;
+    let sumIva = 0;
+    let sumTotal = 0;
+
+    (appState.gastosIndirectos || []).forEach(item => {
+        sumSubtotal += Number(item.subtotal) || 0;
+        sumIva += Number(item.iva) || 0;
+        sumTotal += Number(item.total) || 0;
+    });
+
+    const totalsRow = document.getElementById("excel-gastos-indirectos-totals-row");
+    if (totalsRow) {
+        totalsRow.innerHTML = `
+            <td style="text-align: center; font-weight: 700;">Total</td>
+            <td style="text-align: center; font-weight: 600;">Suma Calculada</td>
+            <td></td>
+            <td></td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumSubtotal)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumIva)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px; color: #B91C1C;">${formatCurrency(sumTotal)}</td>
+            <td></td>
+            <td style="text-align: center;"><span class="material-symbols-outlined" style="font-size: 15px;">lock</span></td>
+        `;
+    }
+
+    if (sumTotal > 0 || (appState.gastosIndirectos && appState.gastosIndirectos.length > 0)) {
+        appState.concepts.gastosInd = sumTotal;
+        const inputConcept = document.getElementById("concept-gastos-ind-input");
+        if (inputConcept) inputConcept.value = sumTotal.toFixed(2);
+        if (typeof window.renderVisualizacion === 'function') {
+            window.renderVisualizacion();
+        }
+    }
+}
+window.recalculateGastosIndirectosTotals = recalculateGastosIndirectosTotals;
+
+// ---------------------------------------------------------------------------------
 // 6. FICHA 3: PROVEEDORES CON CHIPS (IMAGEN 4)
 // ---------------------------------------------------------------------------------
 function renderProveedorChips() {
@@ -1524,20 +1907,37 @@ function renderProveedorChips() {
     if (!container) return;
     container.innerHTML = "";
     
-    // Purga activa de Jennifer y Rama de la lista de proveedores
+    // Purga y normalización activa del catálogo (resolviendo duplicado/falso de "TRASNPORTES RAMIRES" -> "TRANSPORTES RAMIREZ")
     if (appState.proveedorNamesList && Array.isArray(appState.proveedorNamesList)) {
-        const filteredNames = appState.proveedorNamesList.filter(n => {
-            const low = String(n || '').trim().toLowerCase();
-            return low !== 'jennifer' && low !== 'rama';
+        const seen = new Set();
+        const cleanList = [];
+        appState.proveedorNamesList.forEach(raw => {
+            let n = String(raw || '').trim();
+            const low = n.toLowerCase();
+            if (!n || low === 'jennifer' || low === 'rama' || low.includes('-- seleccionar')) return;
+            if (low === 'trasnportes ramires' || low === 'transportes ramires') {
+                n = 'TRANSPORTES RAMIREZ';
+            }
+            const cleanLow = n.toLowerCase();
+            if (!seen.has(cleanLow)) {
+                seen.add(cleanLow);
+                cleanList.push(n);
+            }
         });
-        if (filteredNames.length !== appState.proveedorNamesList.length) {
-            appState.proveedorNamesList = filteredNames;
+        if (cleanList.length !== appState.proveedorNamesList.length || !cleanList.every((v, i) => v === appState.proveedorNamesList[i])) {
+            appState.proveedorNamesList = cleanList;
             saveToStorage();
         }
     }
 
-    if (appState.selectedProveedorFilter && (appState.selectedProveedorFilter.toLowerCase() === 'jennifer' || appState.selectedProveedorFilter.toLowerCase() === 'rama')) {
-        appState.selectedProveedorFilter = 'all';
+    // Normalizar si el filtro seleccionado era el nombre con falta ortográfica
+    if (appState.selectedProveedorFilter) {
+        const sLow = appState.selectedProveedorFilter.trim().toLowerCase();
+        if (sLow === 'jennifer' || sLow === 'rama') {
+            appState.selectedProveedorFilter = 'all';
+        } else if (sLow === 'trasnportes ramires' || sLow === 'transportes ramires') {
+            appState.selectedProveedorFilter = 'TRANSPORTES RAMIREZ';
+        }
     }
 
     const validLinked = (appState.proveedores || []).filter(p => p && (
@@ -1552,9 +1952,14 @@ function renderProveedorChips() {
 
     // "Todos" Chip
     const allChip = document.createElement("button");
+    allChip.type = "button";
     allChip.className = `proveedor-chip ${appState.selectedProveedorFilter === 'all' ? 'active' : ''}`;
     allChip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">apps</span> Todos (${validLinked.length})`;
-    allChip.onclick = () => filterByProveedor('all');
+    allChip.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        filterByProveedor('all');
+    };
     container.appendChild(allChip);
     
     // Dynamic Chips from provider names list
@@ -1562,16 +1967,47 @@ function renderProveedorChips() {
         const low = String(name || '').trim().toLowerCase();
         if (low === 'jennifer' || low === 'rama') return;
 
-        const count = validLinked.filter(p => p.proveedor && p.proveedor.toLowerCase() === name.toLowerCase()).length;
-        const chip = document.createElement("button");
-        chip.className = `proveedor-chip ${appState.selectedProveedorFilter.toLowerCase() === name.toLowerCase() ? 'active' : ''}`;
-        chip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">person</span> ${name} (${count}) ` +
-            `<span class="material-symbols-outlined chip-edit-btn" style="font-size: 14px; margin-left: 6px; opacity: 0.7; cursor: pointer;" title="Editar nombre de proveedor" onclick="editProveedorName('${name}', event)">edit</span> ` +
-            `<span class="material-symbols-outlined chip-delete-btn" style="font-size: 14px; margin-left: 4px; opacity: 0.7; cursor: pointer;" title="Eliminar proveedor" onclick="deleteProveedorName('${name}', event)">close</span>`;
+        const count = validLinked.filter(p => p.proveedor && p.proveedor.toLowerCase() === low).length;
+        const chip = document.createElement("div");
+        chip.className = `proveedor-chip ${appState.selectedProveedorFilter.toLowerCase() === low ? 'active' : ''}`;
+        chip.setAttribute('role', 'button');
+        chip.setAttribute('tabindex', '0');
+        chip.style.cursor = 'pointer';
+        
+        chip.innerHTML = `
+            <span class="chip-label-area" style="display:inline-flex; align-items:center; gap:6px;">
+                <span class="material-symbols-outlined" style="font-size: 16px;">person</span>
+                <span>${name} (${count})</span>
+            </span>
+            <span class="material-symbols-outlined chip-edit-btn" style="font-size: 14px; margin-left: 6px; opacity: 0.7; cursor: pointer;" title="Editar nombre de proveedor">edit</span>
+            <span class="material-symbols-outlined chip-delete-btn" style="font-size: 14px; margin-left: 4px; opacity: 0.7; cursor: pointer;" title="Eliminar proveedor">close</span>
+        `;
+        
         chip.onclick = (e) => {
-            if (e.target && (e.target.classList.contains('chip-delete-btn') || e.target.classList.contains('chip-edit-btn'))) return;
+            if (e.target && (e.target.closest('.chip-edit-btn') || e.target.closest('.chip-delete-btn'))) return;
+            e.stopPropagation();
+            e.preventDefault();
             filterByProveedor(name);
         };
+
+        const editBtn = chip.querySelector('.chip-edit-btn');
+        if (editBtn) {
+            editBtn.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                editProveedorName(name, e);
+            };
+        }
+
+        const delBtn = chip.querySelector('.chip-delete-btn');
+        if (delBtn) {
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                deleteProveedorName(name, e);
+            };
+        }
+
         container.appendChild(chip);
     });
 
@@ -1869,33 +2305,63 @@ async function fetchProveedoresDataFromCloud() {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    const statusMap = new Map();
+                    const rowMap = new Map();
                     parsed.forEach(r => {
                         if (!r) return;
-                        const st = r.p || r.estatus;
-                        if (!st) return;
-                        if (r.opRefId) statusMap.set(r.opRefId, st);
-                        if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
-                        if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
-                        if (r.op && r.proveedor) statusMap.set(`${String(r.op).trim().toLowerCase()}_${String(r.proveedor).trim().toLowerCase()}`, st);
+                        if (r.opRefId) rowMap.set(r.opRefId, r);
+                        if (r.projectId && r.opRowIndex !== undefined) rowMap.set(`${r.projectId}_${r.opRowIndex}`, r);
+                        if (r.op && r.opRowIndex !== undefined) rowMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, r);
+                        if (r.op && r.proveedor) rowMap.set(`${String(r.op).trim().toLowerCase()}_${String(r.proveedor).trim().toLowerCase()}`, r);
                     });
 
+                    let anyChanged = false;
                     (appState.proveedores || []).forEach(localR => {
                         const key = localR.opRefId || (localR.projectId && localR.opRowIndex !== undefined ? `${localR.projectId}_${localR.opRowIndex}` : null) || (localR.op ? `${String(localR.op).trim().toLowerCase()}_${localR.opRowIndex}` : null);
                         const provKey = (localR.op && localR.proveedor) ? `${String(localR.op).trim().toLowerCase()}_${String(localR.proveedor).trim().toLowerCase()}` : null;
-                        if (key && statusMap.has(key)) {
-                            localR.p = statusMap.get(key);
-                            localR.estatus = statusMap.get(key);
-                        } else if (provKey && statusMap.has(provKey)) {
-                            localR.p = statusMap.get(provKey);
-                            localR.estatus = statusMap.get(provKey);
+                        const match = (key && rowMap.has(key)) ? rowMap.get(key) : (provKey && rowMap.has(provKey) ? rowMap.get(provKey) : null);
+                        if (match) {
+                            if (match.p !== undefined || match.estatus !== undefined) {
+                                const st = match.p || match.estatus;
+                                if (localR.p !== st) { localR.p = st; localR.estatus = st; anyChanged = true; }
+                            }
+                            if (match.fechaPago !== undefined && match.fechaPago !== localR.fechaPago) {
+                                localR.fechaPago = match.fechaPago;
+                                anyChanged = true;
+                            }
+                            if (match.facturaProveedor !== undefined && match.facturaProveedor !== localR.facturaProveedor) {
+                                localR.facturaProveedor = match.facturaProveedor;
+                                localR.folioFF = match.facturaProveedor;
+                                localR.facturaNum = match.facturaProveedor;
+                                anyChanged = true;
+                            }
+                            if (match.servicio !== undefined && match.servicio !== localR.servicio) {
+                                localR.servicio = match.servicio;
+                                anyChanged = true;
+                            }
+                            if (match.subtotal !== undefined && match.subtotal !== localR.subtotal) {
+                                localR.subtotal = match.subtotal;
+                                localR.iva = match.iva;
+                                localR.ret4 = match.ret4;
+                                localR.retIsr = match.retIsr;
+                                localR.total = match.total;
+                                anyChanged = true;
+                            }
+                            if (match.proveedor && match.proveedor !== localR.proveedor) {
+                                localR.proveedor = match.proveedor;
+                                anyChanged = true;
+                            }
                         }
                     });
 
-                    saveToStorage();
-                    if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
-                        updateProveedorStatusCounts();
-                        renderProveedores();
+                    if (anyChanged) {
+                        saveToStorage();
+                        if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
+                            updateProveedorStatusCounts();
+                            renderProveedores();
+                        }
+                        if (typeof window.recalculateProveedoresTableTotals === 'function') {
+                            window.recalculateProveedoresTableTotals();
+                        }
                     }
                 }
             } catch (e) {}
@@ -1969,7 +2435,7 @@ function handleProveedorSelectChange(tableType, index, val) {
 }
 window.handleProveedorSelectChange = handleProveedorSelectChange;
 
-// Filtros de Estatus en Control de Proveedores: P = Por pagar, C = Por cobrar (Imagen 5)
+// Filtros de Estatus en Control de Proveedores: P = Por pagar, Programar a pago, Pagado, Cancelado (Imágenes 1 y 3)
 function filterProveedoresByStatus(status, btnEl) {
     window.filterProveedoresByStatus = filterProveedoresByStatus;
     appState.proveedorStatusFilter = status || 'all';
@@ -1981,7 +2447,10 @@ function filterProveedoresByStatus(status, btnEl) {
     if (btnEl) {
         btnEl.classList.add("active");
     } else {
-        const targetBtn = document.getElementById(`btn-status-filter-${String(status).toLowerCase()}`);
+        const sLow = String(status).toLowerCase();
+        let targetId = `btn-status-filter-${sLow}`;
+        if (sLow === 'prog' || sLow === 'c') targetId = 'btn-status-filter-prog';
+        const targetBtn = document.getElementById(targetId) || document.getElementById(`btn-status-filter-${sLow}`);
         if (targetBtn) targetBtn.classList.add("active");
     }
 
@@ -2006,11 +2475,15 @@ function updateProveedorStatusCounts() {
     const countAll = list.length;
     const countP = list.filter(p => {
         const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-        return st === 'p' || (!st.includes('cancel') && st !== 'c');
+        return st === 'p' || st === 'por pagar' || (!st.includes('cancel') && st !== 'c' && st !== 'prog' && !st.includes('prog') && st !== 'pagado');
     }).length;
-    const countC = list.filter(p => {
+    const countProg = list.filter(p => {
         const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-        return st === 'c';
+        return st === 'c' || st === 'prog' || st.includes('prog') || st.includes('cobrar');
+    }).length;
+    const countPagado = list.filter(p => {
+        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
+        return st === 'pagado';
     }).length;
     const countCancel = list.filter(p => {
         const st = (p.p || p.estatus || 'P').trim().toLowerCase();
@@ -2019,11 +2492,15 @@ function updateProveedorStatusCounts() {
 
     const elAll = document.getElementById("count-status-all");
     const elP = document.getElementById("count-status-p");
+    const elProg = document.getElementById("count-status-prog");
     const elC = document.getElementById("count-status-c");
+    const elPagado = document.getElementById("count-status-pagado");
     const elCancel = document.getElementById("count-status-cancelado");
     if (elAll) elAll.textContent = countAll;
     if (elP) elP.textContent = countP;
-    if (elC) elC.textContent = countC;
+    if (elProg) elProg.textContent = countProg;
+    if (elC) elC.textContent = countProg;
+    if (elPagado) elPagado.textContent = countPagado;
     if (elCancel) elCancel.textContent = countCancel;
 }
 window.updateProveedorStatusCounts = updateProveedorStatusCounts;
@@ -2070,8 +2547,9 @@ function syncAllOperacionesToProveedores() {
         appState.proveedores = [];
     }
 
-    // Preservar estatus (P / C / Cancelado) asignados por el usuario en Control de Proveedores
+    // Preservar estatus (P / Programar a pago / Pagado / Cancelado) y Fecha de Pago
     const statusMap = new Map();
+    const fechaPagoMap = new Map();
     appState.proveedores.forEach(r => {
         if (!r) return;
         const st = r.p || r.estatus;
@@ -2079,6 +2557,12 @@ function syncAllOperacionesToProveedores() {
             if (r.opRefId) statusMap.set(r.opRefId, st);
             if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
             if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
+        }
+        const fp = r.fechaPago;
+        if (fp) {
+            if (r.opRefId) fechaPagoMap.set(r.opRefId, fp);
+            if (r.projectId && r.opRowIndex !== undefined) fechaPagoMap.set(`${r.projectId}_${r.opRowIndex}`, fp);
+            if (r.op && r.opRowIndex !== undefined) fechaPagoMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, fp);
         }
     });
 
@@ -2109,7 +2593,11 @@ function syncAllOperacionesToProveedores() {
                 const iva = sub > 0 ? (sub * 0.16) : 0;
                 const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
 
-                const provName = (item.proveedor && !item.proveedor.includes('-- Seleccionar')) ? item.proveedor.trim() : '';
+                let provName = (item.proveedor && !item.proveedor.includes('-- Seleccionar')) ? item.proveedor.trim() : '';
+                if (provName.toLowerCase() === 'trasnportes ramires' || provName.toLowerCase() === 'transportes ramires') {
+                    provName = 'TRANSPORTES RAMIREZ';
+                    item.proveedor = 'TRANSPORTES RAMIREZ';
+                }
                 const concepto = (item.concepto && !item.concepto.includes('-- Seleccionar')) ? item.concepto.trim() : '';
 
                 // Factura Proveedor: Proviene de la columna 'Factura #' de la fila en Operaciones (Imagen 2)
@@ -2146,10 +2634,15 @@ function syncAllOperacionesToProveedores() {
                 if (!hasData) return;
 
                 const opRefId = `${p.id}_${idx}`;
+                // Por defecto todos los expedientes de proveedores entran estrictamente por pagar ('P')
                 const savedStatus = statusMap.get(opRefId) || 
                                     statusMap.get(`${p.id}_${idx}`) || 
                                     statusMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
                                     item.p || item.estatus || 'P';
+                const savedFechaPago = fechaPagoMap.get(opRefId) || 
+                                       fechaPagoMap.get(`${p.id}_${idx}`) || 
+                                       fechaPagoMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
+                                       item.fechaPago || '';
 
                 // Mantener sincronizado el objeto del proyecto en memoria
                 item.subtotal = sub;
@@ -2157,6 +2650,7 @@ function syncAllOperacionesToProveedores() {
                 item.total = tot;
                 item.p = savedStatus;
                 item.estatus = savedStatus;
+                item.fechaPago = savedFechaPago;
 
                 newProveedoresList.push({
                     folioFF: facturaProveedor,
@@ -2164,6 +2658,8 @@ function syncAllOperacionesToProveedores() {
                     facturaNum: facturaProveedor,
                     proveedor: provName || (p.proveedor || '-'),
                     fecha: p.fecha || (p.infoViaje && p.infoViaje.fecha) || new Date().toISOString().split('T')[0],
+                    fechaPago: savedFechaPago,
+                    archivado: Boolean(p.archivado || p.estatus === 'CERRADO'),
                     servicio: concepto || "Logistic",
                     subtotal: sub,
                     iva: iva,
@@ -2253,9 +2749,13 @@ function toggleProvEstatusDropdown(index, event) {
                 <span class="prov-badge-dot badge-dot-p"></span>
                 <span class="option-name">P (Por pagar)</span>
             </div>
-            <div class="prov-dropdown-option option-c" onclick="selectGlobalProvEstatus('C', event)">
-                <span class="prov-badge-dot badge-dot-c"></span>
-                <span class="option-name">C (Por cobrar)</span>
+            <div class="prov-dropdown-option option-prog" onclick="selectGlobalProvEstatus('PROG', event)">
+                <span class="prov-badge-dot badge-dot-prog"></span>
+                <span class="option-name">Programar a pago</span>
+            </div>
+            <div class="prov-dropdown-option option-pagado" onclick="selectGlobalProvEstatus('PAGADO', event)">
+                <span class="prov-badge-dot badge-dot-pagado"></span>
+                <span class="option-name">Pagado</span>
             </div>
             <div class="prov-dropdown-option option-cancelado" onclick="selectGlobalProvEstatus('Cancelado', event)">
                 <span class="prov-badge-dot badge-dot-cancel"></span>
@@ -2273,17 +2773,18 @@ function toggleProvEstatusDropdown(index, event) {
     menu.dataset.currentIndex = String(index);
     
     const currentItem = appState.proveedores[index];
-    const currentSt = currentItem ? (currentItem.p || currentItem.estatus || 'P').trim() : 'P';
-    const isCancel = currentSt.toLowerCase().includes('cancel');
-    const isC = currentSt.toUpperCase() === 'C';
+    const currentSt = currentItem ? (currentItem.p || currentItem.estatus || 'P').trim().toLowerCase() : 'p';
     
     menu.querySelectorAll(".prov-dropdown-option").forEach(opt => opt.classList.remove("selected"));
-    if (isCancel) {
+    if (currentSt.includes('cancel')) {
         const oCanc = menu.querySelector(".option-cancelado");
         if (oCanc) oCanc.classList.add("selected");
-    } else if (isC) {
-        const oC = menu.querySelector(".option-c");
-        if (oC) oC.classList.add("selected");
+    } else if (currentSt === 'pagado') {
+        const oPag = menu.querySelector(".option-pagado");
+        if (oPag) oPag.classList.add("selected");
+    } else if (currentSt === 'prog' || currentSt === 'c' || currentSt.includes('prog') || currentSt.includes('cobrar')) {
+        const oProg = menu.querySelector(".option-prog");
+        if (oProg) oProg.classList.add("selected");
     } else {
         const oP = menu.querySelector(".option-p");
         if (oP) oP.classList.add("selected");
@@ -2320,12 +2821,19 @@ function selectGlobalProvEstatus(newStatus, event) {
     if (trigger) {
         let estClass = 'estatus-p';
         let dLabel = 'P';
-        if (String(newStatus).toLowerCase().includes('cancel')) {
+        const stLower = String(newStatus).toLowerCase();
+        if (stLower.includes('cancel')) {
             estClass = 'estatus-cancelado';
             dLabel = 'Canc';
-        } else if (String(newStatus).toUpperCase() === 'C') {
-            estClass = 'estatus-c';
-            dLabel = 'C';
+        } else if (stLower === 'pagado') {
+            estClass = 'estatus-pagado';
+            dLabel = 'Pagado';
+        } else if (stLower === 'prog' || stLower === 'c' || stLower.includes('prog') || stLower.includes('cobrar')) {
+            estClass = 'estatus-prog';
+            dLabel = 'Prog';
+        } else {
+            estClass = 'estatus-p';
+            dLabel = 'P';
         }
         trigger.className = `prov-estatus-trigger ${estClass}`;
         const spanLabel = trigger.querySelector('span:first-child');
@@ -2349,16 +2857,18 @@ function cycleProveedorEstatus(index, event) {
     const item = appState.proveedores[index];
     if (!item) return;
 
-    const currentSt = (item.p || item.estatus || 'P').trim();
+    const currentSt = (item.p || item.estatus || 'P').trim().toLowerCase();
     let nextSt = 'P';
-    if (currentSt.toLowerCase().includes('cancel')) {
+    if (currentSt.includes('cancel')) {
         nextSt = 'P';
-    } else if (currentSt.toUpperCase() === 'P') {
-        nextSt = 'C';
-    } else if (currentSt.toUpperCase() === 'C') {
+    } else if (currentSt === 'p' || currentSt === 'por pagar') {
+        nextSt = 'PROG';
+    } else if (currentSt === 'prog' || currentSt === 'c' || currentSt.includes('prog') || currentSt.includes('cobrar')) {
+        nextSt = 'PAGADO';
+    } else if (currentSt === 'pagado') {
         nextSt = 'Cancelado';
     } else {
-        nextSt = 'C';
+        nextSt = 'P';
     }
 
     updateProveedorCell(index, 'p', nextSt);
@@ -2383,7 +2893,7 @@ function renderProveedores() {
     if (!tbody) return;
     tbody.innerHTML = "";
     
-    // Filtrar filas válidas para mostrar en Control de Proveedores (sin borrar ninguna tabla)
+    // Filtrar filas válidas para mostrar en Control de Proveedores (visualizar todos los documentos incluso los archivados)
     let list = (appState.proveedores || []).filter(p => p && (
         (p.op && String(p.op).trim() !== '') ||
         (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
@@ -2396,10 +2906,11 @@ function renderProveedores() {
     
     // Filter by active chip
     if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
-        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
+        const selLow = appState.selectedProveedorFilter.trim().toLowerCase();
+        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === selLow);
     }
 
-    // Filter by active status (P = Por pagar, C = Por cobrar, Cancelado)
+    // Filter by active status (P = Por pagar, Programar a pago, Pagado, Cancelado)
     if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
         const filterVal = appState.proveedorStatusFilter.toLowerCase();
         list = list.filter(p => {
@@ -2407,11 +2918,14 @@ function renderProveedores() {
             if (filterVal === 'cancelado') {
                 return st.includes('cancel');
             }
-            if (filterVal === 'c') {
-                return st === 'c';
+            if (filterVal === 'pagado') {
+                return st === 'pagado';
+            }
+            if (filterVal === 'prog' || filterVal === 'c') {
+                return st === 'c' || st === 'prog' || st.includes('prog') || st.includes('cobrar');
             }
             if (filterVal === 'p') {
-                return st === 'p' || (!st.includes('cancel') && st !== 'c');
+                return st === 'p' || st === 'por pagar' || (!st.includes('cancel') && st !== 'c' && st !== 'prog' && !st.includes('prog') && st !== 'pagado');
             }
             return st === filterVal;
         });
@@ -2419,33 +2933,43 @@ function renderProveedores() {
     
     list.forEach((item, index) => {
         const realIndex = appState.proveedores.indexOf(item);
-        const rawSt = (item.p || item.estatus || 'P').trim();
+        const rawSt = (item.p || item.estatus || 'P').trim().toLowerCase();
         let currentStatus = 'P';
         let displayLabel = 'P';
         let estatusClass = 'estatus-p';
-        if (rawSt.toLowerCase().includes('cancel')) {
+        if (rawSt.includes('cancel')) {
             currentStatus = 'Cancelado';
             displayLabel = 'Canc';
             estatusClass = 'estatus-cancelado';
-        } else if (rawSt.toUpperCase() === 'C') {
-            currentStatus = 'C';
-            displayLabel = 'C';
-            estatusClass = 'estatus-c';
+        } else if (rawSt === 'pagado') {
+            currentStatus = 'Pagado';
+            displayLabel = 'Pagado';
+            estatusClass = 'estatus-pagado';
+        } else if (rawSt === 'c' || rawSt === 'prog' || rawSt.includes('prog') || rawSt.includes('cobrar')) {
+            currentStatus = 'Programar a pago';
+            displayLabel = 'Prog';
+            estatusClass = 'estatus-prog';
         } else {
-            currentStatus = 'P';
+            currentStatus = 'Por pagar';
             displayLabel = 'P';
             estatusClass = 'estatus-p';
         }
 
         const factProv = item.facturaProveedor || item.folioFF || item.facturaNum || "";
+        const isArchivado = item.archivado === true;
 
         const tr = document.createElement("tr");
+        tr.id = `prov-row-${realIndex}`;
+        tr.dataset.rowKey = `prov_${realIndex}`;
         tr.innerHTML = `
             <td style="text-align: center;">
                 <input type="text" class="excel-input" value="${factProv}" placeholder="-" oninput="updateProveedorCell(${realIndex}, 'facturaProveedor', this.value)" style="text-align: center; font-weight: 600;">
             </td>
             <td style="padding-left: 8px;">
-                <span class="prov-name-locked" title="${item.proveedor || ''}">${item.proveedor || '-'}</span>
+                <span class="prov-name-locked" title="${item.proveedor || ''}">
+                    ${item.proveedor || '-'}
+                    ${isArchivado ? '<span class="badge-archivado-tag" style="background:#F1F5F9; color:#64748B; font-size:9px; font-weight:600; padding:1px 5px; border-radius:4px; border:1px solid #CBD5E1; margin-left:6px;" title="Expediente archivado">Archivado</span>' : ''}
+                </span>
             </td>
             <td style="text-align: center;">
                 <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateProveedorCell(${realIndex}, 'fecha', this.value)" style="text-align: center;">
@@ -2475,6 +2999,9 @@ function renderProveedores() {
                 </div>
             </td>
             <td style="text-align: center;">
+                <input type="date" class="excel-input" value="${item.fechaPago || ''}" oninput="updateProveedorCell(${realIndex}, 'fechaPago', this.value)" style="text-align: center;" title="Fecha de pago">
+            </td>
+            <td style="text-align: center;">
                 <input type="text" class="excel-input readonly" value="${(item.folioFE && item.folioFE !== 'FE-') ? item.folioFE : ''}" placeholder="-" readonly style="text-align: center; font-weight: 700; color: #0F172A; cursor: default;" title="Factura vinculada desde Operaciones">
             </td>
             <td style="text-align: center;">
@@ -2493,6 +3020,88 @@ function renderProveedores() {
     recalculateProveedoresTableTotals();
     updateProveedorStatusCounts();
 }
+
+function recalculateProveedoresTableTotals() {
+    window.recalculateProveedoresTableTotals = recalculateProveedoresTableTotals;
+    let sumSubtotal = 0;
+    let sumIva = 0;
+    let sumRet4 = 0;
+    let sumRetIsr = 0;
+    let sumTotal = 0;
+    
+    let list = (appState.proveedores || []).filter(p => p && (
+        (p.op && String(p.op).trim() !== '') ||
+        (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
+        (p.facturaProveedor && String(p.facturaProveedor).trim() !== '') ||
+        (p.folioFF && String(p.folioFF).trim() !== '') ||
+        (p.subtotal && p.subtotal > 0) ||
+        (p.total && p.total > 0) ||
+        (p.servicio && String(p.servicio).trim() !== '')
+    ));
+    if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
+        const selLow = appState.selectedProveedorFilter.trim().toLowerCase();
+        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === selLow);
+    }
+
+    if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
+        const filterVal = appState.proveedorStatusFilter.toLowerCase();
+        list = list.filter(p => {
+            const st = (p.p || p.estatus || 'P').trim().toLowerCase();
+            if (filterVal === 'cancelado') {
+                return st.includes('cancel');
+            }
+            if (filterVal === 'pagado') {
+                return st === 'pagado';
+            }
+            if (filterVal === 'prog' || filterVal === 'c') {
+                return st === 'c' || st === 'prog' || st.includes('prog') || st.includes('cobrar');
+            }
+            if (filterVal === 'p') {
+                return st === 'p' || st === 'por pagar' || (!st.includes('cancel') && st !== 'c' && st !== 'prog' && !st.includes('prog') && st !== 'pagado');
+            }
+            return st === filterVal;
+        });
+    }
+    
+    list.forEach(item => {
+        sumSubtotal += Number(item.subtotal) || 0;
+        sumIva += Number(item.iva) || 0;
+        sumRet4 += Number(item.ret4) || 0;
+        sumRetIsr += Number(item.retIsr) || 0;
+        sumTotal += Number(item.total) || 0;
+    });
+    
+    const totalsRow = document.getElementById("excel-proveedores-totals-row");
+    if (totalsRow) {
+        totalsRow.innerHTML = `
+            <td style="text-align: center; font-weight: 700;">Total</td>
+            <td style="padding-left: 8px;">Suma Calculada</td>
+            <td></td>
+            <td></td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumSubtotal)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumIva)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumRet4)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumRetIsr)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumTotal)}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td style="text-align: center;"><span class="material-symbols-outlined" style="font-size: 15px;">lock</span></td>
+        `;
+    }
+}
+
+let _debouncedProveedoresTimer = null;
+function debouncedBroadcastProveedores() {
+    window.debouncedBroadcastProveedores = debouncedBroadcastProveedores;
+    if (_debouncedProveedoresTimer) clearTimeout(_debouncedProveedoresTimer);
+    _debouncedProveedoresTimer = setTimeout(() => {
+        if (typeof window.broadcastProveedoresUpdate === 'function') {
+            window.broadcastProveedoresUpdate();
+        }
+    }, 250);
+}
+window.debouncedBroadcastProveedores = debouncedBroadcastProveedores;
 
 function updateProveedorCell(index, key, val) {
     window.updateProveedorCell = updateProveedorCell;
@@ -2528,6 +3137,8 @@ function updateProveedorCell(index, key, val) {
             if (typeof window.broadcastProveedoresUpdate === 'function') {
                 window.broadcastProveedoresUpdate();
             }
+        } else {
+            debouncedBroadcastProveedores();
         }
     }
 }
@@ -2564,71 +3175,7 @@ function liveUpdateProveedorTotals(index) {
         recalculateProveedoresTableTotals();
         saveToStorage();
         renderVisualizacion();
-    }
-}
-
-function recalculateProveedoresTableTotals() {
-    window.recalculateProveedoresTableTotals = recalculateProveedoresTableTotals;
-    let sumSubtotal = 0;
-    let sumIva = 0;
-    let sumRet4 = 0;
-    let sumRetIsr = 0;
-    let sumTotal = 0;
-    
-    let list = (appState.proveedores || []).filter(p => p && (
-        (p.op && String(p.op).trim() !== '') ||
-        (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
-        (p.facturaProveedor && String(p.facturaProveedor).trim() !== '') ||
-        (p.folioFF && String(p.folioFF).trim() !== '') ||
-        (p.subtotal && p.subtotal > 0) ||
-        (p.total && p.total > 0) ||
-        (p.servicio && String(p.servicio).trim() !== '')
-    ));
-    if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
-        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
-    }
-
-    if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
-        const filterVal = appState.proveedorStatusFilter.toLowerCase();
-        list = list.filter(p => {
-            const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-            if (filterVal === 'cancelado') {
-                return st.includes('cancel');
-            }
-            if (filterVal === 'c') {
-                return st === 'c';
-            }
-            if (filterVal === 'p') {
-                return st === 'p' || (!st.includes('cancel') && st !== 'c');
-            }
-            return st === filterVal;
-        });
-    }
-    
-    list.forEach(item => {
-        sumSubtotal += Number(item.subtotal) || 0;
-        sumIva += Number(item.iva) || 0;
-        sumRet4 += Number(item.ret4) || 0;
-        sumRetIsr += Number(item.retIsr) || 0;
-        sumTotal += Number(item.total) || 0;
-    });
-    
-    const totalsRow = document.getElementById("excel-proveedores-totals-row");
-    if (totalsRow) {
-        totalsRow.innerHTML = `
-            <td style="text-align: center; font-weight: 700;">Total</td>
-            <td style="padding-left: 8px;">Suma Calculada</td>
-            <td></td>
-            <td></td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumSubtotal)}</td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumIva)}</td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumRet4)}</td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumRetIsr)}</td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumTotal)}</td>
-            <td></td>
-            <td></td>
-            <td style="text-align: center;"><span class="material-symbols-outlined" style="font-size: 15px;">lock</span></td>
-        `;
+        debouncedBroadcastProveedores();
     }
 }
 
@@ -5831,6 +6378,29 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 4h. Actualización en tiempo real de gastos indirectos por broadcast
+    window.chatRealtimeChannel.on('broadcast', { event: 'gastos_indirectos_update' }, payload => {
+        const data = payload.payload;
+        if (!data || !Array.isArray(data.gastosIndirectos)) return;
+        appState.gastosIndirectos = data.gastosIndirectos;
+        saveToStorage();
+        if (appState.currentTab === 'admin' && appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
+            if (typeof window.renderGastosIndirectos === 'function') {
+                window.renderGastosIndirectos();
+            }
+        }
+        if (typeof window.recalculateGastosIndirectosTotals === 'function') {
+            window.recalculateGastosIndirectosTotals();
+        }
+    });
+
+    // 4i. Bloqueo visual gris colaborativo en tiempo real (Imagen 3)
+    window.chatRealtimeChannel.on('broadcast', { event: 'collaborative_editing' }, payload => {
+        if (typeof handleIncomingEditingState === 'function') {
+            handleIncomingEditingState(payload.payload);
+        }
+    });
+
     // 4f. Documento listo transferido desde la nube o par
     window.chatRealtimeChannel.on('broadcast', { event: 'document_ready' }, async payload => {
         const data = payload.payload;
@@ -5890,6 +6460,9 @@ function setupRealtimeSubscriptions() {
             }
             if (channelKey === '__cloud_sync_nominas__' && typeof window.fetchNominasFromCloud === 'function') {
                 window.fetchNominasFromCloud();
+            }
+            if (channelKey === '__cloud_sync_gastos_indirectos__' && typeof window.fetchGastosIndirectosFromCloud === 'function') {
+                window.fetchGastosIndirectosFromCloud();
             }
             return;
         }
@@ -5991,17 +6564,157 @@ function setupRealtimeSubscriptions() {
         });
     }
 
-    if (!window._operacionesHeartbeatInterval) {
-        window._operacionesHeartbeatInterval = setInterval(() => {
+    if (!window._realtimeHeartbeatInterval) {
+        window._realtimeHeartbeatInterval = setInterval(async () => {
             try {
-                if (window.isSupabaseActive && window.isSupabaseActive() && appState.currentAdminFicha === 'operaciones') {
-                    if (typeof window.fetchOperacionesFromCloud === 'function') {
-                        window.fetchOperacionesFromCloud();
+                if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+
+                // Si el canal websocket se desconectó o quedó en error, re-suscribir automáticamente
+                if (window.chatRealtimeChannel && (window.chatRealtimeChannel.state === 'closed' || window.chatRealtimeChannel.state === 'errored')) {
+                    console.log("🔄 Realtime Hub inactivo, reconectando...");
+                    if (typeof setupRealtimeSubscriptions === 'function') {
+                        setupRealtimeSubscriptions();
+                    }
+                }
+
+                // Sincronización continua de la ficha activa para garantizar actualización instantánea entre computadoras sin refresh
+                if (appState.currentTab === 'admin') {
+                    if (appState.currentAdminFicha === 'operaciones') {
+                        if (typeof window.fetchOperacionesFromCloud === 'function') {
+                            await window.fetchOperacionesFromCloud();
+                        }
+                    } else if (appState.currentAdminFicha === 'proveedores') {
+                        if (typeof window.fetchProveedoresDataFromCloud === 'function') {
+                            await window.fetchProveedoresDataFromCloud();
+                        }
+                    } else if (appState.currentAdminFicha === 'quincenal') {
+                        if (typeof window.fetchNominasFromCloud === 'function') {
+                            await window.fetchNominasFromCloud();
+                        }
+                        if (typeof window.fetchGastosIndirectosFromCloud === 'function') {
+                            await window.fetchGastosIndirectosFromCloud();
+                        }
+                    } else if (appState.currentAdminFicha === 'consecutivo') {
+                        if (typeof window.fetchConsecutivoFromCloud === 'function') {
+                            await window.fetchConsecutivoFromCloud();
+                        }
                     }
                 }
             } catch (e) {}
-        }, 4000);
+        }, 3000);
+        window._operacionesHeartbeatInterval = window._realtimeHeartbeatInterval; // compatibilidad
     }
+}
+
+// =================================================================================
+// INDICADOR COLABORATIVO EN TIEMPO REAL (IMAGEN 3)
+// Cuando un usuario edita un campo/fila, aparece en gris para los demás hasta terminar
+// =================================================================================
+const _activeCollabLocks = new Map();
+let _currentFocusedCollabKey = null;
+
+function broadcastEditingState(action, rowKey) {
+    if (!window.chatRealtimeChannel) return;
+    const userName = appState.currentUser?.nombre || appState.currentUser?.email || 'Usuario';
+    const userId = appState.currentUser?.id || appState.currentUser?.email || userName;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'collaborative_editing',
+            payload: {
+                action: action, // 'start' o 'stop'
+                key: rowKey,
+                user: userName,
+                userId: userId,
+                timestamp: Date.now()
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting editing state:", e);
+    }
+}
+window.broadcastEditingState = broadcastEditingState;
+
+function handleIncomingEditingState(payload) {
+    if (!payload || !payload.key) return;
+    const myId = appState.currentUser?.id || appState.currentUser?.email || appState.currentUser?.nombre;
+    if (payload.userId && myId && payload.userId === myId) return; // No bloquear al propio usuario
+
+    const elements = document.querySelectorAll(`[data-row-key="${payload.key}"]`);
+    if (payload.action === 'start') {
+        elements.forEach(el => {
+            el.classList.add('user-editing-grey');
+            el.setAttribute('data-editing-user', `Editando: ${payload.user || 'Colaborador'}`);
+        });
+
+        if (_activeCollabLocks.has(payload.key)) {
+            clearTimeout(_activeCollabLocks.get(payload.key).timer);
+        }
+        // Auto-limpieza de seguridad (30s) en caso de caída o desconexión
+        const timer = setTimeout(() => {
+            const targets = document.querySelectorAll(`[data-row-key="${payload.key}"]`);
+            targets.forEach(el => {
+                el.classList.remove('user-editing-grey');
+                el.removeAttribute('data-editing-user');
+            });
+            _activeCollabLocks.delete(payload.key);
+        }, 30000);
+        _activeCollabLocks.set(payload.key, { user: payload.user, timer });
+    } else if (payload.action === 'stop') {
+        elements.forEach(el => {
+            el.classList.remove('user-editing-grey');
+            el.removeAttribute('data-editing-user');
+        });
+        if (_activeCollabLocks.has(payload.key)) {
+            clearTimeout(_activeCollabLocks.get(payload.key).timer);
+            _activeCollabLocks.delete(payload.key);
+        }
+    }
+}
+window.handleIncomingEditingState = handleIncomingEditingState;
+
+if (!window._collabEditingEventsBound) {
+    window._collabEditingEventsBound = true;
+    document.addEventListener('focusin', (e) => {
+        const inputOrSelect = e.target.closest('input, select, textarea');
+        if (!inputOrSelect) return;
+        const rowEl = inputOrSelect.closest('[data-row-key]');
+        if (rowEl) {
+            const rowKey = rowEl.getAttribute('data-row-key');
+            if (rowKey && rowKey !== _currentFocusedCollabKey) {
+                if (_currentFocusedCollabKey) {
+                    broadcastEditingState('stop', _currentFocusedCollabKey);
+                }
+                _currentFocusedCollabKey = rowKey;
+                broadcastEditingState('start', rowKey);
+            }
+        }
+    });
+
+    document.addEventListener('focusout', (e) => {
+        const inputOrSelect = e.target.closest('input, select, textarea');
+        if (!inputOrSelect) return;
+        const rowEl = inputOrSelect.closest('[data-row-key]');
+        if (rowEl) {
+            const rowKey = rowEl.getAttribute('data-row-key');
+            setTimeout(() => {
+                if (_currentFocusedCollabKey === rowKey) {
+                    const activeNow = document.activeElement;
+                    if (!activeNow || !activeNow.closest(`[data-row-key="${rowKey}"]`)) {
+                        broadcastEditingState('stop', rowKey);
+                        _currentFocusedCollabKey = null;
+                    }
+                }
+            }, 150);
+        }
+    });
+
+    window.addEventListener('beforeunload', () => {
+        if (_currentFocusedCollabKey) {
+            broadcastEditingState('stop', _currentFocusedCollabKey);
+            _currentFocusedCollabKey = null;
+        }
+    });
 }
 
 async function fetchCloudData() {
@@ -6041,6 +6754,11 @@ async function fetchCloudData() {
         // Sincronizar registros de Nóminas Quincenales (nube <-> local para todos los dispositivos)
         if (typeof window.fetchNominasFromCloud === 'function') {
             await window.fetchNominasFromCloud();
+        }
+
+        // Sincronizar registros de Gastos Indirectos (nube <-> local)
+        if (typeof window.fetchGastosIndirectosFromCloud === 'function') {
+            await window.fetchGastosIndirectosFromCloud();
         }
         
         // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)
