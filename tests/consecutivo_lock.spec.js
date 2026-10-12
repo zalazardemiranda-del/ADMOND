@@ -860,6 +860,8 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
 
   // 2. Ir a Administración -> Nóminas Quincenales y verificar botones Editar y Guardar + filtro gris y mensaje
   await page.evaluate(() => {
+    window.appState.nominas = [{ folio: '1', empleado: 'Juan', fecha: '2026-10-12', nomina: 2000, servicio: 2000, iva: 0, retencion4: 0, retencionIsr: 0, total: 2000 }];
+    localStorage.setItem('rp_nominas_data', JSON.stringify(window.appState.nominas));
     window.switchAdminFicha('quincenal');
     window.switchAdminSubSection('quincenas');
   });
@@ -881,17 +883,11 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
   await expect(page.locator("#nominas-table-container")).toHaveClass(/tabla-filtro-gris-edicion/);
 
   // Editar un valor en Nóminas: no se guarda en localStorage hasta dar clic en Guardar
-  const prevNominaVal = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_nominas_data') || '[]')[0]?.nomina || 2000);
   await page.evaluate(() => {
     window.updateNominaCell(0, 'nomina', 3500);
   });
-  const storedBeforeSaveNomina = await page.evaluate(() => {
-    const raw = localStorage.getItem('rp_nominas_data');
-    return raw ? JSON.parse(raw)[0]?.nomina : null;
-  });
-  if (storedBeforeSaveNomina !== null) {
-    expect(storedBeforeSaveNomina).toBe(prevNominaVal);
-  }
+  const storedBeforeSaveNomina = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_nominas_data'))[0].nomina);
+  expect(storedBeforeSaveNomina).toBe(2000);
 
   // Dar clic en Guardar en Nóminas: guarda cambios y libera bloqueo
   await page.locator("#btn-save-nominas").click();
