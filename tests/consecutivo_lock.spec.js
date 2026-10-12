@@ -230,7 +230,7 @@ test("5. Estatus Pagados (P) añade automáticamente la fecha de pago", async ({
   expect(item.fechaPago).toBeTruthy();
 });
 
-test("6. Filtro Cancelados ahora es 'PP' (Por programar) y las operaciones empiezan en 'por cobrar' (C)", async ({ page }) => {
+test("6. Sin Estatus eliminado y todos los proyectos por defecto empiezan en 'PP' (Por programar)", async ({ page }) => {
   await openAppAsAdmin(page);
 
   // Verificar que el botón de filtro dice 'PP'
@@ -238,7 +238,7 @@ test("6. Filtro Cancelados ahora es 'PP' (Por programar) y las operaciones empie
   await expect(ppBtn).toBeVisible();
   await expect(ppBtn).toContainText("PP");
 
-  // Sincronizar un proyecto desde Operaciones a Consecutivo y verificar que empieza en 'C'
+  // Sincronizar un proyecto desde Operaciones a Consecutivo y verificar que empieza en 'PP' (Por programar)
   await page.evaluate(() => {
     const dummyOp = {
       id: 'RDP2610903-F',
@@ -258,9 +258,13 @@ test("6. Filtro Cancelados ahora es 'PP' (Por programar) y las operaciones empie
     return window.appState.consecutivo.find(c => c.referenciaOp === 'RDP2610903-F');
   });
   expect(syncedItem).toBeTruthy();
-  expect(syncedItem.st).toBe('C');
+  expect(syncedItem.st).toBe('PP');
 
-  // KPI cards reflejan los montos de 'por cobrar'
+  // Verificar que ya NO existe la opción "Sin Estatus" en el menú desplegable
+  const sinEstatusCount = await page.locator("#tbody-consecutivo .st-dropdown-menu .option-name:has-text('Sin Estatus')").count();
+  expect(sinEstatusCount).toBe(0);
+
+  // KPI cards reflejan los montos de 'por cobrar' + 'por programar'
   const kpiTotal = page.locator("#consecutivo-kpi-total");
   await expect(kpiTotal).toBeVisible();
   const kpiText = await kpiTotal.innerText();
@@ -399,7 +403,7 @@ test("8. Cambiar de P a C quita la fecha de pago y los cambios solo se guardan a
   expect(storedAfterSave.st).toBe('P');
   expect(storedAfterSave.fechaPago).toBeTruthy();
 
-  // 5. Verificar en Proveedores que tampoco se guarda hasta dar clic en Guardar y que al cambiar a P se quita la fecha
+  // 5. Verificar en Proveedores que tampoco se guarda hasta dar clic en Guardar y que al cambiar a PROG se quita la fecha
   await page.evaluate(() => {
     window.switchAdminFicha('proveedores');
     const initialProv = [{
@@ -409,8 +413,8 @@ test("8. Cambiar de P a C quita la fecha de pago y los cambios solo se guardan a
       subtotal: 5000,
       iva: 800,
       total: 5800,
-      p: 'P',
-      estatus: 'P',
+      p: 'PROG',
+      estatus: 'PROG',
       fechaPago: ''
     }];
     window.appState.proveedores = JSON.parse(JSON.stringify(initialProv));
@@ -425,16 +429,16 @@ test("8. Cambiar de P a C quita la fecha de pago y los cambios solo se guardan a
   expect(provInMemAfterPagado.fechaPago).toBeTruthy();
 
   const provStoredBeforeSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_proveedores_data'))[0]);
-  expect(provStoredBeforeSave.p).toBe('P');
+  expect(provStoredBeforeSave.p).toBe('PROG');
 
-  // Cambiar de PAGADO a P (Por pagar) en Proveedores -> quita la fecha de pago
+  // Cambiar de PAGADO a PROG (Programar a pago) en Proveedores -> quita la fecha de pago
   await page.evaluate(() => {
-    window.updateProveedorCell(0, 'p', 'P');
+    window.updateProveedorCell(0, 'p', 'PROG');
   });
   await page.waitForTimeout(200);
-  const provInMemAfterP = await page.evaluate(() => window.appState.proveedores[0]);
-  expect(provInMemAfterP.p).toBe('P');
-  expect(provInMemAfterP.fechaPago).toBe('');
+  const provInMemAfterProg = await page.evaluate(() => window.appState.proveedores[0]);
+  expect(provInMemAfterProg.p).toBe('PROG');
+  expect(provInMemAfterProg.fechaPago).toBe('');
 
   // Volver a PAGADO y dar clic en Guardar
   await page.evaluate(() => {
@@ -714,5 +718,104 @@ test("11. Condición de carrera (el que dio clic antes se queda) y expulsión po
   await expect(page.locator("#operaciones-view-detail")).toBeVisible();
 });
 
+test("12. Proveedores elimina filtros Por pagar y Cancelados dejando Programar a pago por defecto, y Consecutivo tiene sección Archivo para Pagados", async ({ page }) => {
+  await openAppAsAdmin(page);
 
+  // 1. Verificar en Consecutivo la sección "Archivo"
+  const archivoBtn = page.locator("#btn-consecutivo-archivo");
+  await expect(archivoBtn).toBeVisible();
+  await expect(archivoBtn).toContainText("Archivo");
 
+  await page.evaluate(() => {
+    window.appState.consecutivo = [
+      { consecutivo: 1, factura: 'FE-701', fechaEmision: '2026-10-12', cliente: 'CLIENTE PAGADO', subtotal: 5000, iva: 800, total: 5800, st: 'P', fechaPago: '2026-10-12', referenciaOp: 'RDP-P-1' },
+      { consecutivo: 2, factura: 'FE-702', fechaEmision: '2026-10-12', cliente: 'CLIENTE PP', subtotal: 10000, iva: 1600, total: 11600, st: 'PP', fechaPago: '', referenciaOp: 'RDP-PP-2' }
+    ];
+    window.renderConsecutivo();
+  });
+  await page.waitForTimeout(200);
+
+  // Al dar clic en Archivo, deben mostrarse únicamente los archivos en "Pagados" (P)
+  await archivoBtn.click();
+  await page.waitForTimeout(200);
+  await expect(page.locator("#consecutivo-archivo-banner")).toBeVisible();
+  const rowsInArchivo = page.locator("#tbody-consecutivo tr");
+  await expect(rowsInArchivo).toHaveCount(1);
+  await expect(rowsInArchivo.first()).toContainText("FE-701");
+
+  // 2. Ir a Proveedores y verificar que NO existen los filtros 'Por pagar' ni 'Cancelado'
+  await page.evaluate(() => window.switchAdminFicha('proveedores'));
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("#btn-status-filter-p")).toHaveCount(0);
+  await expect(page.locator("#btn-status-filter-cancelado")).toHaveCount(0);
+  await expect(page.locator("#btn-status-filter-prog")).toBeVisible();
+  await expect(page.locator("#btn-status-filter-pagado")).toBeVisible();
+});
+
+test("13. Visualización: Fórmulas exactas (Bancos + fecha, Ingresos = C + PP, 1..4 Balance parcial, Gastos proveedores, Gastos Indirectos, Nominas, Impuestos, TOTAL GENERAL) y colores solicitados", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  await page.evaluate(() => {
+    window.appState.consecutivo = [
+      { consecutivo: 1, factura: 'FE-801', subtotal: 10000, iva: 1600, total: 11600, st: 'C' },
+      { consecutivo: 2, factura: 'FE-802', subtotal: 5000, iva: 800, total: 5800, st: 'PP' },
+      { consecutivo: 3, factura: 'FE-803', subtotal: 20000, iva: 3200, total: 23200, st: 'P' }
+    ];
+    window.appState.proveedores = [
+      { op: 'RDP-1', proveedor: 'PROV 1', subtotal: 3000, iva: 480, total: 3480, p: 'PROG', estatus: 'PROG' },
+      { op: 'RDP-2', proveedor: 'PROV 2', subtotal: 2000, iva: 320, total: 2320, p: 'PAGADO', estatus: 'PAGADO' }
+    ];
+    window.appState.gastosIndirectos = [
+      { id: 'gi-1', folio: 'GI-001', concepto: 'Renta', subtotal: 1000, iva: 0, total: 1000 }
+    ];
+    window.appState.nominas = [
+      { folio: '1', empleado: 'Juan', nomina: 2000, servicio: 2000, total: 2000 }
+    ];
+    window.appState.archivosQuincenales = [];
+    window.appState.selectedQuincenaId = 'current';
+    window.switchAdminFicha('visualizacion');
+    window.updateAdminConcept('bancos', 10000);
+    window.updateAdminConcept('impuestos', 500);
+  });
+  await page.waitForTimeout(200);
+
+  // Verificar que Bancos registró la fecha automáticamente
+  const bancosFechaText = await page.locator("#concept-bancos-fecha").innerText();
+  expect(bancosFechaText).toContain("Fecha:");
+
+  // Verificar cálculos exactos:
+  // Bancos = 10,000
+  // Ingresos (C + PP) = 11,600 + 5,800 = 17,400 (excluye P = 23,200)
+  // 1 Balance parcial = 10,000 + 17,400 = 27,400
+  // Gastos proveedores (solo por pagar / PROG) = 3,480
+  // 2 Balance parcial = 27,400 - 3,480 = 23,920
+  // Gastos Indirectos = 1,000
+  // 3 Balance parcial = 23,920 - 1,000 = 22,920
+  // Nominas = 2,000
+  // 4 Balance parcial = 22,920 - 2,000 = 20,920
+  // Impuestos = 500
+  // TOTAL GENERAL = 20,920 - 500 = 20,420
+  await expect(page.locator("#concept-ingresos-val")).toHaveText("$17,400.00");
+  await expect(page.locator("#balance-subtotal-1")).toHaveText("$27,400.00");
+  await expect(page.locator("#concept-gastos-prov-val")).toHaveText("$3,480.00");
+  await expect(page.locator("#balance-subtotal-2")).toHaveText("$23,920.00");
+  await expect(page.locator("#concept-gastos-ind-val")).toHaveText("$1,000.00");
+  await expect(page.locator("#balance-subtotal-3")).toHaveText("$22,920.00");
+  await expect(page.locator("#concept-nominas-val")).toHaveText("$2,000.00");
+  await expect(page.locator("#balance-subtotal-4")).toHaveText("$20,920.00");
+  await expect(page.locator("#concept-total-final")).toHaveText("$20,420.00");
+
+  // Verificar títulos y clases de colores solicitados
+  await expect(page.locator("#row-vis-balance-1")).toContainText("1 Balance parcial");
+  await expect(page.locator("#row-vis-balance-2")).toContainText("2 Balance parcial");
+  await expect(page.locator("#row-vis-balance-3")).toContainText("3 Balance parcial");
+  await expect(page.locator("#row-vis-balance-4")).toContainText("4 Balance parcial");
+  await expect(page.locator("#row-vis-gastos-ind")).toContainText("Gastos Indirectos");
+
+  await expect(page.locator("#row-vis-balance-1")).toHaveClass(/excel-white-balance-row/);
+  await expect(page.locator("#row-vis-gastos-prov")).toHaveClass(/excel-row-gastos-prov/);
+  await expect(page.locator("#row-vis-gastos-ind")).toHaveClass(/excel-row-gastos-ind/);
+  await expect(page.locator("#row-vis-nominas")).toHaveClass(/excel-row-nominas/);
+  await expect(page.locator("#row-vis-impuestos")).toHaveClass(/excel-row-impuestos/);
+});

@@ -1293,9 +1293,9 @@
 
                                                 <tbody>
 
-                                                    <!-- Bancos Row (Light Green) -->
+                                                    <!-- Bancos Row (Verde) -->
 
-                                                    <tr class="excel-row-bancos">
+                                                    <tr class="excel-row-bancos" id="row-vis-bancos">
 
                                                         <td><strong>Bancos</strong></td>
 
@@ -1305,117 +1305,118 @@
 
                                                         </td>
 
-                                                        <td class="cell-note">Capital disponible en cuenta bancaria</td>
+                                                        <td class="cell-note">
+                                                            <span>Capital disponible en cuenta bancaria</span>
+                                                            <span id="concept-bancos-fecha" class="bancos-fecha-badge"></span>
+                                                        </td>
 
                                                     </tr>
 
-                                                    <!-- Ingresos Row (Dark Blue) -->
+                                                    <!-- Ingresos Row (Azul) -->
 
-                                                    <tr class="excel-row-ingresos">
+                                                    <tr class="excel-row-ingresos" id="row-vis-ingresos">
 
                                                         <td><strong>Ingresos</strong></td>
 
-                                                        <td>
-
-                                                            <input type="number" id="concept-ingresos-input" class="excel-input number-input" value="0" step="100" oninput="updateAdminConcept('ingresos', this.value)">
-
+                                                        <td class="text-right font-bold">
+                                                            <span id="concept-ingresos-val">$0.00</span>
+                                                            <input type="hidden" id="concept-ingresos-input" value="0">
                                                         </td>
 
-                                                        <td class="cell-note"><strong>Facturas por recibir pago.</strong></td>
+                                                        <td class="cell-note"><strong>Total Por cobrar (C) + Por programar (PP)</strong></td>
 
                                                     </tr>
 
-                                                    <!-- Subtotal 1 (Blue) -->
+                                                    <!-- 1 Balance parcial (Blanco) -->
 
-                                                    <tr class="excel-blue-balance-row">
+                                                    <tr class="excel-white-balance-row" id="row-vis-balance-1">
 
-                                                        <td>Balance Parcial (Bancos + Ingresos)</td>
+                                                        <td><strong>1 Balance parcial</strong></td>
 
-                                                        <td id="balance-subtotal-1" class="text-right">$10,000.00</td>
+                                                        <td id="balance-subtotal-1" class="text-right font-bold">$10,000.00</td>
 
-                                                        <td></td>
+                                                        <td class="cell-note">Bancos + Ingresos</td>
 
                                                     </tr>
 
-                                                    <!-- Gastos proveedores (Yellow) -->
+                                                    <!-- Gastos proveedores (Rosa) -->
 
-                                                    <tr class="excel-row-gastos">
+                                                    <tr class="excel-row-gastos-prov" id="row-vis-gastos-prov">
 
                                                         <td><strong>Gastos proveedores</strong></td>
 
                                                         <td id="concept-gastos-prov-val" class="text-right font-bold">$0.00</td>
 
-                                                        <td class="cell-note">Calculado automáticamente de Proveedores</td>
+                                                        <td class="cell-note">Total por pagar en Proveedores</td>
 
                                                     </tr>
 
-                                                    <!-- Subtotal 2 (Blue) -->
+                                                    <!-- 2 Balance parcial (Blanco) -->
 
-                                                    <tr class="excel-blue-balance-row">
+                                                    <tr class="excel-white-balance-row" id="row-vis-balance-2">
 
-                                                        <td>Balance Parcial</td>
+                                                        <td><strong>2 Balance parcial</strong></td>
 
-                                                        <td id="balance-subtotal-2" class="text-right">$10,000.00</td>
+                                                        <td id="balance-subtotal-2" class="text-right font-bold">$10,000.00</td>
 
-                                                        <td></td>
+                                                        <td class="cell-note">1 Balance parcial - Gastos proveedores</td>
 
                                                     </tr>
 
-                                                    <!-- Gastos Indirectos (Yellow) -->
+                                                    <!-- Gastos Indirectos (Amarillo) -->
 
-                                                    <tr class="excel-row-gastos">
+                                                    <tr class="excel-row-gastos-ind" id="row-vis-gastos-ind">
 
-                                                        <td><strong>Gastos Ind.</strong></td>
+                                                        <td><strong>Gastos Indirectos</strong></td>
 
-                                                        <td>
-
-                                                            <input type="number" id="concept-gastos-ind-input" class="excel-input number-input" value="670" step="10" oninput="updateAdminConcept('gastosInd', this.value)">
-
+                                                        <td class="text-right font-bold">
+                                                            <span id="concept-gastos-ind-val">$670.00</span>
+                                                            <input type="hidden" id="concept-gastos-ind-input" value="670">
                                                         </td>
 
-                                                        <td class="cell-note">Gastos operativos indirectos</td>
+                                                        <td class="cell-note">Total de Gastos Indirectos en Administración</td>
 
                                                     </tr>
 
-                                                    <!-- Subtotal 3 (Blue) -->
+                                                    <!-- 3 Balance parcial (Blanco) -->
 
-                                                    <tr class="excel-blue-balance-row">
+                                                    <tr class="excel-white-balance-row" id="row-vis-balance-3">
 
-                                                        <td>Balance Parcial</td>
+                                                        <td><strong>3 Balance parcial</strong></td>
 
-                                                        <td id="balance-subtotal-3" class="text-right">$9,330.00</td>
+                                                        <td id="balance-subtotal-3" class="text-right font-bold">$9,330.00</td>
 
-                                                        <td></td>
+                                                        <td class="cell-note">2 Balance parcial - Gastos Indirectos</td>
 
                                                     </tr>
 
-                                                    <!-- Nóminas (Yellow) -->
+                                                    <!-- Nominas (Negro) -->
 
-                                                    <tr class="excel-row-gastos">
+                                                    <tr class="excel-row-nominas" id="row-vis-nominas">
 
                                                         <td><strong>Nominas</strong></td>
 
-                                                        <td id="concept-nominas-val" class="text-right font-bold" style="color: #b71c1c;">$13,780.00</td>
+                                                        <td id="concept-nominas-val" class="text-right font-bold">$13,780.00</td>
 
-                                                        <td class="cell-note">Calculado de Administración Quincenal</td>
+                                                        <td class="cell-note">Total de Nóminas</td>
 
                                                     </tr>
 
-                                                    <!-- Subtotal 4 (Blue) -->
+                                                    <!-- 4 Balance parcial (Blanco) -->
 
-                                                    <tr class="excel-blue-balance-row">
+                                                    <tr class="excel-white-balance-row" id="row-vis-balance-4">
 
-                                                        <td>Balance Parcial</td>
+                                                        <td><strong>4 Balance parcial</strong></td>
 
                                                         <td id="balance-subtotal-4" class="text-right font-bold">-$4,450.00</td>
 
-                                                        <td></td>
+                                                        <td class="cell-note">3 Balance parcial - Nominas</td>
 
                                                     </tr>
 
-                                                    <!-- Impuestos (Yellow) -->
+                                                    <!-- Impuestos (Rojo) -->
 
-                                                    <tr class="excel-row-gastos">
+                                                    <tr class="excel-row-impuestos" id="row-vis-impuestos">
 
                                                         <td><strong>Impuestos</strong></td>
 
@@ -1431,13 +1432,13 @@
 
                                                     <!-- TOTAL ROW (Boxed Summary) -->
 
-                                                    <tr class="excel-final-total-row">
+                                                    <tr class="excel-final-total-row" id="row-vis-total-general">
 
                                                         <td><strong>TOTAL GENERAL</strong></td>
 
                                                         <td id="concept-total-final" class="text-right font-extrabold">-$4,450.00</td>
 
-                                                        <td class="cell-note">Balance neto final del ejercicio</td>
+                                                        <td class="cell-note">4 Balance parcial - Impuestos</td>
 
                                                     </tr>
 
@@ -1746,21 +1747,15 @@
 
 
 
-                                    <!-- Filtros de Estatus: P = Por pagar, Programar a pago, Pagado, Cancelado (Imágenes 1 y 3) -->
+                                    <!-- Filtros de Estatus: Todos, Programar a pago, Pagado -->
 
                                     <div class="proveedor-status-filter-group" id="proveedor-status-filter-group">
 
                                         <span class="chips-label">Estatus:</span>
 
-                                        <button type="button" class="btn-status-filter active" id="btn-status-filter-all" onclick="filterProveedoresByStatus('all', this)" title="Visualizar todos los documentos incluso archivados">
+                                        <button type="button" class="btn-status-filter active" id="btn-status-filter-all" onclick="filterProveedoresByStatus('all', this)" title="Visualizar todos los documentos">
 
                                             Todos (<span id="count-status-all">0</span>)
-
-                                        </button>
-
-                                        <button type="button" class="btn-status-filter btn-status-p" id="btn-status-filter-p" onclick="filterProveedoresByStatus('P', this)" title="Filtrar Por pagar (P)">
-
-                                            P - Por pagar (<span id="count-status-p">0</span>)
 
                                         </button>
 
@@ -1773,12 +1768,6 @@
                                         <button type="button" class="btn-status-filter btn-status-pagado" id="btn-status-filter-pagado" onclick="filterProveedoresByStatus('PAGADO', this)" title="Filtrar Pagado">
 
                                             Pagado (<span id="count-status-pagado">0</span>)
-
-                                        </button>
-
-                                        <button type="button" class="btn-status-filter btn-status-cancelado" id="btn-status-filter-cancelado" onclick="filterProveedoresByStatus('Cancelado', this)" title="Filtrar Cancelado">
-
-                                            Cancelado (<span id="count-status-cancelado">0</span>)
 
                                         </button>
 
@@ -1885,7 +1874,7 @@
 
 
 
-                                <!-- Summary KPI Cards -->
+                                <!-- Summary KPI Cards + Sección Archivo -->
 
                                 <div class="consecutivo-kpi-grid">
 
@@ -1931,6 +1920,28 @@
 
                                     </div>
 
+                                    <button type="button" class="kpi-mini-card kpi-archivo-card" id="btn-consecutivo-archivo" onclick="toggleConsecutivoArchivoView()" title="Ver sección de Archivo (Todos los proyectos Pagados)">
+                                        <span class="material-symbols-outlined">inventory_2</span>
+                                        <div>
+                                            <span class="kpi-title">Archivo (Pagados)</span>
+                                            <h4 id="consecutivo-archivo-count">Ver Archivo (0)</h4>
+                                        </div>
+                                    </button>
+
+                                 </div>
+
+                                 <!-- Banner activo de Sección Archivo -->
+                                 <div id="consecutivo-archivo-banner" class="consecutivo-archivo-banner" style="display: none;">
+                                     <div class="archivo-banner-info">
+                                         <span class="material-symbols-outlined">folder_managed</span>
+                                         <div>
+                                             <strong>Sección de Archivo — Proyectos Pagados (P)</strong>
+                                             <span>Mostrando únicamente los expedientes y facturas con estatus Pagado (P).</span>
+                                         </div>
+                                     </div>
+                                     <button type="button" class="btn btn-secondary btn-sm" onclick="toggleConsecutivoArchivoView(false)">
+                                         <span class="material-symbols-outlined" style="font-size: 16px;">arrow_back</span> Ver todos los proyectos
+                                     </button>
                                  </div>
 
 

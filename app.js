@@ -378,32 +378,59 @@ const runInitialAppSetup = async () => {
         }
     }
     
-    // Por defecto todas las operaciones empiezan en "por cobrar" ('C') y cancelados en "Por programar" ('PP')
+    // Por defecto todos los proyectos en Consecutivo se ponen en "Por programar" ('PP') y se elimina "Sin Estatus"
+    const migratedConsecutivoPP = localStorage.getItem('rp_consecutivo_default_pp_v3');
     if (appState.consecutivo && Array.isArray(appState.consecutivo)) {
+        let consecChanged = false;
         appState.consecutivo.forEach(item => {
+            if (!item) return;
             const stVal = String(item.st || '').trim().toUpperCase();
-            const isCanceled = String(item.fechaEmision || '').toLowerCase().includes('cancel') || String(item.cliente || '').toLowerCase().includes('cancel') || stVal === 'CANCELADO';
-            if (isCanceled || stVal === 'CANCELADO' || stVal === 'PROG' || stVal === 'POR PROGRAMAR' || stVal === 'PP') {
-                item.st = 'PP';
-            } else if (stVal === 'P') {
-                item.st = 'P';
-            } else if (item.referenciaOp || item.factura || item.subtotal || item.total) {
-                item.st = 'C';
+            if (!migratedConsecutivoPP) {
+                // En la migración inicial, todos los que no estén en Pagado ('P') pasan por defecto a 'PP' (Por programar)
+                if (stVal === 'P') {
+                    item.st = 'P';
+                } else {
+                    item.st = 'PP';
+                    consecChanged = true;
+                }
+            } else {
+                if (stVal === 'P') {
+                    item.st = 'P';
+                } else if (stVal === 'C') {
+                    item.st = 'C';
+                } else {
+                    item.st = 'PP';
+                    consecChanged = true;
+                }
             }
             if (item.st !== 'P') {
                 item.fechaPago = '';
             }
         });
+        if (!migratedConsecutivoPP) {
+            try { localStorage.setItem('rp_consecutivo_default_pp_v3', 'true'); } catch (e) {}
+        }
+        if (consecChanged) {
+            try { localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo)); } catch (e) {}
+        }
     }
     
-    // Purga de filas de proveedores con "Jennifer" o "Rama" y restaurar montos si están en ceros
+    // Por defecto todos los proyectos de Proveedores están en "Programar a pago" ('PROG')
     if (appState.proveedores && Array.isArray(appState.proveedores)) {
         let changed = false;
         appState.proveedores.forEach(p => {
             if (!p) return;
-            if (String(p.p || p.estatus || '').trim().toLowerCase() !== 'pagado' && p.fechaPago) {
-                p.fechaPago = '';
-                changed = true;
+            const rawSt = String(p.p || p.estatus || '').trim().toLowerCase();
+            if (rawSt !== 'pagado') {
+                if (p.p !== 'PROG' || p.estatus !== 'PROG') {
+                    p.p = 'PROG';
+                    p.estatus = 'PROG';
+                    changed = true;
+                }
+                if (p.fechaPago) {
+                    p.fechaPago = '';
+                    changed = true;
+                }
             }
             const cur = String(p.proveedor || '').trim().toLowerCase();
             if (cur === 'jennifer' || cur === 'rama') {
@@ -425,8 +452,8 @@ const runInitialAppSetup = async () => {
                     p.retencion4 = 1932;
                     p.retencionIsr = 0;
                     p.total = 54096;
-                    p.estatus = p.estatus || 'P';
-                    p.p = p.p || 'P';
+                    p.estatus = (!p.estatus || String(p.estatus).toLowerCase() !== 'pagado') ? 'PROG' : 'PAGADO';
+                    p.p = p.estatus;
                     p.factura = p.factura || '-';
                     p.op = 'RDP2610172-F';
                     changed = true;
@@ -1052,34 +1079,99 @@ function formatCurrency(val) {
 }
 
 function calculateAdminTotals() {
-    const bancos = Number(appState.concepts.bancos) || 10000;
-    const ingresos = Number(appState.concepts.ingresos) || 0;
-    const subtotal1 = bancos + ingresos;
-    
-    // Sum from proveedores table
-    let totalGastosProveedores = 0;
-    appState.proveedores.forEach(p => {
-        totalGastosProveedores += Number(p.total) || 0;
-    });
-    
-    const subtotal2 = subtotal1 - totalGastosProveedores;
-    let gastosInd = Number(appState.concepts.gastosInd) || 670;
-    if (appState.gastosIndirectos && appState.gastosIndirectos.length > 0) {
-        let sumGI = 0;
-        appState.gastosIndirectos.forEach(g => { sumGI += Number(g.total) || 0; });
-        if (sumGI > 0) gastosInd = sumGI;
+    if (!appState.concepts) appState.concepts = {};
+    const bancos = (appState.concepts.bancos !== undefined && appState.concepts.bancos !== null && appState.concepts.bancos !== '')
+        ? (Number(appState.concepts.bancos) || 0)
+        : 10000;
+
+    // Ingresos: resultado del total de todos los proyectos en "Por cobrar" (C) y "Por programar" (PP) en Consecutivo
+    let ingresos = 0;
+    if (Array.isArray(appState.consecutivo)) {
+        appState.consecutivo.forEach(item => {
+            if (!item) return;
+            const stVal = String(item.st || 'PP').trim().toUpperCase();
+            if (stVal === 'C' || stVal === 'POR COBRAR' || stVal === 'PP' || stVal === 'PROG' || stVal === 'POR PROGRAMAR' || stVal !== 'P') {
+                if (stVal !== 'P') {
+                    const sub = Number(item.subtotal) || 0;
+                    const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined)
+                        ? Number(item.iva)
+                        : (sub > 0 ? Math.round(sub * 0.16 * 100) / 100 : 0);
+                    const tot = (item.total !== '' && item.total !== null && item.total !== undefined && Number(item.total) > 0)
+                        ? Number(item.total)
+                        : (sub + iv);
+                    ingresos += tot;
+                }
+            }
+        });
     }
-    const subtotal3 = subtotal2 - gastosInd;
+    ingresos = Math.round(ingresos * 100) / 100;
+    appState.concepts.ingresos = ingresos;
+
+    // 1 Balance parcial = Bancos + Ingresos
+    const subtotal1 = Math.round((bancos + ingresos) * 100) / 100;
     
-    // Sum from nóminas table
+    // Gastos proveedores: Todo lo que esté por pagar / programar a pago en Proveedores (excluyendo Pagado)
+    let totalGastosProveedores = 0;
+    (appState.proveedores || []).forEach(p => {
+        if (!p) return;
+        const st = String(p.p || p.estatus || 'PROG').trim().toLowerCase();
+        if (st !== 'pagado') {
+            totalGastosProveedores += Number(p.total) || 0;
+        }
+    });
+    totalGastosProveedores = Math.round(totalGastosProveedores * 100) / 100;
+    
+    // 2 Balance parcial = 1 Balance parcial - Gastos proveedores
+    const subtotal2 = Math.round((subtotal1 - totalGastosProveedores) * 100) / 100;
+
+    // Gastos Indirectos: resultado del total de los gastos indirectos en Administración
+    if (!appState.gastosIndirectos || !Array.isArray(appState.gastosIndirectos) || appState.gastosIndirectos.length === 0) {
+        if (!appState._giInitializedOnce) {
+            appState._giInitializedOnce = true;
+            appState.gastosIndirectos = [
+                {
+                    id: 'gi-1',
+                    folio: 'GI-001',
+                    fecha: new Date().toISOString().split('T')[0],
+                    concepto: 'Papelería e insumos operativos',
+                    categoria: 'Papelería',
+                    subtotal: 577.59,
+                    iva: 92.41,
+                    total: 670.00,
+                    factura: 'FAC-8821'
+                }
+            ];
+        }
+    }
+    let gastosInd = 0;
+    if (Array.isArray(appState.gastosIndirectos)) {
+        appState.gastosIndirectos.forEach(g => {
+            if (g) gastosInd += Number(g.total) || 0;
+        });
+    }
+    gastosInd = Math.round(gastosInd * 100) / 100;
+    appState.concepts.gastosInd = gastosInd;
+
+    // 3 Balance parcial = 2 Balance parcial - Gastos Indirectos
+    const subtotal3 = Math.round((subtotal2 - gastosInd) * 100) / 100;
+    
+    // Nominas: resultado del total de nóminas
     let totalNominas = 0;
     window.getActiveNominasList().forEach(n => {
-        totalNominas += Number(n.total) || 0;
+        if (n) totalNominas += Number(n.total) || 0;
     });
+    totalNominas = Math.round(totalNominas * 100) / 100;
     
-    const subtotal4 = subtotal3 - totalNominas;
-    const impuestos = Number(appState.concepts.impuestos) || 0;
-    const totalFinal = subtotal4 - impuestos;
+    // 4 Balance parcial = 3 Balance parcial - Nominas
+    const subtotal4 = Math.round((subtotal3 - totalNominas) * 100) / 100;
+
+    // Impuestos: edición manual
+    const impuestos = (appState.concepts.impuestos !== undefined && appState.concepts.impuestos !== null && appState.concepts.impuestos !== '')
+        ? (Number(appState.concepts.impuestos) || 0)
+        : 0;
+
+    // TOTAL GENERAL = 4 Balance parcial - Impuestos
+    const totalFinal = Math.round((subtotal4 - impuestos) * 100) / 100;
     
     return {
         bancos,
@@ -1115,7 +1207,15 @@ function renderVisualizacion() {
         kpiBal.style.color = totals.totalFinal < 0 ? "#c62828" : "#2e7d32";
     }
     
-    // Update Concept Table (Imagen 2 format)
+    // Update Concept Table
+    const elBancosFecha = document.getElementById("concept-bancos-fecha");
+    if (elBancosFecha) {
+        elBancosFecha.innerText = appState.concepts?.bancosFecha ? `Fecha: ${appState.concepts.bancosFecha}` : "";
+    }
+
+    const elIngresosVal = document.getElementById("concept-ingresos-val");
+    if (elIngresosVal) elIngresosVal.innerText = formatCurrency(totals.ingresos);
+
     const elSub1 = document.getElementById("balance-subtotal-1");
     if (elSub1) elSub1.innerText = formatCurrency(totals.subtotal1);
     
@@ -1124,6 +1224,9 @@ function renderVisualizacion() {
     
     const elSub2 = document.getElementById("balance-subtotal-2");
     if (elSub2) elSub2.innerText = formatCurrency(totals.subtotal2);
+
+    const elGastosIndVal = document.getElementById("concept-gastos-ind-val");
+    if (elGastosIndVal) elGastosIndVal.innerText = formatCurrency(totals.gastosInd);
     
     const elSub3 = document.getElementById("balance-subtotal-3");
     if (elSub3) elSub3.innerText = formatCurrency(totals.subtotal3);
@@ -1159,7 +1262,15 @@ function renderVisualizacion() {
 
 function updateAdminConcept(key, value) {
     window.updateAdminConcept = updateAdminConcept;
-    appState.concepts[key] = Number(value) || 0;
+    if (!appState.concepts) appState.concepts = {};
+    appState.concepts[key] = value === '' ? 0 : (Number(value) || 0);
+    if (key === 'bancos') {
+        const now = new Date();
+        const dd = String(now.getDate()).padStart(2, '0');
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const yyyy = now.getFullYear();
+        appState.concepts.bancosFecha = `${dd}/${mm}/${yyyy}`;
+    }
     saveToStorage();
     renderVisualizacion();
 };
@@ -2537,35 +2648,23 @@ function updateProveedorStatusCounts() {
         list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
     }
     const countAll = list.length;
-    const countP = list.filter(p => {
-        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-        return st === 'p' || st === 'por pagar' || (!st.includes('cancel') && st !== 'c' && st !== 'prog' && !st.includes('prog') && st !== 'pagado');
-    }).length;
     const countProg = list.filter(p => {
-        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-        return st === 'c' || st === 'prog' || st.includes('prog') || st.includes('cobrar');
+        const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
+        return st !== 'pagado';
     }).length;
     const countPagado = list.filter(p => {
-        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
+        const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
         return st === 'pagado';
-    }).length;
-    const countCancel = list.filter(p => {
-        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-        return st.includes('cancel');
     }).length;
 
     const elAll = document.getElementById("count-status-all");
-    const elP = document.getElementById("count-status-p");
     const elProg = document.getElementById("count-status-prog");
     const elC = document.getElementById("count-status-c");
     const elPagado = document.getElementById("count-status-pagado");
-    const elCancel = document.getElementById("count-status-cancelado");
     if (elAll) elAll.textContent = countAll;
-    if (elP) elP.textContent = countP;
     if (elProg) elProg.textContent = countProg;
     if (elC) elC.textContent = countProg;
     if (elPagado) elPagado.textContent = countPagado;
-    if (elCancel) elCancel.textContent = countCancel;
 }
 window.updateProveedorStatusCounts = updateProveedorStatusCounts;
 
@@ -2613,18 +2712,17 @@ function syncAllOperacionesToProveedores() {
         appState.proveedores = [];
     }
 
-    // Preservar estatus (P / Programar a pago / Pagado / Cancelado) y Fecha de Pago
+    // Preservar estatus (Programar a pago / Pagado) y Fecha de Pago
     const statusMap = new Map();
     const fechaPagoMap = new Map();
     appState.proveedores.forEach(r => {
         if (!r) return;
-        const st = r.p || r.estatus;
-        if (st) {
-            if (r.opRefId) statusMap.set(r.opRefId, st);
-            if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
-            if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
-        }
-        const fp = (String(st || '').trim().toLowerCase() === 'pagado') ? (r.fechaPago || '') : '';
+        const rawSt = r.p || r.estatus;
+        const st = (String(rawSt || '').trim().toLowerCase() === 'pagado') ? 'PAGADO' : 'PROG';
+        if (r.opRefId) statusMap.set(r.opRefId, st);
+        if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
+        if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
+        const fp = (st === 'PAGADO') ? (r.fechaPago || '') : '';
         if (r.opRefId) fechaPagoMap.set(r.opRefId, fp);
         if (r.projectId && r.opRowIndex !== undefined) fechaPagoMap.set(`${r.projectId}_${r.opRowIndex}`, fp);
         if (r.op && r.opRowIndex !== undefined) fechaPagoMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, fp);
@@ -2698,12 +2796,13 @@ function syncAllOperacionesToProveedores() {
                 if (!hasData) return;
 
                 const opRefId = `${p.id}_${idx}`;
-                // Por defecto todos los expedientes de proveedores entran estrictamente por pagar ('P')
-                const savedStatus = statusMap.get(opRefId) || 
-                                    statusMap.get(`${p.id}_${idx}`) || 
-                                    statusMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
-                                    item.p || item.estatus || 'P';
-                const isPagado = String(savedStatus || '').trim().toLowerCase() === 'pagado';
+                // Por defecto todos los expedientes de proveedores entran en "Programar a pago" ('PROG')
+                const rawSaved = statusMap.get(opRefId) || 
+                                 statusMap.get(`${p.id}_${idx}`) || 
+                                 statusMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
+                                 item.p || item.estatus || 'PROG';
+                const isPagado = String(rawSaved || '').trim().toLowerCase() === 'pagado';
+                const savedStatus = isPagado ? 'PAGADO' : 'PROG';
                 const rawFp = fechaPagoMap.has(opRefId) ? fechaPagoMap.get(opRefId) :
                               (fechaPagoMap.has(`${p.id}_${idx}`) ? fechaPagoMap.get(`${p.id}_${idx}`) :
                               (fechaPagoMap.has(`${String(projOp).trim().toLowerCase()}_${idx}`) ? fechaPagoMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) :
@@ -3146,26 +3245,18 @@ function toggleProvEstatusDropdown(index, event) {
         menu = document.createElement("div");
         menu.id = "global-prov-estatus-menu";
         menu.className = "prov-estatus-global-menu";
-        menu.innerHTML = `
-            <div class="prov-dropdown-option option-p" onclick="selectGlobalProvEstatus('P', event)">
-                <span class="prov-badge-dot badge-dot-p"></span>
-                <span class="option-name">P (Por pagar)</span>
-            </div>
-            <div class="prov-dropdown-option option-prog" onclick="selectGlobalProvEstatus('PROG', event)">
-                <span class="prov-badge-dot badge-dot-prog"></span>
-                <span class="option-name">Programar a pago</span>
-            </div>
-            <div class="prov-dropdown-option option-pagado" onclick="selectGlobalProvEstatus('PAGADO', event)">
-                <span class="prov-badge-dot badge-dot-pagado"></span>
-                <span class="option-name">Pagado</span>
-            </div>
-            <div class="prov-dropdown-option option-cancelado" onclick="selectGlobalProvEstatus('Cancelado', event)">
-                <span class="prov-badge-dot badge-dot-cancel"></span>
-                <span class="option-name">Cancelado</span>
-            </div>
-        `;
         document.body.appendChild(menu);
     }
+    menu.innerHTML = `
+        <div class="prov-dropdown-option option-prog" onclick="selectGlobalProvEstatus('PROG', event)">
+            <span class="prov-badge-dot badge-dot-prog"></span>
+            <span class="option-name">Programar a pago</span>
+        </div>
+        <div class="prov-dropdown-option option-pagado" onclick="selectGlobalProvEstatus('PAGADO', event)">
+            <span class="prov-badge-dot badge-dot-pagado"></span>
+            <span class="option-name">Pagado</span>
+        </div>
+    `;
     
     if (menu.style.display === "block" && menu.dataset.currentIndex === String(index)) {
         menu.style.display = "none";
@@ -3175,21 +3266,15 @@ function toggleProvEstatusDropdown(index, event) {
     menu.dataset.currentIndex = String(index);
     
     const currentItem = appState.proveedores[index];
-    const currentSt = currentItem ? (currentItem.p || currentItem.estatus || 'P').trim().toLowerCase() : 'p';
+    const currentSt = currentItem ? (currentItem.p || currentItem.estatus || 'PROG').trim().toLowerCase() : 'prog';
     
     menu.querySelectorAll(".prov-dropdown-option").forEach(opt => opt.classList.remove("selected"));
-    if (currentSt.includes('cancel')) {
-        const oCanc = menu.querySelector(".option-cancelado");
-        if (oCanc) oCanc.classList.add("selected");
-    } else if (currentSt === 'pagado') {
+    if (currentSt === 'pagado') {
         const oPag = menu.querySelector(".option-pagado");
         if (oPag) oPag.classList.add("selected");
-    } else if (currentSt === 'prog' || currentSt === 'c' || currentSt.includes('prog') || currentSt.includes('cobrar')) {
+    } else {
         const oProg = menu.querySelector(".option-prog");
         if (oProg) oProg.classList.add("selected");
-    } else {
-        const oP = menu.querySelector(".option-p");
-        if (oP) oP.classList.add("selected");
     }
     
     const trigger = (event && (event.currentTarget || event.target.closest(".prov-estatus-trigger"))) || document.getElementById(`prov-estatus-trigger-${index}`);
@@ -3218,32 +3303,25 @@ function selectGlobalProvEstatus(newStatus, event) {
     
     if (isNaN(idx) || !appState.proveedores[idx]) return;
 
+    const stLower = String(newStatus).toLowerCase();
+    const normStatus = (stLower === 'pagado') ? 'PAGADO' : 'PROG';
+
     // Actualización visual inmediata en el DOM del badge / trigger
     const trigger = document.getElementById(`prov-estatus-trigger-${idx}`);
     if (trigger) {
-        let estClass = 'estatus-p';
-        let dLabel = 'P';
-        const stLower = String(newStatus).toLowerCase();
-        if (stLower.includes('cancel')) {
-            estClass = 'estatus-cancelado';
-            dLabel = 'Canc';
-        } else if (stLower === 'pagado') {
+        let estClass = 'estatus-prog';
+        let dLabel = 'Prog';
+        if (normStatus === 'PAGADO') {
             estClass = 'estatus-pagado';
             dLabel = 'Pagado';
-        } else if (stLower === 'prog' || stLower === 'c' || stLower.includes('prog') || stLower.includes('cobrar')) {
-            estClass = 'estatus-prog';
-            dLabel = 'Prog';
-        } else {
-            estClass = 'estatus-p';
-            dLabel = 'P';
         }
         trigger.className = `prov-estatus-trigger ${estClass}`;
         const spanLabel = trigger.querySelector('span:first-child');
         if (spanLabel) spanLabel.innerText = dLabel;
-        trigger.title = `Estatus: ${newStatus}. Haz clic para cambiar el estatus.`;
+        trigger.title = `Estatus: ${normStatus === 'PAGADO' ? 'Pagado' : 'Programar a pago'}. Haz clic para cambiar el estatus.`;
     }
     
-    updateProveedorCell(idx, 'p', newStatus);
+    updateProveedorCell(idx, 'p', normStatus);
 }
 window.selectGlobalProvEstatus = selectGlobalProvEstatus;
 
@@ -3259,19 +3337,8 @@ function cycleProveedorEstatus(index, event) {
     const item = appState.proveedores[index];
     if (!item) return;
 
-    const currentSt = (item.p || item.estatus || 'P').trim().toLowerCase();
-    let nextSt = 'P';
-    if (currentSt.includes('cancel')) {
-        nextSt = 'P';
-    } else if (currentSt === 'p' || currentSt === 'por pagar') {
-        nextSt = 'PROG';
-    } else if (currentSt === 'prog' || currentSt === 'c' || currentSt.includes('prog') || currentSt.includes('cobrar')) {
-        nextSt = 'PAGADO';
-    } else if (currentSt === 'pagado') {
-        nextSt = 'Cancelado';
-    } else {
-        nextSt = 'P';
-    }
+    const currentSt = (item.p || item.estatus || 'PROG').trim().toLowerCase();
+    const nextSt = (currentSt === 'pagado') ? 'PROG' : 'PAGADO';
 
     updateProveedorCell(index, 'p', nextSt);
 }
@@ -3295,7 +3362,7 @@ function renderProveedores() {
     if (!tbody) return;
     tbody.innerHTML = "";
     
-    // Filtrar filas válidas para mostrar en Control de Proveedores (visualizar todos los documentos incluso los archivados)
+    // Filtrar filas válidas para mostrar en Control de Proveedores
     let list = (appState.proveedores || []).filter(p => p && (
         (p.op && String(p.op).trim() !== '') ||
         (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
@@ -3312,22 +3379,16 @@ function renderProveedores() {
         list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === selLow);
     }
 
-    // Filter by active status (P = Por pagar, Programar a pago, Pagado, Cancelado)
+    // Filter by active status (Programar a pago, Pagado)
     if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
         const filterVal = appState.proveedorStatusFilter.toLowerCase();
         list = list.filter(p => {
-            const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-            if (filterVal === 'cancelado') {
-                return st.includes('cancel');
-            }
+            const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
             if (filterVal === 'pagado') {
                 return st === 'pagado';
             }
-            if (filterVal === 'prog' || filterVal === 'c') {
-                return st === 'c' || st === 'prog' || st.includes('prog') || st.includes('cobrar');
-            }
-            if (filterVal === 'p') {
-                return st === 'p' || st === 'por pagar' || (!st.includes('cancel') && st !== 'c' && st !== 'prog' && !st.includes('prog') && st !== 'pagado');
+            if (filterVal === 'prog' || filterVal === 'c' || filterVal === 'p') {
+                return st !== 'pagado';
             }
             return st === filterVal;
         });
@@ -3335,26 +3396,18 @@ function renderProveedores() {
     
     list.forEach((item, index) => {
         const realIndex = appState.proveedores.indexOf(item);
-        const rawSt = (item.p || item.estatus || 'P').trim().toLowerCase();
-        let currentStatus = 'P';
-        let displayLabel = 'P';
-        let estatusClass = 'estatus-p';
-        if (rawSt.includes('cancel')) {
-            currentStatus = 'Cancelado';
-            displayLabel = 'Canc';
-            estatusClass = 'estatus-cancelado';
-        } else if (rawSt === 'pagado') {
+        const rawSt = (item.p || item.estatus || 'PROG').trim().toLowerCase();
+        let currentStatus = 'Programar a pago';
+        let displayLabel = 'Prog';
+        let estatusClass = 'estatus-prog';
+        if (rawSt === 'pagado') {
             currentStatus = 'Pagado';
             displayLabel = 'Pagado';
             estatusClass = 'estatus-pagado';
-        } else if (rawSt === 'c' || rawSt === 'prog' || rawSt.includes('prog') || rawSt.includes('cobrar')) {
+        } else {
             currentStatus = 'Programar a pago';
             displayLabel = 'Prog';
             estatusClass = 'estatus-prog';
-        } else {
-            currentStatus = 'Por pagar';
-            displayLabel = 'P';
-            estatusClass = 'estatus-p';
         }
 
         const factProv = item.facturaProveedor || item.folioFF || item.facturaNum || "";
@@ -3451,18 +3504,12 @@ function recalculateProveedoresTableTotals() {
     if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
         const filterVal = appState.proveedorStatusFilter.toLowerCase();
         list = list.filter(p => {
-            const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-            if (filterVal === 'cancelado') {
-                return st.includes('cancel');
-            }
+            const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
             if (filterVal === 'pagado') {
                 return st === 'pagado';
             }
-            if (filterVal === 'prog' || filterVal === 'c') {
-                return st === 'c' || st === 'prog' || st.includes('prog') || st.includes('cobrar');
-            }
-            if (filterVal === 'p') {
-                return st === 'p' || st === 'por pagar' || (!st.includes('cancel') && st !== 'c' && st !== 'prog' && !st.includes('prog') && st !== 'pagado');
+            if (filterVal === 'prog' || filterVal === 'c' || filterVal === 'p') {
+                return st !== 'pagado';
             }
             return st === filterVal;
         });
@@ -3511,6 +3558,10 @@ window.debouncedBroadcastProveedores = debouncedBroadcastProveedores;
 function updateProveedorCell(index, key, val) {
     window.updateProveedorCell = updateProveedorCell;
     if (appState.proveedores && appState.proveedores[index]) {
+        if (key === 'p') {
+            const isPagado = String(val || '').trim().toLowerCase() === 'pagado';
+            val = isPagado ? 'PAGADO' : 'PROG';
+        }
         appState.proveedores[index][key] = val;
         if (key === 'facturaProveedor' || key === 'folioFF' || key === 'facturaNum') {
             appState.proveedores[index].facturaProveedor = val;
@@ -3519,7 +3570,7 @@ function updateProveedorCell(index, key, val) {
         }
         if (key === 'p') {
             appState.proveedores[index].estatus = val;
-            const isPagado = String(val || '').trim().toLowerCase() === 'pagado';
+            const isPagado = val === 'PAGADO';
             if (isPagado) {
                 if (!appState.proveedores[index].fechaPago || appState.proveedores[index].fechaPago === '-' || appState.proveedores[index].fechaPago === '') {
                     appState.proveedores[index].fechaPago = new Date().toISOString().split('T')[0];
@@ -3556,6 +3607,7 @@ function updateProveedorCell(index, key, val) {
         if (key === 'p' || key === 'proveedor') {
             updateProveedorStatusCounts();
             renderProveedores();
+            if (typeof renderVisualizacion === 'function') renderVisualizacion();
         }
     }
 }
@@ -5577,17 +5629,15 @@ window.fetchConsecutivoLockFromCloud = fetchConsecutivoLockFromCloud;
 function getFilteredConsecutivoList() {
     let list = appState.consecutivo || [];
     
-    // 1. ST Filter (P = Pagados, C = Por Cobrar, PP / PROG = Por programar)
-    if (appState.consecutivoStFilter === 'P') {
-        list = list.filter(item => (item.st || '').trim().toUpperCase() === 'P');
+    // 1. ST Filter (P = Pagados / Archivo, C = Por Cobrar, PP = Por programar)
+    if (appState.consecutivoArchivoMode || appState.consecutivoStFilter === 'P') {
+        list = list.filter(item => String(item.st || '').trim().toUpperCase() === 'P');
     } else if (appState.consecutivoStFilter === 'C') {
-        list = list.filter(item => (item.st || '').trim().toUpperCase() === 'C');
+        list = list.filter(item => String(item.st || '').trim().toUpperCase() === 'C');
     } else if (appState.consecutivoStFilter === 'PP' || appState.consecutivoStFilter === 'PROG' || appState.consecutivoStFilter === 'Cancelado') {
         list = list.filter(item => {
-            const st = String(item.st || '').trim().toUpperCase();
-            return st === 'PP' || st === 'PROG' || st === 'POR PROGRAMAR' || st === 'CANCELADO' ||
-                String(item.fechaEmision || '').toLowerCase().includes('cancel') ||
-                String(item.cliente || '').toLowerCase().includes('cancel');
+            const st = String(item.st || 'PP').trim().toUpperCase();
+            return st !== 'P' && st !== 'C';
         });
     }
     
@@ -5619,6 +5669,26 @@ function getFilteredConsecutivoList() {
     return list;
 }
 
+function toggleConsecutivoArchivoView(forceState) {
+    window.toggleConsecutivoArchivoView = toggleConsecutivoArchivoView;
+    const nextState = typeof forceState === 'boolean' ? forceState : !appState.consecutivoArchivoMode;
+    appState.consecutivoArchivoMode = nextState;
+    appState.consecutivoPage = 1;
+
+    document.querySelectorAll(".consecutivo-filter-btn").forEach(b => b.classList.remove("active"));
+    if (nextState) {
+        appState.consecutivoStFilter = 'P';
+        const btnP = document.querySelector(".consecutivo-filter-btn[data-st='P']");
+        if (btnP) btnP.classList.add("active");
+    } else {
+        appState.consecutivoStFilter = 'all';
+        const btnAll = document.querySelector(".consecutivo-filter-btn[data-st='all']");
+        if (btnAll) btnAll.classList.add("active");
+    }
+    renderConsecutivo();
+}
+window.toggleConsecutivoArchivoView = toggleConsecutivoArchivoView;
+
 function renderConsecutivo() {
     window.renderConsecutivo = renderConsecutivo;
     if (!appState.isEditingConsecutivo && typeof window.syncAllOperacionesToConsecutivo === "function") {
@@ -5631,8 +5701,25 @@ function renderConsecutivo() {
     
     const filteredList = getFilteredConsecutivoList();
     const totalFiltered = filteredList.length;
+
+    // Actualizar tarjeta y banner de Sección Archivo (Pagados)
+    const pagadosCount = (appState.consecutivo || []).filter(item => item && String(item.st || '').trim().toUpperCase() === 'P').length;
+    const archivoCountEl = document.getElementById("consecutivo-archivo-count");
+    const archivoBtn = document.getElementById("btn-consecutivo-archivo");
+    const archivoBanner = document.getElementById("consecutivo-archivo-banner");
+    if (archivoCountEl) {
+        archivoCountEl.innerText = appState.consecutivoArchivoMode
+            ? `Viendo Archivo (${pagadosCount})`
+            : `Ver Archivo (${pagadosCount})`;
+    }
+    if (archivoBtn) {
+        archivoBtn.classList.toggle("active", Boolean(appState.consecutivoArchivoMode));
+    }
+    if (archivoBanner) {
+        archivoBanner.style.display = appState.consecutivoArchivoMode ? "flex" : "none";
+    }
     
-    // Update KPI summary cards based on filtered list (reflects Por Cobrar / C)
+    // Update KPI summary cards (reflects Por Cobrar C + Por Programar PP)
     updateConsecutivoKPIs(filteredList);
     
     // Update header count badges
@@ -5667,22 +5754,21 @@ function renderConsecutivo() {
     } else {
         pageItems.forEach((item) => {
             const realIndex = appState.consecutivo.indexOf(item);
-            const isCanceled = String(item.fechaEmision || '').toLowerCase().includes('cancel') || String(item.cliente || '').toLowerCase().includes('cancel') || String(item.st || '').toLowerCase().includes('cancel');
+            const stVal = String(item.st || 'PP').trim().toUpperCase();
             
-            const stVal = String(item.st || '').trim().toUpperCase();
-            const isProg = stVal === 'PP' || stVal === 'PROG' || stVal === 'POR PROGRAMAR' || isCanceled || stVal === 'CANCELADO';
-            
-            let stBadgeClass = 'st-badge-empty';
-            let stDisplay = '-';
-            if (isProg) {
-                stBadgeClass = 'st-badge-pp';
-                stDisplay = 'PP';
+            let stBadgeClass = 'st-badge-pp';
+            let stDisplay = 'PP';
+            let isProg = false;
+            if (stVal === 'P') {
+                stBadgeClass = 'st-badge-p';
+                stDisplay = 'P';
             } else if (stVal === 'C') {
                 stBadgeClass = 'st-badge-c';
                 stDisplay = 'C';
-            } else if (stVal === 'P') {
-                stBadgeClass = 'st-badge-p';
-                stDisplay = 'P';
+            } else {
+                stBadgeClass = 'st-badge-pp';
+                stDisplay = 'PP';
+                isProg = true;
             }
             
             const cleanEmision = String(item.fechaEmision || '').replace(' 00:00:00', '').trim();
@@ -5726,10 +5812,6 @@ function renderConsecutivo() {
                             <span class="material-symbols-outlined st-arrow">expand_more</span>
                         </div>
                         <div class="st-dropdown-menu" id="st-menu-${realIndex}">
-                            <div class="st-dropdown-option ${!stVal ? 'selected' : ''}" onclick="selectStOption(${realIndex}, '', event)">
-                                <span class="st-badge st-badge-empty">-</span>
-                                <span class="option-name">Sin Estatus</span>
-                            </div>
                             <div class="st-dropdown-option ${stVal === 'P' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'P', event)">
                                 <span class="st-badge st-badge-p">P</span>
                                 <span class="option-name">Pagado (P)</span>
@@ -5770,11 +5852,12 @@ function updateConsecutivoKPIs(list) {
     let sumSubtotal = 0;
     let sumIva = 0;
     
-    // En la sección de total se reflejan todos los proyectos que estén en el filtro "por cobrar" ('C')
-    const sourceList = (appState.consecutivoStFilter === 'C') ? list : (appState.consecutivo || []);
+    // El resultado del total de todos los proyectos que estén en "Por cobrar" ('C') y "Por programar" ('PP')
+    const sourceList = appState.consecutivo || [];
     sourceList.forEach(item => {
-        const stVal = String(item.st || '').trim().toUpperCase();
-        if (stVal === 'C' || stVal === 'POR COBRAR') {
+        if (!item) return;
+        const stVal = String(item.st || 'PP').trim().toUpperCase();
+        if (stVal !== 'P') {
             const sub = Number(item.subtotal) || 0;
             const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined) 
                 ? Number(item.iva) 
@@ -5794,6 +5877,10 @@ function updateConsecutivoKPIs(list) {
     if (subEl) subEl.innerText = formatCurrency(sumSubtotal);
     if (ivaEl) ivaEl.innerText = formatCurrency(sumIva);
     if (totEl) totEl.innerText = formatCurrency(sumTotalFacturado);
+
+    if (typeof renderVisualizacion === 'function') {
+        renderVisualizacion();
+    }
 }
 
 function renderConsecutivoFooterTotals(list) {
@@ -5969,8 +6056,8 @@ function addNewConsecutivoRow() {
         subtotal: 0,
         iva: 0,
         total: 0,
-        st: "",
-        fechaPago: today,
+        st: "PP",
+        fechaPago: "",
         referenciaOp: "",
         servicio: "Flete",
         detalle: "",
@@ -6043,6 +6130,9 @@ function filterConsecutivoByST(st, btn) {
     window.filterConsecutivoByST = filterConsecutivoByST;
     const normSt = (st === 'PROG' || st === 'Por programar') ? 'PP' : st;
     appState.consecutivoStFilter = normSt;
+    if (normSt !== 'P') {
+        appState.consecutivoArchivoMode = false;
+    }
     appState.consecutivoPage = 1;
     document.querySelectorAll(".consecutivo-filter-btn").forEach(b => b.classList.remove("active"));
     if (btn && typeof btn.classList?.add === 'function') {
@@ -10830,14 +10920,9 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
         row.iva = iva;
         row.total = tot;
     }
-    if (p.cancelado || p.estatus === 'CANCELADO') {
-        if (!row.st || row.st === 'PROG' || row.st === 'PP') {
-            row.st = 'PP';
-        }
-    } else if (p.archivado || p.estatus === 'CERRADO') {
-        if (!row.st) row.st = 'C';
-    } else if (!row.st) {
-        row.st = 'C';
+    const curRowSt = String(row.st || '').trim().toUpperCase();
+    if (curRowSt !== 'P' && curRowSt !== 'C') {
+        row.st = 'PP';
     }
     if (String(row.st || '').trim().toUpperCase() !== 'P') {
         row.fechaPago = '';
