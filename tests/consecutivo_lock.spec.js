@@ -16,6 +16,25 @@ const supabaseUmd = fs.readFileSync(
 );
 
 async function mockNetwork(page, requests = []) {
+  await page.addInitScript(() => {
+    const OrigWS = window.WebSocket;
+    window.WebSocket = function (url, protocols) {
+      if (url && String(url).includes("supabase.co")) {
+        return {
+          readyState: 1,
+          send() {},
+          close() {},
+          addEventListener() {},
+          removeEventListener() {},
+        };
+      }
+      return new OrigWS(url, protocols);
+    };
+    window.WebSocket.CONNECTING = 0;
+    window.WebSocket.OPEN = 1;
+    window.WebSocket.CLOSING = 2;
+    window.WebSocket.CLOSED = 3;
+  });
   await page.route("**/*", async (route) => {
     const url = route.request().url();
     if (url.startsWith("http://localhost")) return route.continue();
@@ -161,7 +180,7 @@ test("4. Columnas de Consecutivo son de solo lectura y solo ST es editable", asy
       total: 11600,
       st: 'C',
       fechaPago: '',
-      referenciaOp: 'RDP-PRUEBA',
+      referenciaOp: 'RDP2610901-F',
       servicio: 'Flete'
     }];
     window.renderConsecutivo();
@@ -192,7 +211,7 @@ test("5. Estatus Pagados (P) añade automáticamente la fecha de pago", async ({
       total: 5800,
       st: 'C',
       fechaPago: '',
-      referenciaOp: 'RDP-200',
+      referenciaOp: 'RDP2610902-F',
       servicio: 'Flete'
     }];
     window.startEditingConsecutivo();
@@ -222,8 +241,8 @@ test("6. Filtro Cancelados ahora es 'PP' (Por programar) y las operaciones empie
   // Sincronizar un proyecto desde Operaciones a Consecutivo y verificar que empieza en 'C'
   await page.evaluate(() => {
     const dummyOp = {
-      id: 'RDP-NEW-OP',
-      numProyecto: 'RDP-NEW-OP',
+      id: 'RDP2610903-F',
+      numProyecto: 'RDP2610903-F',
       generado: true,
       subtotal: 20000,
       iva: 3200,
@@ -236,7 +255,7 @@ test("6. Filtro Cancelados ahora es 'PP' (Por programar) y las operaciones empie
   await page.waitForTimeout(300);
 
   const syncedItem = await page.evaluate(() => {
-    return window.appState.consecutivo.find(c => c.referenciaOp === 'RDP-NEW-OP');
+    return window.appState.consecutivo.find(c => c.referenciaOp === 'RDP2610903-F');
   });
   expect(syncedItem).toBeTruthy();
   expect(syncedItem.st).toBe('C');
@@ -264,7 +283,7 @@ test("7. Cambiar estatus asigna fecha de pago, preserva el filtro activo y no ca
       total: 9280,
       st: 'PP',
       fechaPago: '',
-      referenciaOp: 'RDP-555',
+      referenciaOp: 'RDP2610904-F',
       servicio: 'Flete Local'
     }];
     window.filterConsecutivoByST('all');
@@ -318,4 +337,115 @@ test("7. Cambiar estatus asigna fecha de pago, preserva el filtro activo y no ca
   expect(row.st).toBe("P");
   expect(row.fechaPago).toBeTruthy();
 });
+
+test("8. Cambiar de P a C quita la fecha de pago y los cambios solo se guardan al dar clic en Guardar (Consecutivo y Proveedores)", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  // 1. Preparar registro inicial guardado en localStorage con estatus C y sin fecha
+  await page.evaluate(() => {
+    const initialList = [{
+      consecutivo: 1,
+      factura: 'FE-100',
+      fechaEmision: '2026-10-12',
+      cliente: 'CLIENTE PRUEBA',
+      folioCliente: 'OC-999',
+      subtotal: 10000,
+      iva: 1600,
+      total: 11600,
+      st: 'C',
+      fechaPago: '',
+      referenciaOp: 'RDP2610905-F',
+      servicio: 'Flete'
+    }];
+    window.appState.consecutivo = JSON.parse(JSON.stringify(initialList));
+    localStorage.setItem('rp_consecutivo_data', JSON.stringify(initialList));
+    window.renderConsecutivo();
+    window.startEditingConsecutivo();
+  });
+  await page.waitForTimeout(200);
+
+  // 2. Cambiar a P -> debe agregar fechaPago en memoria, pero NO guardar aún en localStorage
+  await page.evaluate(() => {
+    window.selectStOption(0, 'P');
+  });
+  await page.waitForTimeout(200);
+
+  const inMemoryAfterP = await page.evaluate(() => window.appState.consecutivo[0]);
+  expect(inMemoryAfterP.st).toBe('P');
+  expect(inMemoryAfterP.fechaPago).toBeTruthy();
+
+  const storedBeforeSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_consecutivo_data'))[0]);
+  expect(storedBeforeSave.st).toBe('C');
+  expect(storedBeforeSave.fechaPago).toBe('');
+
+  // 3. Cambiar de P a C -> debe QUITAR la fecha de pago
+  await page.evaluate(() => {
+    window.selectStOption(0, 'C');
+  });
+  await page.waitForTimeout(200);
+
+  const inMemoryAfterC = await page.evaluate(() => window.appState.consecutivo[0]);
+  expect(inMemoryAfterC.st).toBe('C');
+  expect(inMemoryAfterC.fechaPago).toBe('');
+
+  // 4. Volver a cambiar a P y dar clic en Guardar -> ahora SÍ se guarda en localStorage
+  await page.evaluate(() => {
+    window.selectStOption(0, 'P');
+  });
+  await page.locator("#btn-save-consecutivo").click();
+  await page.waitForTimeout(300);
+
+  const storedAfterSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_consecutivo_data'))[0]);
+  expect(storedAfterSave.st).toBe('P');
+  expect(storedAfterSave.fechaPago).toBeTruthy();
+
+  // 5. Verificar en Proveedores que tampoco se guarda hasta dar clic en Guardar y que al cambiar a P se quita la fecha
+  await page.evaluate(() => {
+    window.switchAdminFicha('proveedores');
+    const initialProv = [{
+      op: 'RDP2610906-F',
+      fecha: '2026-10-12',
+      proveedor: 'PROVEEDOR TEST',
+      subtotal: 5000,
+      iva: 800,
+      total: 5800,
+      p: 'P',
+      estatus: 'P',
+      fechaPago: ''
+    }];
+    window.appState.proveedores = JSON.parse(JSON.stringify(initialProv));
+    localStorage.setItem('rp_proveedores_data', JSON.stringify(initialProv));
+    window.startEditingProveedores();
+    window.updateProveedorCell(0, 'p', 'PAGADO');
+  });
+  await page.waitForTimeout(200);
+
+  const provInMemAfterPagado = await page.evaluate(() => window.appState.proveedores[0]);
+  expect(provInMemAfterPagado.p).toBe('PAGADO');
+  expect(provInMemAfterPagado.fechaPago).toBeTruthy();
+
+  const provStoredBeforeSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_proveedores_data'))[0]);
+  expect(provStoredBeforeSave.p).toBe('P');
+
+  // Cambiar de PAGADO a P (Por pagar) en Proveedores -> quita la fecha de pago
+  await page.evaluate(() => {
+    window.updateProveedorCell(0, 'p', 'P');
+  });
+  await page.waitForTimeout(200);
+  const provInMemAfterP = await page.evaluate(() => window.appState.proveedores[0]);
+  expect(provInMemAfterP.p).toBe('P');
+  expect(provInMemAfterP.fechaPago).toBe('');
+
+  // Volver a PAGADO y dar clic en Guardar
+  await page.evaluate(() => {
+    window.updateProveedorCell(0, 'p', 'PAGADO');
+  });
+  await page.locator("#btn-save-proveedores").click();
+  await page.waitForTimeout(300);
+
+  const provStoredAfterSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_proveedores_data'))[0]);
+  expect(provStoredAfterSave.p).toBe('PAGADO');
+  expect(provStoredAfterSave.fechaPago).toBeTruthy();
+});
+
 

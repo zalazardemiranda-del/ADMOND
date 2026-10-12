@@ -279,7 +279,8 @@ const runInitialAppSetup = async () => {
         'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
         'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
-        'RDP261074-', 'RDP261075-'
+        'RDP261074-', 'RDP261075-',
+        'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
     ]);
     window.purgedProjectIds = purgedProjectIds;
 
@@ -389,6 +390,9 @@ const runInitialAppSetup = async () => {
             } else if (item.referenciaOp || item.factura || item.subtotal || item.total) {
                 item.st = 'C';
             }
+            if (item.st !== 'P') {
+                item.fechaPago = '';
+            }
         });
     }
     
@@ -397,6 +401,10 @@ const runInitialAppSetup = async () => {
         let changed = false;
         appState.proveedores.forEach(p => {
             if (!p) return;
+            if (String(p.p || p.estatus || '').trim().toLowerCase() !== 'pagado' && p.fechaPago) {
+                p.fechaPago = '';
+                changed = true;
+            }
             const cur = String(p.proveedor || '').trim().toLowerCase();
             if (cur === 'jennifer' || cur === 'rama') {
                 p.proveedor = cur === 'rama' ? "RAMA MULTIMODAL S DE RL DE CV" : "Jennufer Marylin Gonzales Franco";
@@ -907,6 +915,12 @@ function switchTab(tabName) {
     const titleEl = document.getElementById("page-main-title");
     const subtitleEl = document.getElementById("page-subtitle");
     
+    if (tabName !== 'administracion' && appState.activeOperacionesProjectId) {
+        if (typeof closeOperacionesDetail === 'function') {
+            closeOperacionesDetail();
+        }
+    }
+
     if (tabName === 'schema') {
         titleEl.innerText = "Esquematización de Sistema";
         subtitleEl.innerText = "Mapeo jerárquico de proyectos, ramificación por departamentos y trazabilidad de bloqueos";
@@ -963,17 +977,20 @@ function switchAdminFicha(fichaName) {
     const subpane = document.getElementById(`admin-subpane-${fichaName}`);
     if (subpane) subpane.classList.add("active");
 
-    const topbarBack = document.getElementById("op-detail-topbar");
-    if (topbarBack && fichaName !== 'operaciones') topbarBack.style.display = "none";
+    if (fichaName !== 'operaciones' && appState.activeOperacionesProjectId) {
+        if (typeof closeOperacionesDetail === 'function') {
+            closeOperacionesDetail();
+        }
+    }
 
     if (fichaName !== 'proveedores' && appState.isEditingProveedores) {
-        if (typeof saveEditingProveedores === 'function') {
-            saveEditingProveedores(true);
+        if (typeof cancelEditingProveedores === 'function') {
+            cancelEditingProveedores();
         }
     }
     if (fichaName !== 'consecutivo' && appState.isEditingConsecutivo) {
-        if (typeof saveEditingConsecutivo === 'function') {
-            saveEditingConsecutivo(true);
+        if (typeof cancelEditingConsecutivo === 'function') {
+            cancelEditingConsecutivo();
         }
     }
 
@@ -1018,6 +1035,9 @@ function renderAdministracion() {
     } else if (appState.currentAdminFicha === 'archivo-digital') {
         renderArchivoDigital();
     } else if (appState.currentAdminFicha === 'operaciones') {
+        if (typeof window.fetchOperacionesProjectLocksFromCloud === 'function') {
+            window.fetchOperacionesProjectLocksFromCloud();
+        }
         if (typeof window.fetchOperacionesFromCloud === 'function') window.fetchOperacionesFromCloud();
         if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
     }
@@ -2273,12 +2293,14 @@ async function fetchProveedoresCatalogFromCloud() {
 let _syncProveedoresTimer = null;
 function syncProveedoresToCloud(forceImmediate = false) {
     window.syncProveedoresToCloud = syncProveedoresToCloud;
+    window._lastLocalProveedoresSyncTime = Date.now();
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
     const doSync = async () => {
         try {
+            window._lastLocalProveedoresSyncTime = Date.now();
             const list = appState.proveedores || [];
             await client.from('messages').insert({
                 chat_id: '__cloud_sync_proveedores_data__',
@@ -2286,6 +2308,7 @@ function syncProveedoresToCloud(forceImmediate = false) {
                 emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
                 emisor_role: 'sistema'
             });
+            window._lastLocalProveedoresSyncTime = Date.now();
         } catch (e) {
             console.warn("⚠️ Error persisting proveedores data to Supabase:", e);
         }
@@ -2302,6 +2325,7 @@ window.syncProveedoresToCloud = syncProveedoresToCloud;
 
 function broadcastProveedoresUpdate() {
     window.broadcastProveedoresUpdate = broadcastProveedoresUpdate;
+    window._lastLocalProveedoresSyncTime = Date.now();
     if (window.chatRealtimeChannel) {
         try {
             window.chatRealtimeChannel.send({
@@ -2324,6 +2348,8 @@ window.broadcastProveedoresUpdate = broadcastProveedoresUpdate;
 async function fetchProveedoresDataFromCloud() {
     window.fetchProveedoresDataFromCloud = fetchProveedoresDataFromCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    if (appState.isEditingProveedores) return;
+    if (Date.now() - (window._lastLocalProveedoresSyncTime || 0) < 5000) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
@@ -2333,6 +2359,8 @@ async function fetchProveedoresDataFromCloud() {
             .eq('chat_id', '__cloud_sync_proveedores_data__')
             .order('created_at', { ascending: false })
             .limit(1);
+
+        if (appState.isEditingProveedores || Date.now() - (window._lastLocalProveedoresSyncTime || 0) < 5000) return;
 
         if (msgs && msgs.length > 0 && msgs[0].contenido) {
             try {
@@ -2357,8 +2385,10 @@ async function fetchProveedoresDataFromCloud() {
                                 const st = match.p || match.estatus;
                                 if (localR.p !== st) { localR.p = st; localR.estatus = st; anyChanged = true; }
                             }
-                            if (match.fechaPago !== undefined && match.fechaPago !== localR.fechaPago) {
-                                localR.fechaPago = match.fechaPago;
+                            const isPagado = String(localR.p || localR.estatus || '').trim().toLowerCase() === 'pagado';
+                            const targetFecha = isPagado ? (match.fechaPago !== undefined ? match.fechaPago : localR.fechaPago) : '';
+                            if (targetFecha !== localR.fechaPago) {
+                                localR.fechaPago = targetFecha;
                                 anyChanged = true;
                             }
                             if (match.facturaProveedor !== undefined && match.facturaProveedor !== localR.facturaProveedor) {
@@ -2564,6 +2594,8 @@ window.syncProjectToProveedores = syncProjectToProveedores;
 
 function syncAllOperacionesToProveedores() {
     window.syncAllOperacionesToProveedores = syncAllOperacionesToProveedores;
+    if (appState.isEditingProveedores) return;
+
     if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos) || appState.operacionesProyectos.length === 0) {
         const stored = localStorage.getItem('rp_operaciones_proyectos');
         if (stored) {
@@ -2591,12 +2623,10 @@ function syncAllOperacionesToProveedores() {
             if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
             if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
         }
-        const fp = r.fechaPago;
-        if (fp) {
-            if (r.opRefId) fechaPagoMap.set(r.opRefId, fp);
-            if (r.projectId && r.opRowIndex !== undefined) fechaPagoMap.set(`${r.projectId}_${r.opRowIndex}`, fp);
-            if (r.op && r.opRowIndex !== undefined) fechaPagoMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, fp);
-        }
+        const fp = (String(st || '').trim().toLowerCase() === 'pagado') ? (r.fechaPago || '') : '';
+        if (r.opRefId) fechaPagoMap.set(r.opRefId, fp);
+        if (r.projectId && r.opRowIndex !== undefined) fechaPagoMap.set(`${r.projectId}_${r.opRowIndex}`, fp);
+        if (r.op && r.opRowIndex !== undefined) fechaPagoMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, fp);
     });
 
     const newProveedoresList = [];
@@ -2672,10 +2702,12 @@ function syncAllOperacionesToProveedores() {
                                     statusMap.get(`${p.id}_${idx}`) || 
                                     statusMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
                                     item.p || item.estatus || 'P';
-                const savedFechaPago = fechaPagoMap.get(opRefId) || 
-                                       fechaPagoMap.get(`${p.id}_${idx}`) || 
-                                       fechaPagoMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
-                                       item.fechaPago || '';
+                const isPagado = String(savedStatus || '').trim().toLowerCase() === 'pagado';
+                const rawFp = fechaPagoMap.has(opRefId) ? fechaPagoMap.get(opRefId) :
+                              (fechaPagoMap.has(`${p.id}_${idx}`) ? fechaPagoMap.get(`${p.id}_${idx}`) :
+                              (fechaPagoMap.has(`${String(projOp).trim().toLowerCase()}_${idx}`) ? fechaPagoMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) :
+                              (item.fechaPago || '')));
+                const savedFechaPago = isPagado ? (rawFp || '') : '';
 
                 // Mantener sincronizado el objeto del proyecto en memoria
                 item.subtotal = sub;
@@ -2718,7 +2750,12 @@ function syncAllOperacionesToProveedores() {
     }
 
     // Preservar filas manuales que hayan sido creadas en Control de Proveedores (sin opRefId de Operaciones)
-    const existingManualRows = (appState.proveedores || []).filter(r => r && !r.opRefId && !r.projectId);
+    const existingManualRows = (appState.proveedores || []).filter(r => r && !r.opRefId && !r.projectId).map(r => {
+        if (String(r.p || r.estatus || '').trim().toLowerCase() !== 'pagado') {
+            r.fechaPago = '';
+        }
+        return r;
+    });
     appState.proveedores = [...newProveedoresList, ...existingManualRows];
     saveToStorage();
     if (typeof updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
@@ -2747,13 +2784,14 @@ function syncProveedorRowBackToOperaciones(row) {
     if (!p.proveedoresClaves) p.proveedoresClaves = [];
     const rIdx = (row.opRowIndex !== undefined && row.opRowIndex !== null) ? row.opRowIndex : 0;
 
-    // Sincronizar estatus y factura de proveedor hacia Operaciones
+    // Sincronizar estatus, fecha de pago y factura de proveedor hacia Operaciones
     if (p.proveedoresClaves[rIdx]) {
         const item = p.proveedoresClaves[rIdx];
         if (row.p) {
             item.p = row.p;
             item.estatus = row.p;
         }
+        item.fechaPago = (String(row.p || row.estatus || '').trim().toLowerCase() === 'pagado') ? (row.fechaPago || '') : '';
         if (row.facturaProveedor !== undefined) {
             item.facturaNum = row.facturaProveedor;
         } else if (row.folioFF !== undefined) {
@@ -2835,6 +2873,10 @@ async function startEditingProveedores() {
         }
     }
 
+    // Respaldar estado previo a la edición para que los cambios solo se guarden al dar clic en 'Guardar'
+    appState._proveedoresSnapshot = JSON.parse(JSON.stringify(appState.proveedores || []));
+    appState._operacionesSnapshotProv = JSON.parse(JSON.stringify(appState.operacionesProyectos || []));
+
     appState.isEditingProveedores = true;
     appState.proveedoresLockedBy = {
         userId: currentUserId,
@@ -2855,14 +2897,14 @@ async function startEditingProveedores() {
         showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
     }
 
-    // Auto-cierre de seguridad a los 5 minutos de inactividad
+    // Auto-cierre de seguridad a los 5 minutos de inactividad (descarta si no se dio clic en Guardar)
     if (_editProveedoresTimeout) clearTimeout(_editProveedoresTimeout);
     _editProveedoresTimeout = setTimeout(() => {
         if (appState.isEditingProveedores) {
             if (typeof showCustomNotification === 'function') {
-                showCustomNotification("Tiempo de edición expirado por inactividad. Guardando cambios automáticamente...", "warning");
+                showCustomNotification("Tiempo de edición expirado por inactividad. Los cambios no guardados fueron descartados.", "warning");
             }
-            saveEditingProveedores(true);
+            cancelEditingProveedores();
         }
     }, 5 * 60 * 1000);
 }
@@ -2872,14 +2914,34 @@ async function saveEditingProveedores(isAuto = false) {
     window.saveEditingProveedores = saveEditingProveedores;
     if (_editProveedoresTimeout) clearTimeout(_editProveedoresTimeout);
 
+    window._lastLocalProveedoresSyncTime = Date.now();
+    window._lastLocalOperacionesSyncTime = Date.now();
+
+    // Sincronizar hacia Operaciones los cambios confirmados
+    if (typeof window.syncProveedorRowBackToOperaciones === 'function' && Array.isArray(appState.proveedores)) {
+        appState.proveedores.forEach(r => {
+            if (r && String(r.p || r.estatus || '').trim().toLowerCase() !== 'pagado') {
+                r.fechaPago = '';
+            }
+            window.syncProveedorRowBackToOperaciones(r);
+        });
+    }
+
     appState.isEditingProveedores = false;
     appState.proveedoresLockedBy = null;
+    appState._proveedoresSnapshot = null;
+    appState._operacionesSnapshotProv = null;
+
+    // Guardar en almacenamiento y nube ANTES de re-renderizar
+    saveToStorage();
+    try {
+        localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
+        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    } catch (e) {}
 
     updateProveedoresEditButtonsUI();
     renderProveedores();
 
-    // Guardar en almacenamiento y nube
-    saveToStorage();
     if (typeof syncProveedoresToCloud === 'function') {
         syncProveedoresToCloud(true);
     }
@@ -2896,6 +2958,30 @@ async function saveEditingProveedores(isAuto = false) {
     }
 }
 window.saveEditingProveedores = saveEditingProveedores;
+
+async function cancelEditingProveedores() {
+    window.cancelEditingProveedores = cancelEditingProveedores;
+    if (_editProveedoresTimeout) clearTimeout(_editProveedoresTimeout);
+
+    appState.isEditingProveedores = false;
+    appState.proveedoresLockedBy = null;
+
+    if (appState._proveedoresSnapshot) {
+        appState.proveedores = JSON.parse(JSON.stringify(appState._proveedoresSnapshot));
+        appState._proveedoresSnapshot = null;
+    }
+    if (appState._operacionesSnapshotProv) {
+        appState.operacionesProyectos = JSON.parse(JSON.stringify(appState._operacionesSnapshotProv));
+        appState._operacionesSnapshotProv = null;
+    }
+
+    updateProveedoresEditButtonsUI();
+    renderProveedores();
+
+    broadcastProveedoresLockState(false, null, null);
+    await syncProveedoresLockToCloud(false, null, null);
+}
+window.cancelEditingProveedores = cancelEditingProveedores;
 
 function updateProveedoresEditButtonsUI() {
     window.updateProveedoresEditButtonsUI = updateProveedoresEditButtonsUI;
@@ -3432,6 +3518,14 @@ function updateProveedorCell(index, key, val) {
         }
         if (key === 'p') {
             appState.proveedores[index].estatus = val;
+            const isPagado = String(val || '').trim().toLowerCase() === 'pagado';
+            if (isPagado) {
+                if (!appState.proveedores[index].fechaPago || appState.proveedores[index].fechaPago === '-' || appState.proveedores[index].fechaPago === '') {
+                    appState.proveedores[index].fechaPago = new Date().toISOString().split('T')[0];
+                }
+            } else {
+                appState.proveedores[index].fechaPago = '';
+            }
         }
         
         // If updated provider name, check if in names list
@@ -3442,21 +3536,25 @@ function updateProveedorCell(index, key, val) {
             renderProveedorChips();
         }
 
-        // Two-way sync back to Operaciones
-        const row = appState.proveedores[index];
-        if (typeof window.syncProveedorRowBackToOperaciones === 'function') {
-            window.syncProveedorRowBackToOperaciones(row);
+        // Los cambios no se guardan en almacenamiento ni nube a menos que se dé clic en 'Guardar'
+        if (!appState.isEditingProveedores) {
+            const row = appState.proveedores[index];
+            if (typeof window.syncProveedorRowBackToOperaciones === 'function') {
+                window.syncProveedorRowBackToOperaciones(row);
+            }
+            saveToStorage();
+            if (key === 'p' || key === 'proveedor') {
+                if (typeof window.broadcastProveedoresUpdate === 'function') {
+                    window.broadcastProveedoresUpdate();
+                }
+            } else {
+                debouncedBroadcastProveedores();
+            }
         }
-        
-        saveToStorage();
+
         if (key === 'p' || key === 'proveedor') {
             updateProveedorStatusCounts();
             renderProveedores();
-            if (typeof window.broadcastProveedoresUpdate === 'function') {
-                window.broadcastProveedoresUpdate();
-            }
-        } else {
-            debouncedBroadcastProveedores();
         }
     }
 }
@@ -5219,6 +5317,10 @@ async function startEditingConsecutivo() {
         }
     }
 
+    // Respaldar estado previo a la edición para que los cambios solo se guarden al dar clic en 'Guardar'
+    appState._consecutivoSnapshot = JSON.parse(JSON.stringify(appState.consecutivo || []));
+    appState._operacionesSnapshotConsec = JSON.parse(JSON.stringify(appState.operacionesProyectos || []));
+
     appState.isEditingConsecutivo = true;
     appState.consecutivoLockedBy = {
         userId: currentUserId,
@@ -5239,14 +5341,14 @@ async function startEditingConsecutivo() {
         showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
     }
 
-    // Auto-timeout de 5 minutos por seguridad
+    // Auto-timeout de 5 minutos por seguridad (descarta si no se dio clic en Guardar)
     if (_editConsecutivoTimeout) clearTimeout(_editConsecutivoTimeout);
     _editConsecutivoTimeout = setTimeout(() => {
         if (appState.isEditingConsecutivo) {
             if (typeof showCustomNotification === 'function') {
-                showCustomNotification("Tiempo de edición expirado por inactividad. Guardando cambios automáticamente...", "warning");
+                showCustomNotification("Tiempo de edición expirado por inactividad. Los cambios no guardados fueron descartados.", "warning");
             }
-            saveEditingConsecutivo(true);
+            cancelEditingConsecutivo();
         }
     }, 5 * 60 * 1000);
 }
@@ -5256,16 +5358,35 @@ async function saveEditingConsecutivo(isAuto = false) {
     window.saveEditingConsecutivo = saveEditingConsecutivo;
     if (_editConsecutivoTimeout) clearTimeout(_editConsecutivoTimeout);
 
+    window._lastLocalConsecutivoSyncTime = Date.now();
+    window._lastLocalOperacionesSyncTime = Date.now();
+
+    if (Array.isArray(appState.consecutivo)) {
+        appState.consecutivo.forEach(row => {
+            if (!row) return;
+            if (String(row.st || '').trim().toUpperCase() !== 'P') {
+                row.fechaPago = '';
+            }
+        });
+    }
+
     appState.isEditingConsecutivo = false;
     appState.consecutivoLockedBy = null;
+    appState._consecutivoSnapshot = null;
+    appState._operacionesSnapshotConsec = null;
+
+    // Guardar en almacenamiento y nube ANTES de re-renderizar
+    saveToStorage();
+    try {
+        localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
+        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    } catch (e) {}
 
     updateConsecutivoEditButtonsUI();
     renderConsecutivo();
 
-    // Guardar en almacenamiento y nube
-    saveToStorage();
     if (typeof window.syncConsecutivoToCloud === 'function') {
-        window.syncConsecutivoToCloud();
+        window.syncConsecutivoToCloud(true);
     }
 
     // Notificar desbloqueo a otras máquinas
@@ -5277,6 +5398,30 @@ async function saveEditingConsecutivo(isAuto = false) {
     }
 }
 window.saveEditingConsecutivo = saveEditingConsecutivo;
+
+async function cancelEditingConsecutivo() {
+    window.cancelEditingConsecutivo = cancelEditingConsecutivo;
+    if (_editConsecutivoTimeout) clearTimeout(_editConsecutivoTimeout);
+
+    appState.isEditingConsecutivo = false;
+    appState.consecutivoLockedBy = null;
+
+    if (appState._consecutivoSnapshot) {
+        appState.consecutivo = JSON.parse(JSON.stringify(appState._consecutivoSnapshot));
+        appState._consecutivoSnapshot = null;
+    }
+    if (appState._operacionesSnapshotConsec) {
+        appState.operacionesProyectos = JSON.parse(JSON.stringify(appState._operacionesSnapshotConsec));
+        appState._operacionesSnapshotConsec = null;
+    }
+
+    updateConsecutivoEditButtonsUI();
+    renderConsecutivo();
+
+    broadcastConsecutivoLockState(false, null, null);
+    await syncConsecutivoLockToCloud(false, null, null);
+}
+window.cancelEditingConsecutivo = cancelEditingConsecutivo;
 
 function updateConsecutivoEditButtonsUI() {
     window.updateConsecutivoEditButtonsUI = updateConsecutivoEditButtonsUI;
@@ -5475,7 +5620,9 @@ function getFilteredConsecutivoList() {
 
 function renderConsecutivo() {
     window.renderConsecutivo = renderConsecutivo;
-    if (typeof window.syncAllOperacionesToConsecutivo === "function") window.syncAllOperacionesToConsecutivo();
+    if (!appState.isEditingConsecutivo && typeof window.syncAllOperacionesToConsecutivo === "function") {
+        window.syncAllOperacionesToConsecutivo();
+    }
     if (typeof window.updateConsecutivoEditButtonsUI === "function") window.updateConsecutivoEditButtonsUI();
     const tbody = document.getElementById("tbody-consecutivo");
     if (!tbody) return;
@@ -5729,9 +5876,12 @@ function updateConsecutivoCell(index, key, val) {
     window.updateConsecutivoCell = updateConsecutivoCell;
     if (appState.consecutivo && appState.consecutivo[index]) {
         appState.consecutivo[index][key] = val;
-        saveToStorage();
-        if (typeof window.syncConsecutivoToCloud === 'function') {
-            window.syncConsecutivoToCloud();
+        // Los cambios no se guardan en almacenamiento ni nube a menos que se dé clic en 'Guardar'
+        if (!appState.isEditingConsecutivo) {
+            saveToStorage();
+            if (typeof window.syncConsecutivoToCloud === 'function') {
+                window.syncConsecutivoToCloud();
+            }
         }
     }
 };
@@ -6169,19 +6319,20 @@ function selectStOption(index, value, event) {
     }
 
     // 1 Pagados: se añade automáticamente la fecha de pago para que proceda a archivarse
+    // Si se cambia a otro estatus ('C', 'PP', ''), se quita la fecha de pago
     if (finalVal === 'P') {
         if (!row.fechaPago || row.fechaPago === '-' || row.fechaPago === '') {
             row.fechaPago = new Date().toISOString().split('T')[0];
         }
+    } else {
+        row.fechaPago = '';
     }
 
     row.st = finalVal;
     updateConsecutivoCell(index, 'st', finalVal);
-    if (finalVal === 'P' && row.fechaPago) {
-        updateConsecutivoCell(index, 'fechaPago', row.fechaPago);
-    }
+    updateConsecutivoCell(index, 'fechaPago', row.fechaPago);
 
-    // Sincronizar cancelación o cambio de estatus al expediente en Operaciones
+    // Sincronizar en memoria el cambio de estatus al expediente en Operaciones (se guardará al dar clic en 'Guardar')
     if (row.referenciaOp && Array.isArray(appState.operacionesProyectos)) {
         const refId = String(row.referenciaOp).trim().toLowerCase();
         const proj = appState.operacionesProyectos.find(p => 
@@ -6191,6 +6342,8 @@ function selectStOption(index, value, event) {
             if (finalVal === 'PP' || finalVal === 'PROG') {
                 proj.estatus = 'POR PROGRAMAR';
                 proj.cancelado = false;
+                proj.fechaPago = '';
+                proj.listoParaArchivar = false;
             } else if (finalVal === 'P') {
                 proj.fechaPago = row.fechaPago;
                 proj.listoParaArchivar = true;
@@ -6198,16 +6351,22 @@ function selectStOption(index, value, event) {
                 proj.estatus = 'PAGADO';
             } else if (finalVal === 'C') {
                 proj.cancelado = false;
-                if (proj.estatus === 'CANCELADO' || proj.estatus === 'POR PROGRAMAR') {
+                proj.fechaPago = '';
+                proj.listoParaArchivar = false;
+                if (proj.estatus === 'CANCELADO' || proj.estatus === 'POR PROGRAMAR' || proj.estatus === 'PAGADO') {
                     proj.estatus = 'PENDIENTE';
                 }
             } else {
                 proj.cancelado = false;
+                proj.fechaPago = '';
+                proj.listoParaArchivar = false;
                 proj.estatus = computeProjectStatus(proj);
             }
-            try {
-                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
-            } catch (e) {}
+            if (!appState.isEditingConsecutivo) {
+                try {
+                    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+                } catch (e) {}
+            }
             if (typeof window.renderOperaciones === 'function' && appState.currentAdminFicha === 'operaciones') {
                 window.renderOperaciones();
             }
@@ -6216,11 +6375,15 @@ function selectStOption(index, value, event) {
 
     if (finalVal === 'P') {
         if (typeof showCustomNotification === 'function') {
-            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Pagada con fecha ${formatProvTableDate(row.fechaPago)}. Lista para proceder al archivo.`, "success");
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Pagada con fecha ${formatProvTableDate(row.fechaPago)}. Haz clic en 'Guardar' para confirmar.`, "info");
+        }
+    } else if (finalVal === 'C') {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Por Cobrar (C) y fecha de pago retirada. Haz clic en 'Guardar' para confirmar.`, "info");
         }
     } else if (finalVal === 'PP') {
         if (typeof showCustomNotification === 'function') {
-            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Por programar (PP).`, "info");
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Por programar (PP). Haz clic en 'Guardar' para confirmar.`, "info");
         }
     }
 
@@ -6876,12 +7039,14 @@ function setupRealtimeSubscriptions() {
         if (!data || !Array.isArray(data.proyectos)) return;
         // Evitar procesar el eco de nuestra propia emisión en esta misma pestaña
         if (data.senderId && window._myClientId && data.senderId === window._myClientId) return;
+        if (Date.now() - (window._lastLocalOperacionesSyncTime || 0) < 5000) return;
+        if (appState.isEditingOperacionesDetail) return;
         if (typeof window.mergeOperacionesProjects === 'function') {
             window.mergeOperacionesProjects(data.proyectos, true);
             try {
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             } catch (e) {}
-            if (typeof window.syncAllOperacionesToProveedores === 'function') {
+            if (!appState.isEditingProveedores && typeof window.syncAllOperacionesToProveedores === 'function') {
                 window.syncAllOperacionesToProveedores();
             }
             if (appState.currentAdminFicha === 'operaciones') {
@@ -6889,7 +7054,7 @@ function setupRealtimeSubscriptions() {
                 if (!detailPane || detailPane.style.display === "none") {
                     if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
                 }
-                if (appState.activeOperacionesProjectId) {
+                if (appState.activeOperacionesProjectId && !appState.isEditingOperacionesDetail) {
                     const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId || x.consecutivo === appState.activeOperacionesProjectId || x.numProyecto === appState.activeOperacionesProjectId);
                     if (activeP) {
                         if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
@@ -6900,13 +7065,27 @@ function setupRealtimeSubscriptions() {
                         if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
                     }
                 }
-            } else if (appState.currentAdminFicha === 'proveedores') {
+            } else if (appState.currentAdminFicha === 'proveedores' && !appState.isEditingProveedores) {
                 if (typeof window.updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
                 if (typeof window.renderProveedoresTable === 'function') renderProveedoresTable();
                 if (typeof window.renderProveedores === 'function') renderProveedores();
-            } else if (appState.currentAdminFicha === 'consecutivo') {
+            } else if (appState.currentAdminFicha === 'consecutivo' && !appState.isEditingConsecutivo) {
                 if (typeof window.renderConsecutivoTable === 'function') renderConsecutivoTable();
             }
+        }
+    });
+
+    // 4a2. Bloqueo exclusivo por proyecto en Operaciones (con resolución determinista de carrera por timestamp)
+    window.chatRealtimeChannel.on('broadcast', { event: 'operaciones_project_lock_update' }, payload => {
+        if (typeof window.handleIncomingOperacionesProjectLock === 'function') {
+            window.handleIncomingOperacionesProjectLock(payload.payload);
+        }
+    });
+
+    // 4a3. Actualización del sistema en línea ("suelta los globos"): saca a los usuarios de los proyectos abiertos y actualiza
+    window.chatRealtimeChannel.on('broadcast', { event: 'system_release_update' }, payload => {
+        if (typeof window.handleIncomingSystemReleaseUpdate === 'function') {
+            window.handleIncomingSystemReleaseUpdate(payload.payload);
         }
     });
 
@@ -6914,8 +7093,23 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_update' }, payload => {
         const data = payload.payload;
         if (!data || !Array.isArray(data.proveedores)) return;
-        if (data.proveedores.length > 0) {
-            appState.proveedores = data.proveedores;
+        if (appState.isEditingProveedores) return;
+        if (Date.now() - (window._lastLocalProveedoresSyncTime || 0) < 5000) return;
+        const purgedIds = window.purgedProjectIds || new Set();
+        const validProv = data.proveedores.filter(r => {
+            if (!r) return false;
+            const opVal = r.op ? String(r.op).trim() : '';
+            const pId = r.projectId ? String(r.projectId).trim() : '';
+            if (purgedIds.has(opVal) || purgedIds.has(pId)) return false;
+            return true;
+        }).map(r => {
+            if (String(r.p || r.estatus || '').trim().toLowerCase() !== 'pagado') {
+                r.fechaPago = '';
+            }
+            return r;
+        });
+        if (validProv.length > 0) {
+            appState.proveedores = validProv;
             saveToStorage();
             if (appState.currentAdminFicha === 'proveedores') {
                 if (typeof window.updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
@@ -6991,6 +7185,7 @@ function setupRealtimeSubscriptions() {
         if (!data || !Array.isArray(data.consecutivo)) return;
         if (data.sender && appState.currentUser?.email && data.sender === appState.currentUser.email) return;
         if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
+        if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
         if (typeof window.mergeConsecutivoFromCloud === 'function') {
             window.mergeConsecutivoFromCloud(data.consecutivo);
         }
@@ -7118,11 +7313,17 @@ function setupRealtimeSubscriptions() {
                 window.handleIncomingCloudDoc(channelKey, row.contenido);
             }
             if (channelKey === '__cloud_sync_operaciones__' && typeof window.fetchOperacionesFromCloud === 'function') {
-                if (Date.now() - (window._lastLocalOperacionesSyncTime || 0) < 3000) {
-                    // Omitir recarga: acabamos de sincronizar nosotros mismos hace un instante
+                if (Date.now() - (window._lastLocalOperacionesSyncTime || 0) < 3000 || appState.isEditingOperacionesDetail) {
+                    // Omitir recarga: acabamos de sincronizar nosotros mismos o estamos editando en detalle
                 } else {
                     window.fetchOperacionesFromCloud();
                 }
+            }
+            if (channelKey === '__cloud_sync_operaciones_locks__' && typeof window.fetchOperacionesProjectLocksFromCloud === 'function') {
+                window.fetchOperacionesProjectLocksFromCloud();
+            }
+            if (channelKey === '__cloud_sync_system_release__' && typeof window.checkSystemReleaseFromCloud === 'function') {
+                window.checkSystemReleaseFromCloud();
             }
             if (channelKey === '__cloud_sync_consecutivo__' && typeof window.fetchConsecutivoFromCloud === 'function') {
                 window.fetchConsecutivoFromCloud();
@@ -7198,7 +7399,7 @@ function setupRealtimeSubscriptions() {
 
     // 7. Cambios de base de datos PostgreSQL en operaciones
     window.chatRealtimeChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'operaciones' }, async () => {
-        if (typeof window.fetchOperacionesFromCloud === 'function') {
+        if (!appState.isEditingOperacionesDetail && typeof window.fetchOperacionesFromCloud === 'function') {
             await window.fetchOperacionesFromCloud();
         }
     });
@@ -7259,14 +7460,19 @@ function setupRealtimeSubscriptions() {
                 }
 
                 // Sincronización continua de la ficha activa para garantizar actualización instantánea entre computadoras sin refresh
-                if (appState.currentTab === 'admin') {
+                if (appState.currentTab === 'admin' || appState.currentTab === 'administracion') {
                     if (appState.currentAdminFicha === 'operaciones') {
-                        if (typeof window.fetchOperacionesFromCloud === 'function') {
+                        if (!appState.isEditingOperacionesDetail && typeof window.fetchOperacionesFromCloud === 'function') {
                             await window.fetchOperacionesFromCloud();
                         }
+                        if (typeof window.fetchOperacionesProjectLocksFromCloud === 'function') {
+                            await window.fetchOperacionesProjectLocksFromCloud();
+                        }
                     } else if (appState.currentAdminFicha === 'proveedores') {
-                        if (typeof window.fetchProveedoresDataFromCloud === 'function') {
-                            await window.fetchProveedoresDataFromCloud();
+                        if (!appState.isEditingProveedores) {
+                            if (typeof window.fetchProveedoresDataFromCloud === 'function') {
+                                await window.fetchProveedoresDataFromCloud();
+                            }
                         }
                         if (typeof window.fetchProveedoresLockFromCloud === 'function') {
                             await window.fetchProveedoresLockFromCloud();
@@ -10399,11 +10605,14 @@ const defaultOperacionesProyectos = [];
 
 function syncAllOperacionesToConsecutivo() {
     window.syncAllOperacionesToConsecutivo = syncAllOperacionesToConsecutivo;
+    if (appState.isEditingConsecutivo) return;
+
     const purgedIds = window.purgedProjectIds || new Set([
         'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
         'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
-        'RDP261074-', 'RDP261075-'
+        'RDP261074-', 'RDP261075-',
+        'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
     ]);
 
     if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos) || appState.operacionesProyectos.length === 0) {
@@ -10433,8 +10642,19 @@ function syncAllOperacionesToConsecutivo() {
 
     // Limpiar de Consecutivo filas de proyectos purgados o referencias incompletas con guion
     if (Array.isArray(appState.consecutivo)) {
+        appState.consecutivo = appState.consecutivo.filter(row => {
+            if (!row) return false;
+            const ref = row.referenciaOp ? String(row.referenciaOp).trim() : '';
+            if (ref && purgedIds.has(ref)) return false;
+            return true;
+        });
+
         appState.consecutivo.forEach(row => {
-            if (!row || !row.referenciaOp) return;
+            if (!row) return;
+            if (String(row.st || '').trim().toUpperCase() !== 'P') {
+                row.fechaPago = '';
+            }
+            if (!row.referenciaOp) return;
             const ref = String(row.referenciaOp).trim();
             if (purgedIds.has(ref) || ref.endsWith('-')) {
                 row.referenciaOp = '';
@@ -10534,6 +10754,7 @@ function syncAllOperacionesToConsecutivo() {
 function syncProjectToConsecutivo(p, shouldRender = false) {
     window.syncProjectToConsecutivo = syncProjectToConsecutivo;
     if (!p) return;
+    if (appState.isEditingConsecutivo) return;
     if (typeof isProjectGenerado === 'function' && !isProjectGenerado(p)) return;
     if (p.isDraft === true || p.isNewProject === true || p.generado === false) return;
     if (!appState.consecutivo || !Array.isArray(appState.consecutivo)) {
@@ -10542,6 +10763,7 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
 
     const projId = (p.numConsecutivo || p.consecutivo || p.numProyecto || p.id || '').trim();
     if (!projId || projId.endsWith('-')) return;
+    if (window.purgedProjectIds && window.purgedProjectIds.has(projId)) return;
 
     let row = appState.consecutivo.find(c => 
         (c.referenciaOp && String(c.referenciaOp).trim().toLowerCase() === String(projId).trim().toLowerCase()) ||
@@ -10610,13 +10832,16 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
     } else if (!row.st) {
         row.st = 'C';
     }
+    if (String(row.st || '').trim().toUpperCase() !== 'P') {
+        row.fechaPago = '';
+    }
     row.servicio = p.servicioName || (p.tipoProyecto === 'lavado_contenedores' ? 'Lavado de Contenedores' : (p.tipoProyecto === 'movimientos_foraneos' ? 'Movimientos Foráneos' : 'Servicio Local'));
 
     try {
         localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
     } catch (e) {}
 
-    if (typeof window.syncConsecutivoToCloud === 'function') {
+    if (shouldRender && typeof window.syncConsecutivoToCloud === 'function') {
         window.syncConsecutivoToCloud(false);
     }
 
@@ -10658,10 +10883,10 @@ function saveOperacionesStorage(skipProveedoresSync = false) {
 
     if (Array.isArray(validList)) {
         validList.forEach(p => {
-            if (p && typeof window.syncProjectToConsecutivo === 'function') {
+            if (!appState.isEditingConsecutivo && p && typeof window.syncProjectToConsecutivo === 'function') {
                 window.syncProjectToConsecutivo(p);
             }
-            if (!skipProveedoresSync && p && typeof window.syncProjectToProveedores === 'function') {
+            if (!skipProveedoresSync && !appState.isEditingProveedores && p && typeof window.syncProjectToProveedores === 'function') {
                 window.syncProjectToProveedores(p);
             }
         });
@@ -10795,6 +11020,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
 let _syncConsecutivoTimer = null;
 function syncConsecutivoToCloud(forceImmediate = false) {
     window.syncConsecutivoToCloud = syncConsecutivoToCloud;
+    window._lastLocalConsecutivoSyncTime = Date.now();
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
@@ -10820,6 +11046,7 @@ function syncConsecutivoToCloud(forceImmediate = false) {
 
     const doSync = async () => {
         try {
+            window._lastLocalConsecutivoSyncTime = Date.now();
             const dataToSave = appState.consecutivo || [];
             // Guardar snapshot en tabla messages con chat_id __cloud_sync_consecutivo__
             await client.from('messages').insert({
@@ -10846,6 +11073,7 @@ async function fetchConsecutivoFromCloud() {
     window.fetchConsecutivoFromCloud = fetchConsecutivoFromCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
+    if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
@@ -10874,6 +11102,7 @@ function mergeConsecutivoFromCloud(cloudList) {
     window.mergeConsecutivoFromCloud = mergeConsecutivoFromCloud;
     if (!Array.isArray(cloudList) || cloudList.length === 0) return;
     if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
+    if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
     const purgedIds = window.purgedProjectIds || new Set();
 
     const validList = cloudList.filter(row => {
@@ -10881,6 +11110,11 @@ function mergeConsecutivoFromCloud(cloudList) {
         const ref = row.referenciaOp ? String(row.referenciaOp).trim() : '';
         if (purgedIds.has(ref)) return false;
         return true;
+    }).map(row => {
+        if (String(row.st || '').trim().toUpperCase() !== 'P') {
+            row.fechaPago = '';
+        }
+        return row;
     });
 
     if (validList.length > 0) {

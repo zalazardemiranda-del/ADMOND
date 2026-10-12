@@ -2540,60 +2540,24 @@
 
                             <div id="operaciones-view-detail" class="operaciones-subview" style="display: none;">
 
-                                <!-- Back Button eliminated as requested (reemplazado por navegación inferior) -->
-                                <div class="operaciones-detail-topbar" id="op-detail-topbar" style="display: none !important;">
-                                    <button type="button" class="btn btn-back-operaciones" onclick="closeOperacionesDetail()" title="Volver a la lista de proyectos">
-                                        <span class="material-symbols-outlined">arrow_back</span> VOLVER A OPERACIONES
-                                    </button>
+                                <!-- Barra Superior de Acciones del Expediente (Imagen 4): Editar, Guardar, Regresar a operaciones -->
+                                <div class="operaciones-detail-actionbar" id="op-detail-topbar">
+                                    <div class="op-detail-mode-indicator" id="op-detail-mode-indicator">
+                                        <span class="material-symbols-outlined" id="op-detail-mode-icon" style="font-size: 18px;">lock</span>
+                                        <span id="op-detail-mode-text">Modo lectura · Haz clic en <strong>"Editar"</strong> para modificar este proyecto</span>
+                                    </div>
+                                    <div class="op-detail-action-buttons">
+                                        <button type="button" id="btn-edit-op-detail" class="btn-op-top-action btn-op-top-edit" onclick="startEditingOperacionesProject()" title="Habilitar edición del expediente">
+                                            <span class="material-symbols-outlined">edit</span> Editar
+                                        </button>
+                                        <button type="button" id="btn-save-op-detail" class="btn-op-top-action btn-op-top-save" onclick="saveEditingOperacionesProject()" disabled title="Guardar cambios realizados en el expediente">
+                                            <span class="material-symbols-outlined">save</span> Guardar
+                                        </button>
+                                        <button type="button" id="btn-back-op-detail" class="btn-op-top-action btn-op-top-back" onclick="closeOperacionesDetail()" title="Liberar proyecto y regresar a la lista de operaciones">
+                                            <span class="material-symbols-outlined">arrow_back</span> Regresar a operaciones
+                                        </button>
+                                    </div>
                                 </div>
-
-
-
-                                <!-- Stepper Wizard Header (5 Steps) -->
-
-                                <div class="operaciones-stepper-container">
-
-                                    <div class="stepper-step active" id="op-step-indicator-1" onclick="goToOperacionesStep(1)">
-
-                                        <div class="step-number">1</div>
-
-                                        <span class="step-title">Tipo de proyecto</span>
-
-                                    </div>
-
-                                    <div class="stepper-line"></div>
-
-                                    <div class="stepper-step" id="op-step-indicator-2" onclick="goToOperacionesStep(2)">
-
-                                        <div class="step-number">2</div>
-
-                                        <span class="step-title">Datos de proyecto</span>
-
-                                    </div>
-
-                                    <div class="stepper-line"></div>
-
-                                    <div class="stepper-step" id="op-step-indicator-3" onclick="goToOperacionesStep(3)">
-
-                                        <div class="step-number">3</div>
-
-                                        <span class="step-title">Prefactura</span>
-
-                                    </div>
-
-                                    <div class="stepper-line"></div>
-
-                                    <div class="stepper-step" id="op-step-indicator-4" onclick="goToOperacionesStep(4)">
-
-                                        <div class="step-number">4</div>
-
-                                        <span class="step-title">Documentos</span>
-
-                                    </div>
-
-                                </div>
-
-
 
                                 <!-- STEP 1: EXCLUSIVAMENTE SELECCIÓN DE TIPO DE PROYECTO -->
 
@@ -2672,22 +2636,6 @@
                                             </div>
 
                                         </div>
-
-                                    </div>
-
-
-
-                                    <div class="op-wizard-footer">
-
-                                        <button type="button" class="btn btn-secondary op-btn-nav" onclick="closeOperacionesDetail()">
-                                            <span class="material-symbols-outlined">arrow_back</span> VOLVER A PROYECTOS
-                                        </button>
-
-                                        <button class="btn btn-primary btn-next-step op-btn-nav" onclick="goToOperacionesStep(2)">
-
-                                            CONTINUAR <span class="material-symbols-outlined">arrow_forward</span>
-
-                                        </button>
 
                                     </div>
 
@@ -2953,25 +2901,13 @@
 
 
 
-                                    <div class="op-wizard-footer">
-
-                                        <button class="btn btn-secondary op-btn-nav" onclick="goToOperacionesStep(1)">
-
-                                            <span class="material-symbols-outlined">arrow_back</span> ANTERIOR
-
-                                        </button>
+                                    <div class="op-subpage-indicator-row">
 
                                         <div class="contenedores-page-indicator" id="op-contenedores-page-indicator">
 
                                             <!-- Page indicator rendered dynamically by JS -->
 
                                         </div>
-
-                                        <button class="btn btn-primary btn-next-step op-btn-nav" onclick="goToOperacionesStep(3)">
-
-                                            CONTINUAR <span class="material-symbols-outlined">arrow_forward</span>
-
-                                        </button>
 
                                     </div>
 
@@ -3281,25 +3217,13 @@
 
 
 
-                                    <div class="op-wizard-footer">
-
-                                        <button class="btn btn-secondary op-btn-nav" onclick="handlePrefacturaFooterPrev()">
-
-                                            <span class="material-symbols-outlined">arrow_back</span> ANTERIOR
-
-                                        </button>
+                                    <div class="op-subpage-indicator-row">
 
                                         <div class="prefactura-page-indicator" id="op-prefactura-page-indicator">
 
                                             <strong>Página 1 de 2</strong> (Partidas y conceptos)
 
                                         </div>
-
-                                        <button class="btn btn-primary btn-next-step op-btn-nav" onclick="handlePrefacturaFooterNext()">
-
-                                            CONTINUAR <span class="material-symbols-outlined">arrow_forward</span>
-
-                                        </button>
 
                                     </div>
 
@@ -3605,27 +3529,36 @@
 
                                     </div>
 
-
-
-                                    <div class="op-wizard-footer">
-
-                                        <button class="btn btn-secondary op-btn-nav" onclick="goToOperacionesStep(3)">
-
-                                            <span class="material-symbols-outlined">arrow_back</span> ANTERIOR
-
-                                        </button>
-
-                                        <button class="btn btn-primary btn-next-step op-btn-nav" id="op-btn-generar-proyecto" onclick="generarProyectoOperaciones()">
-
-                                            GENERAR PROYECTO <span class="material-symbols-outlined">check_circle</span>
-
-                                        </button>
-
-                                    </div>
-
                                 </div>
 
+                                <!-- Pasos 1, 2, 3 y 4 en la parte inferior como botones con margen rectangular (Imágenes 2 y 3) -->
+                                <div class="operaciones-stepper-container operaciones-stepper-bottom" id="op-bottom-stepper">
+                                    <button type="button" class="stepper-step active" id="op-step-indicator-1" onclick="goToOperacionesStep(1)">
+                                        <div class="step-number">1</div>
+                                        <span class="step-title">Tipo de proyecto</span>
+                                    </button>
 
+                                    <div class="stepper-line"></div>
+
+                                    <button type="button" class="stepper-step" id="op-step-indicator-2" onclick="goToOperacionesStep(2)">
+                                        <div class="step-number">2</div>
+                                        <span class="step-title">Datos de proyecto</span>
+                                    </button>
+
+                                    <div class="stepper-line"></div>
+
+                                    <button type="button" class="stepper-step" id="op-step-indicator-3" onclick="goToOperacionesStep(3)">
+                                        <div class="step-number">3</div>
+                                        <span class="step-title">Prefactura</span>
+                                    </button>
+
+                                    <div class="stepper-line"></div>
+
+                                    <button type="button" class="stepper-step" id="op-step-indicator-4" onclick="goToOperacionesStep(4)">
+                                        <div class="step-number">4</div>
+                                        <span class="step-title">Documentos</span>
+                                    </button>
+                                </div>
 
                             </div>
 

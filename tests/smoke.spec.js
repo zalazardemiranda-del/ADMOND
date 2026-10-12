@@ -9,6 +9,25 @@ const supabaseUmd = fs.readFileSync(
 );
 
 async function mockNetwork(page, requests) {
+  await page.addInitScript(() => {
+    const OrigWS = window.WebSocket;
+    window.WebSocket = function (url, protocols) {
+      if (url && String(url).includes("supabase.co")) {
+        return {
+          readyState: 1,
+          send() {},
+          close() {},
+          addEventListener() {},
+          removeEventListener() {},
+        };
+      }
+      return new OrigWS(url, protocols);
+    };
+    window.WebSocket.CONNECTING = 0;
+    window.WebSocket.OPEN = 1;
+    window.WebSocket.CLOSING = 2;
+    window.WebSocket.CLOSED = 3;
+  });
   await page.route("**/*", async (route) => {
     const url = route.request().url();
     if (url.startsWith("http://localhost")) return route.continue();
