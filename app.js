@@ -6168,18 +6168,11 @@ function selectStOption(index, value, event) {
         finalVal = 'PP';
     }
 
-    // 1 Pagados se activa el filtro de pagado y así mismo se añade la fecha , para que proceda a archivarse
+    // 1 Pagados: se añade automáticamente la fecha de pago para que proceda a archivarse
     if (finalVal === 'P') {
         if (!row.fechaPago || row.fechaPago === '-' || row.fechaPago === '') {
             row.fechaPago = new Date().toISOString().split('T')[0];
         }
-        // Activar el filtro de pagados de inmediato para que la fila continúe visible y no desaparezca la tabla
-        appState.consecutivoStFilter = 'P';
-        appState.consecutivoPage = 1;
-        document.querySelectorAll(".consecutivo-filter-btn").forEach(b => {
-            if (b.getAttribute("data-st") === 'P') b.classList.add("active");
-            else b.classList.remove("active");
-        });
     }
 
     row.st = finalVal;

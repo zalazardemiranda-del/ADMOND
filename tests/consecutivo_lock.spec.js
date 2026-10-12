@@ -174,7 +174,7 @@ test("4. Columnas de Consecutivo son de solo lectura y solo ST es editable", asy
 
   // Solo el trigger de ST está presente
   const stBadge = page.locator("#tbody-consecutivo .st-badge-trigger");
-  await expect(stBadge).toBeVisible();
+  await expect(stBadge.first()).toBeVisible();
 });
 
 test("5. Estatus Pagados (P) añade automáticamente la fecha de pago", async ({ page }) => {
@@ -248,10 +248,10 @@ test("6. Filtro Cancelados ahora es 'PP' (Por programar) y las operaciones empie
   expect(kpiText).not.toBe("$0.00");
 });
 
-test("7. Cambiar estatus de PP a P mantiene la tabla visible, activa filtro Pagados y no se esfuma el dropdown", async ({ page }) => {
+test("7. Cambiar estatus asigna fecha de pago, preserva el filtro activo y no cambia de filtro automáticamente", async ({ page }) => {
   await openAppAsAdmin(page);
 
-  // Cargar registro de prueba con estatus PP
+  // Cargar registro de prueba con estatus PP bajo el filtro Todos
   await page.evaluate(() => {
     window.appState.consecutivo = [{
       consecutivo: 1,
@@ -267,10 +267,14 @@ test("7. Cambiar estatus de PP a P mantiene la tabla visible, activa filtro Paga
       referenciaOp: 'RDP-555',
       servicio: 'Flete Local'
     }];
-    window.filterConsecutivoByST('PP');
+    window.filterConsecutivoByST('all');
     window.startEditingConsecutivo();
   });
   await page.waitForTimeout(300);
+
+  // Verificar que el filtro Todos está activo
+  const activeFilterBtnBefore = page.locator(".consecutivo-filter-btn.active");
+  await expect(activeFilterBtnBefore).toHaveAttribute("data-st", "all");
 
   // Verificar que la fila con badge PP es visible
   const ppBadge = page.locator("#tbody-consecutivo .st-badge-trigger.st-badge-pp");
@@ -281,7 +285,7 @@ test("7. Cambiar estatus de PP a P mantiene la tabla visible, activa filtro Paga
   await ppBadge.click();
   await page.waitForTimeout(200);
 
-  // Verificar que el menú se abre y contiene la opción 'Pagado (P)' y 'Por programar (PP)'
+  // Verificar que el menú se abre y contiene las opciones
   const menu = page.locator("#st-menu-0");
   await expect(menu).toBeVisible();
   await expect(menu.locator(".option-name:has-text('Por programar (PP)')")).toBeVisible();
@@ -301,11 +305,11 @@ test("7. Cambiar estatus de PP a P mantiene la tabla visible, activa filtro Paga
   await optionP.click();
   await page.waitForTimeout(300);
 
-  // Verificar que el filtro de Pagados (P) se activó automáticamente y la fila sigue visible
-  const activeFilterBtn = page.locator(".consecutivo-filter-btn.active");
-  await expect(activeFilterBtn).toHaveAttribute("data-st", "P");
+  // El filtro NO debe cambiar automáticamente: sigue siendo Todos
+  const activeFilterBtnAfter = page.locator(".consecutivo-filter-btn.active");
+  await expect(activeFilterBtnAfter).toHaveAttribute("data-st", "all");
 
-  // La tabla NO se esfuma: la fila sigue visible en la tabla con el badge P y fecha asignada
+  // La fila sigue visible en la tabla con el badge P y fecha asignada
   const pBadge = page.locator("#tbody-consecutivo .st-badge-trigger.st-badge-p");
   await expect(pBadge).toBeVisible();
   await expect(pBadge).toContainText("P");
