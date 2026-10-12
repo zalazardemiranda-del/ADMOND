@@ -102,6 +102,8 @@ let appState = {
     
     // Consecutivo Data & Filter State
     consecutivo: [],
+    isEditingConsecutivo: false,
+    consecutivoLockedBy: null,
     consecutivoSearch: '',
     consecutivoStFilter: 'all',
     consecutivoClientFilter: 'all',
@@ -118,6 +120,7 @@ let appState = {
     selectedEmailIds: new Set(),
     composeAttachments: []
 };
+window.appState = appState;
 
 let pieChartInstance = null;
 
@@ -374,12 +377,17 @@ const runInitialAppSetup = async () => {
         }
     }
     
-    // Ensure consecutivo rows default to 'sin estatus' ("")
+    // Por defecto todas las operaciones empiezan en "por cobrar" ('C') y cancelados en "Por programar" ('PROG')
     if (appState.consecutivo && Array.isArray(appState.consecutivo)) {
         appState.consecutivo.forEach(item => {
             const stVal = String(item.st || '').trim().toUpperCase();
-            if (stVal === 'P' || !item.st) {
-                item.st = '';
+            const isCanceled = String(item.fechaEmision || '').toLowerCase().includes('cancel') || String(item.cliente || '').toLowerCase().includes('cancel') || stVal === 'CANCELADO';
+            if (isCanceled || stVal === 'CANCELADO' || stVal === 'PROG' || stVal === 'POR PROGRAMAR') {
+                item.st = 'PROG';
+            } else if (stVal === 'P') {
+                item.st = 'P';
+            } else if (item.referenciaOp || item.factura || item.subtotal || item.total) {
+                item.st = 'C';
             }
         });
     }
@@ -963,6 +971,11 @@ function switchAdminFicha(fichaName) {
             saveEditingProveedores(true);
         }
     }
+    if (fichaName !== 'consecutivo' && appState.isEditingConsecutivo) {
+        if (typeof saveEditingConsecutivo === 'function') {
+            saveEditingConsecutivo(true);
+        }
+    }
 
     renderAdministracion();
 };
@@ -994,8 +1007,14 @@ function renderAdministracion() {
             window.updateProveedoresEditButtonsUI();
         }
     } else if (appState.currentAdminFicha === 'consecutivo') {
+        if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
+            window.fetchConsecutivoLockFromCloud();
+        }
         if (typeof window.fetchConsecutivoFromCloud === 'function') window.fetchConsecutivoFromCloud();
         renderConsecutivo();
+        if (typeof window.updateConsecutivoEditButtonsUI === 'function') {
+            window.updateConsecutivoEditButtonsUI();
+        }
     } else if (appState.currentAdminFicha === 'archivo-digital') {
         renderArchivoDigital();
     } else if (appState.currentAdminFicha === 'operaciones') {
@@ -5182,22 +5201,248 @@ function updateGlobalStats() {
 }
 
 // ---------------------------------------------------------------------------------
-// 11. FICHA 4: CONSECUTIVO 2026 LOGIC
+// 11. FICHA 4: CONSECUTIVO 2026 LOGIC & COLLABORATIVE EDITING LOCK
 // ---------------------------------------------------------------------------------
+let _editConsecutivoTimeout = null;
+
+async function startEditingConsecutivo() {
+    window.startEditingConsecutivo = startEditingConsecutivo;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
+    // Verificar si está bloqueado por otro usuario
+    if (appState.consecutivoLockedBy && appState.consecutivoLockedBy.userId !== currentUserId) {
+        const elapsed = Date.now() - (appState.consecutivoLockedBy.timestamp || 0);
+        if (elapsed < 5 * 60 * 1000) {
+            alert(`⚠️ Esta sección está siendo editada por ${appState.consecutivoLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    }
+
+    appState.isEditingConsecutivo = true;
+    appState.consecutivoLockedBy = {
+        userId: currentUserId,
+        userName: currentUserName,
+        timestamp: Date.now()
+    };
+
+    updateConsecutivoEditButtonsUI();
+    renderConsecutivo();
+
+    // Notificar a otras máquinas por WebSockets
+    broadcastConsecutivoLockState(true, currentUserName, currentUserId);
+
+    // Persistir estado de bloqueo en Supabase
+    await syncConsecutivoLockToCloud(true, currentUserName, currentUserId);
+
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
+    }
+
+    // Auto-timeout de 5 minutos por seguridad
+    if (_editConsecutivoTimeout) clearTimeout(_editConsecutivoTimeout);
+    _editConsecutivoTimeout = setTimeout(() => {
+        if (appState.isEditingConsecutivo) {
+            if (typeof showCustomNotification === 'function') {
+                showCustomNotification("Tiempo de edición expirado por inactividad. Guardando cambios automáticamente...", "warning");
+            }
+            saveEditingConsecutivo(true);
+        }
+    }, 5 * 60 * 1000);
+}
+window.startEditingConsecutivo = startEditingConsecutivo;
+
+async function saveEditingConsecutivo(isAuto = false) {
+    window.saveEditingConsecutivo = saveEditingConsecutivo;
+    if (_editConsecutivoTimeout) clearTimeout(_editConsecutivoTimeout);
+
+    appState.isEditingConsecutivo = false;
+    appState.consecutivoLockedBy = null;
+
+    updateConsecutivoEditButtonsUI();
+    renderConsecutivo();
+
+    // Guardar en almacenamiento y nube
+    saveToStorage();
+    if (typeof window.syncConsecutivoToCloud === 'function') {
+        window.syncConsecutivoToCloud();
+    }
+
+    // Notificar desbloqueo a otras máquinas
+    broadcastConsecutivoLockState(false, null, null);
+    await syncConsecutivoLockToCloud(false, null, null);
+
+    if (!isAuto && typeof showCustomNotification === 'function') {
+        showCustomNotification("Cambios de estatus guardados y tabla liberada con éxito.", "success");
+    }
+}
+window.saveEditingConsecutivo = saveEditingConsecutivo;
+
+function updateConsecutivoEditButtonsUI() {
+    window.updateConsecutivoEditButtonsUI = updateConsecutivoEditButtonsUI;
+    const btnEdit = document.getElementById("btn-edit-consecutivo");
+    const btnSave = document.getElementById("btn-save-consecutivo");
+    const banner = document.getElementById("consecutivo-lock-banner");
+    const bannerText = document.getElementById("consecutivo-lock-banner-text");
+    const tableContainer = document.getElementById("consecutivo-table-container");
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const isLockedByOther = appState.consecutivoLockedBy && appState.consecutivoLockedBy.userId !== currentUserId;
+
+    if (isLockedByOther) {
+        if (tableContainer) tableContainer.classList.add("tabla-bloqueada-editando");
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) bannerText.innerText = `Esta sección está siendo editada por ${appState.consecutivoLockedBy.userName || 'otro usuario'}`;
+        }
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
+            btnEdit.style.cursor = "not-allowed";
+            btnEdit.style.opacity = "0.5";
+            btnEdit.title = `Esta sección está siendo editada por ${appState.consecutivoLockedBy.userName}`;
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.cursor = "not-allowed";
+            btnSave.style.opacity = "0.45";
+        }
+    } else if (appState.isEditingConsecutivo) {
+        if (tableContainer) tableContainer.classList.remove("tabla-bloqueada-editando");
+        if (banner) banner.style.display = "none";
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.add("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editando...`;
+            btnEdit.style.cursor = "default";
+            btnEdit.style.opacity = "1";
+            btnEdit.title = "Modo de edición activo";
+        }
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.style.cursor = "pointer";
+            btnSave.style.opacity = "1";
+            btnSave.title = "Guardar cambios y permitir edición a otros usuarios";
+        }
+    } else {
+        if (tableContainer) tableContainer.classList.remove("tabla-bloqueada-editando");
+        if (banner) banner.style.display = "none";
+        if (btnEdit) {
+            btnEdit.disabled = false;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar`;
+            btnEdit.style.cursor = "pointer";
+            btnEdit.style.opacity = "1";
+            btnEdit.title = "Habilitar edición de estatus";
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.cursor = "not-allowed";
+            btnSave.style.opacity = "0.45";
+            btnSave.title = "Haz clic en 'Editar' para comenzar";
+        }
+    }
+}
+window.updateConsecutivoEditButtonsUI = updateConsecutivoEditButtonsUI;
+
+function broadcastConsecutivoLockState(isLocked, userName, userId) {
+    window.broadcastConsecutivoLockState = broadcastConsecutivoLockState;
+    if (!window.chatRealtimeChannel) return;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'consecutivo_lock_update',
+            payload: {
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting consecutivo lock state:", e);
+    }
+}
+window.broadcastConsecutivoLockState = broadcastConsecutivoLockState;
+
+async function syncConsecutivoLockToCloud(isLocked, userName, userId) {
+    window.syncConsecutivoLockToCloud = syncConsecutivoLockToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_consecutivo_lock__',
+            contenido: JSON.stringify({
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (e) {
+        console.warn("⚠️ Error persisting consecutivo lock to cloud:", e);
+    }
+}
+window.syncConsecutivoLockToCloud = syncConsecutivoLockToCloud;
+
+async function fetchConsecutivoLockFromCloud() {
+    window.fetchConsecutivoLockFromCloud = fetchConsecutivoLockFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs, error } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_consecutivo_lock__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                if (parsed.isLocked) {
+                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                    if (elapsed < 5 * 60 * 1000) {
+                        if (parsed.userId !== currentUserId) {
+                            appState.consecutivoLockedBy = parsed;
+                        }
+                    } else {
+                        appState.consecutivoLockedBy = null;
+                    }
+                } else {
+                    if (!appState.isEditingConsecutivo) {
+                        appState.consecutivoLockedBy = null;
+                    }
+                }
+                updateConsecutivoEditButtonsUI();
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching consecutivo lock from cloud:", e);
+    }
+}
+window.fetchConsecutivoLockFromCloud = fetchConsecutivoLockFromCloud;
+
 function getFilteredConsecutivoList() {
     let list = appState.consecutivo || [];
     
-    // 1. ST Filter
+    // 1. ST Filter (P = Pagados, C = Por Cobrar, PROG = Por programar)
     if (appState.consecutivoStFilter === 'P') {
         list = list.filter(item => (item.st || '').trim().toUpperCase() === 'P');
     } else if (appState.consecutivoStFilter === 'C') {
         list = list.filter(item => (item.st || '').trim().toUpperCase() === 'C');
-    } else if (appState.consecutivoStFilter === 'Cancelado') {
-        list = list.filter(item => 
-            String(item.st || '').toLowerCase().includes('cancel') ||
-            String(item.fechaEmision || '').toLowerCase().includes('cancel') ||
-            String(item.cliente || '').toLowerCase().includes('cancel')
-        );
+    } else if (appState.consecutivoStFilter === 'PROG' || appState.consecutivoStFilter === 'Cancelado') {
+        list = list.filter(item => {
+            const st = String(item.st || '').trim().toUpperCase();
+            return st === 'PROG' || st === 'POR PROGRAMAR' || st === 'CANCELADO' ||
+                String(item.fechaEmision || '').toLowerCase().includes('cancel') ||
+                String(item.cliente || '').toLowerCase().includes('cancel');
+        });
     }
     
     // 2. Client Filter
@@ -5229,7 +5474,9 @@ function getFilteredConsecutivoList() {
 }
 
 function renderConsecutivo() {
+    window.renderConsecutivo = renderConsecutivo;
     if (typeof window.syncAllOperacionesToConsecutivo === "function") window.syncAllOperacionesToConsecutivo();
+    if (typeof window.updateConsecutivoEditButtonsUI === "function") window.updateConsecutivoEditButtonsUI();
     const tbody = document.getElementById("tbody-consecutivo");
     if (!tbody) return;
     tbody.innerHTML = "";
@@ -5237,7 +5484,7 @@ function renderConsecutivo() {
     const filteredList = getFilteredConsecutivoList();
     const totalFiltered = filteredList.length;
     
-    // Update KPI summary cards based on filtered list
+    // Update KPI summary cards based on filtered list (reflects Por Cobrar / C)
     updateConsecutivoKPIs(filteredList);
     
     // Update header count badges
@@ -5275,13 +5522,27 @@ function renderConsecutivo() {
             const isCanceled = String(item.fechaEmision || '').toLowerCase().includes('cancel') || String(item.cliente || '').toLowerCase().includes('cancel') || String(item.st || '').toLowerCase().includes('cancel');
             
             const stVal = String(item.st || '').trim().toUpperCase();
+            const isProg = stVal === 'PROG' || stVal === 'POR PROGRAMAR' || isCanceled || stVal === 'CANCELADO';
+            
             let stBadgeClass = 'st-badge-empty';
-            if (isCanceled || stVal === 'CANCELADO') stBadgeClass = 'st-badge-cancelado';
-            else if (stVal === 'C') stBadgeClass = 'st-badge-c';
-            else if (stVal === 'P') stBadgeClass = 'st-badge-p';
+            let stDisplay = '-';
+            if (isProg) {
+                stBadgeClass = 'st-badge-prog';
+                stDisplay = 'Prog';
+            } else if (stVal === 'C') {
+                stBadgeClass = 'st-badge-c';
+                stDisplay = 'C';
+            } else if (stVal === 'P') {
+                stBadgeClass = 'st-badge-p';
+                stDisplay = 'P';
+            }
             
             const cleanEmision = String(item.fechaEmision || '').replace(' 00:00:00', '').trim();
             const cleanPago = String(item.fechaPago || '').replace(' 00:00:00', '').trim();
+            
+            const subVal = (item.subtotal !== '' && item.subtotal !== null && item.subtotal !== undefined) ? Number(item.subtotal) : 0;
+            const ivaVal = (item.iva !== '' && item.iva !== null && item.iva !== undefined) ? Number(item.iva) : (subVal > 0 ? Math.round(subVal * 0.16 * 100) / 100 : 0);
+            const totVal = (item.total !== '' && item.total !== null && item.total !== undefined) ? Number(item.total) : (subVal + ivaVal);
             
             const tr = document.createElement("tr");
             tr.id = `consec-row-${realIndex}`;
@@ -5289,31 +5550,31 @@ function renderConsecutivo() {
                 <td style="text-align: center; font-weight: 700; color: var(--text-secondary);" title="Consecutivo #${item.consecutivo || (realIndex + 1)}">
                     ${item.consecutivo || (realIndex + 1)}
                 </td>
-                <td title="${item.factura || ''}">
-                    <input type="text" class="excel-input font-bold" value="${item.factura || ''}" oninput="updateConsecutivoCell(${realIndex}, 'factura', this.value)" style="color: #2563EB;">
+                <td title="${item.factura || '-'}">
+                    <span class="cell-locked-val font-bold" style="color: #2563EB;">${item.factura || '-'}</span>
                 </td>
-                <td title="${cleanEmision}">
-                    <input type="text" class="excel-input" value="${cleanEmision}" oninput="updateConsecutivoCell(${realIndex}, 'fechaEmision', this.value)">
+                <td style="text-align: center;" title="${cleanEmision || '-'}">
+                    <span class="cell-locked-val">${cleanEmision ? formatProvTableDate(cleanEmision) : '-'}</span>
                 </td>
-                <td title="${item.cliente || ''}">
-                    <input type="text" class="excel-input font-bold" value="${item.cliente || ''}" oninput="updateConsecutivoCell(${realIndex}, 'cliente', this.value)">
+                <td title="${item.cliente || '-'}">
+                    <span class="cell-locked-val font-bold">${item.cliente || '-'}</span>
                 </td>
-                <td title="${item.folioCliente || ''}">
-                    <input type="text" class="excel-input" value="${item.folioCliente || ''}" oninput="updateConsecutivoCell(${realIndex}, 'folioCliente', this.value)">
+                <td style="text-align: center;" title="${item.folioCliente || '-'}">
+                    <span class="cell-locked-val">${item.folioCliente || '-'}</span>
                 </td>
-                <td title="Subtotal: ${item.subtotal || ''}">
-                    <input type="number" id="consec-subtotal-${realIndex}" class="excel-input number-input font-bold" value="${(item.subtotal !== '' && item.subtotal !== null && item.subtotal !== undefined) ? item.subtotal : ''}" step="50" oninput="liveUpdateConsecutivoRow(${realIndex})">
+                <td style="text-align: right;" title="Subtotal: ${formatCurrency(subVal)}">
+                    <span class="cell-locked-val font-bold">${formatCurrency(subVal)}</span>
                 </td>
-                <td title="IVA: ${item.iva || ''}">
-                    <input type="number" id="consec-iva-${realIndex}" class="excel-input number-input readonly" value="${(item.iva !== '' && item.iva !== null && item.iva !== undefined) ? item.iva : ''}" readonly>
+                <td style="text-align: right;" title="IVA: ${formatCurrency(ivaVal)}">
+                    <span class="cell-locked-val">${formatCurrency(ivaVal)}</span>
                 </td>
-                <td title="Total: ${item.total || ''}">
-                    <input type="number" id="consec-total-${realIndex}" class="excel-input number-input readonly font-bold" value="${(item.total !== '' && item.total !== null && item.total !== undefined) ? item.total : ''}" readonly style="color: #059669;">
+                <td style="text-align: right;" title="Total: ${formatCurrency(totVal)}">
+                    <span class="cell-locked-val font-bold" style="color: #059669;">${formatCurrency(totVal)}</span>
                 </td>
                 <td style="text-align: center; position: relative;">
                     <div class="st-custom-dropdown-wrap" id="st-wrap-${realIndex}">
-                        <div class="st-badge ${stBadgeClass} st-badge-trigger" onclick="toggleStBadgeDropdown(${realIndex}, event)" title="Cambiar estatus">
-                            <span>${isCanceled || stVal === 'CANCELADO' ? 'Canc' : (stVal || '-')}</span>
+                        <div class="st-badge ${stBadgeClass} st-badge-trigger ${!appState.isEditingConsecutivo ? 'trigger-locked' : ''}" onclick="toggleStBadgeDropdown(${realIndex}, event)" title="${appState.isEditingConsecutivo ? 'Cambiar estatus' : 'Haz clic en \'Editar\' arriba para modificar el estatus'}">
+                            <span>${stDisplay}</span>
                             <span class="material-symbols-outlined st-arrow">expand_more</span>
                         </div>
                         <div class="st-dropdown-menu" id="st-menu-${realIndex}">
@@ -5329,23 +5590,22 @@ function renderConsecutivo() {
                                 <span class="st-badge st-badge-c">C</span>
                                 <span class="option-name">Por Cobrar</span>
                             </div>
-                            <div class="st-dropdown-option ${isCanceled || stVal === 'CANCELADO' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'Cancelado', event)">
-                                <span class="st-badge st-badge-cancelado">Canc</span>
-                                <span class="option-name">Cancelado</span>
+                            <div class="st-dropdown-option ${isProg ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'PROG', event)">
+                                <span class="st-badge st-badge-prog">Prog</span>
+                                <span class="option-name">Por programar</span>
                             </div>
                         </div>
                     </div>
                 </td>
-                <td title="${cleanPago}">
-                    <input type="text" class="excel-input" value="${cleanPago}" oninput="updateConsecutivoCell(${realIndex}, 'fechaPago', this.value)">
+                <td style="text-align: center;" title="Fecha de Pago: ${cleanPago || '-'}">
+                    <span class="cell-locked-val" style="color: #64748B;">${cleanPago ? formatProvTableDate(cleanPago) : '-'}</span>
                 </td>
-                <td title="${item.referenciaOp || ''}">
-                    <input type="text" class="excel-input" value="${item.referenciaOp || ''}" oninput="updateConsecutivoCell(${realIndex}, 'referenciaOp', this.value)">
+                <td style="text-align: center;" title="${item.referenciaOp || '-'}">
+                    <span class="cell-locked-val font-bold" style="color: #0F172A;">${item.referenciaOp || '-'}</span>
                 </td>
-                <td title="${item.servicio || ''}">
-                    <input type="text" class="excel-input" value="${item.servicio || ''}" oninput="updateConsecutivoCell(${realIndex}, 'servicio', this.value)">
+                <td title="${item.servicio || '-'}">
+                    <span class="cell-locked-val">${item.servicio || '-'}</span>
                 </td>
-                
             `;
             tbody.appendChild(tr);
         });
@@ -5362,11 +5622,15 @@ function updateConsecutivoKPIs(list) {
     let sumSubtotal = 0;
     let sumIva = 0;
     
-    list.forEach(item => {
+    // En la sección de total se reflejan todos los proyectos que estén en el filtro "por cobrar" ('C')
+    const sourceList = (appState.consecutivoStFilter === 'C') ? list : (appState.consecutivo || []);
+    sourceList.forEach(item => {
         const stVal = String(item.st || '').trim().toUpperCase();
         if (stVal === 'C' || stVal === 'POR COBRAR') {
             const sub = Number(item.subtotal) || 0;
-            const iv = Number(item.iva) || 0;
+            const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined) 
+                ? Number(item.iva) 
+                : (sub > 0 ? Math.round(sub * 0.16 * 100) / 100 : 0);
             
             sumSubtotal += sub;
             sumIva += iv;
@@ -5839,7 +6103,18 @@ function selectConsecutivoClientOption(value, label, event) {
 
 function toggleStBadgeDropdown(index, event) {
     window.toggleStBadgeDropdown = toggleStBadgeDropdown;
-    if (event) event.stopPropagation();
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingConsecutivo) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' arriba para modificar el estatus.", "warning");
+        } else {
+            alert("Haz clic en 'Editar' arriba para modificar el estatus.");
+        }
+        return;
+    }
     const wrap = document.getElementById(`st-wrap-${index}`);
     const menu = document.getElementById(`st-menu-${index}`);
     if (!wrap || !menu) return;
@@ -5860,27 +6135,59 @@ function toggleStBadgeDropdown(index, event) {
         
         wrap.classList.add("open");
     }
-};
+}
 
 function selectStOption(index, value, event) {
     window.selectStOption = selectStOption;
-    if (event) event.stopPropagation();
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingConsecutivo) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' arriba para modificar el estatus.", "warning");
+        }
+        return;
+    }
     const wrap = document.getElementById(`st-wrap-${index}`);
     if (wrap) wrap.classList.remove("open");
-    updateConsecutivoCell(index, 'st', value);
+
+    const row = appState.consecutivo ? appState.consecutivo[index] : null;
+    if (!row) return;
+
+    let finalVal = value;
+    if (value === 'PROG' || value === 'Por programar' || String(value).toLowerCase().includes('cancel')) {
+        finalVal = 'PROG';
+    }
+
+    // 1 Pagados se activa el filtro de pagado y así mismo se añade la fecha , para que proceda a archivarse
+    if (finalVal === 'P') {
+        if (!row.fechaPago || row.fechaPago === '-' || row.fechaPago === '') {
+            row.fechaPago = new Date().toISOString().split('T')[0];
+        }
+    }
+
+    row.st = finalVal;
+    updateConsecutivoCell(index, 'st', finalVal);
+    if (finalVal === 'P' && row.fechaPago) {
+        updateConsecutivoCell(index, 'fechaPago', row.fechaPago);
+    }
 
     // Sincronizar cancelación o cambio de estatus al expediente en Operaciones
-    const row = appState.consecutivo ? appState.consecutivo[index] : null;
-    if (row && row.referenciaOp && Array.isArray(appState.operacionesProyectos)) {
+    if (row.referenciaOp && Array.isArray(appState.operacionesProyectos)) {
         const refId = String(row.referenciaOp).trim().toLowerCase();
         const proj = appState.operacionesProyectos.find(p => 
             String(p.numProyecto || p.consecutivo || p.numConsecutivo || p.id).trim().toLowerCase() === refId
         );
         if (proj) {
-            const isCancel = String(value || '').toLowerCase().includes('cancel');
-            if (isCancel) {
-                proj.estatus = 'CANCELADO';
-                proj.cancelado = true;
+            if (finalVal === 'PROG') {
+                proj.estatus = 'POR PROGRAMAR';
+                proj.cancelado = false;
+            } else if (finalVal === 'P') {
+                proj.fechaPago = row.fechaPago;
+                proj.listoParaArchivar = true;
+                proj.cancelado = false;
+                proj.estatus = computeProjectStatus(proj);
             } else {
                 proj.cancelado = false;
                 proj.estatus = computeProjectStatus(proj);
@@ -5891,6 +6198,12 @@ function selectStOption(index, value, event) {
             if (typeof window.renderOperaciones === 'function' && appState.currentAdminFicha === 'operaciones') {
                 window.renderOperaciones();
             }
+        }
+    }
+
+    if (finalVal === 'P') {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Pagada con fecha ${formatProvTableDate(row.fechaPago)}. Lista para proceder al archivo.`, "success");
         }
     }
 
@@ -6617,6 +6930,28 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 4b3. Bloqueo exclusivo de edición en tabla de Consecutivo
+    window.chatRealtimeChannel.on('broadcast', { event: 'consecutivo_lock_update' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        if (data.isLocked) {
+            if (data.userId !== currentUserId) {
+                appState.consecutivoLockedBy = data;
+            }
+        } else {
+            if (!appState.isEditingConsecutivo) {
+                appState.consecutivoLockedBy = null;
+            }
+        }
+        if (typeof window.updateConsecutivoEditButtonsUI === 'function') {
+            window.updateConsecutivoEditButtonsUI();
+        }
+        if (appState.currentAdminFicha === 'consecutivo' && typeof window.renderConsecutivo === 'function') {
+            window.renderConsecutivo();
+        }
+    });
+
     // 4c. Recibir Actualizaciones del Catálogo de Proveedores por Broadcast (sincronizado para todos)
     window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_catalog_update' }, payload => {
         const data = payload.payload;
@@ -6788,6 +7123,9 @@ function setupRealtimeSubscriptions() {
             if (channelKey === '__cloud_sync_proveedores_lock__' && typeof window.fetchProveedoresLockFromCloud === 'function') {
                 window.fetchProveedoresLockFromCloud();
             }
+            if (channelKey === '__cloud_sync_consecutivo_lock__' && typeof window.fetchConsecutivoLockFromCloud === 'function') {
+                window.fetchConsecutivoLockFromCloud();
+            }
             return;
         }
         if (!appState.chats[channelKey]) appState.chats[channelKey] = [];
@@ -6924,6 +7262,9 @@ function setupRealtimeSubscriptions() {
                     } else if (appState.currentAdminFicha === 'consecutivo') {
                         if (typeof window.fetchConsecutivoFromCloud === 'function') {
                             await window.fetchConsecutivoFromCloud();
+                        }
+                        if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
+                            await window.fetchConsecutivoLockFromCloud();
                         }
                     }
                 }
@@ -7068,6 +7409,9 @@ async function fetchCloudData() {
         // Sincronizar registros de Consecutivo (nube <-> local para todos los usuarios)
         if (typeof window.fetchConsecutivoFromCloud === 'function') {
             await window.fetchConsecutivoFromCloud();
+        }
+        if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
+            await window.fetchConsecutivoLockFromCloud();
         }
 
         // Sincronizar catálogo y datos de Proveedores (nube <-> local para todos los usuarios)
@@ -10234,12 +10578,12 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
         row.iva = iva;
         row.total = tot;
     }
-    if (p.archivado || p.estatus === 'CERRADO') {
-        row.st = 'C';
-    } else if (p.estatus === 'PRIORIDAD') {
-        row.st = 'P';
+    if (p.cancelado || p.estatus === 'CANCELADO') {
+        row.st = 'PROG';
+    } else if (p.archivado || p.estatus === 'CERRADO') {
+        if (!row.st) row.st = 'C';
     } else if (!row.st) {
-        row.st = 'P';
+        row.st = 'C';
     }
     row.servicio = p.servicioName || (p.tipoProyecto === 'lavado_contenedores' ? 'Lavado de Contenedores' : (p.tipoProyecto === 'movimientos_foraneos' ? 'Movimientos Foráneos' : 'Servicio Local'));
 

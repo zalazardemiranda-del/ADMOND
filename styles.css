@@ -2711,8 +2711,8 @@ div.user-editing-grey,
     user-select: text;
 }
 
-/* Botones de Control de Proveedores (Editar y Guardar) */
-.btn-edit-proveedores {
+/* Botones de Control de Proveedores y Consecutivo (Editar y Guardar) */
+.btn-edit-proveedores, .btn-edit-consecutivo {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -2727,20 +2727,20 @@ div.user-editing-grey,
     transition: all 0.2s ease;
 }
 
-.btn-edit-proveedores:hover:not(:disabled) {
+.btn-edit-proveedores:hover:not(:disabled), .btn-edit-consecutivo:hover:not(:disabled) {
     background: #F8FAFC;
     border-color: #2563EB;
     color: #2563EB;
 }
 
-.btn-edit-proveedores.active-editing {
+.btn-edit-proveedores.active-editing, .btn-edit-consecutivo.active-editing {
     background: #EFF6FF !important;
     border-color: #2563EB !important;
     color: #2563EB !important;
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2) !important;
 }
 
-.btn-save-proveedores {
+.btn-save-proveedores, .btn-save-consecutivo {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -2756,12 +2756,12 @@ div.user-editing-grey,
     box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
 }
 
-.btn-save-proveedores:hover:not(:disabled) {
+.btn-save-proveedores:hover:not(:disabled), .btn-save-consecutivo:hover:not(:disabled) {
     background: #059669;
     border-color: #059669;
 }
 
-.btn-save-proveedores:disabled {
+.btn-save-proveedores:disabled, .btn-save-consecutivo:disabled {
     opacity: 0.45 !important;
     cursor: not-allowed !important;
     background: #94A3B8 !important;
@@ -3573,6 +3573,11 @@ input.excel-p-flag-x {
 .st-badge-cancelado {
     background: rgba(239, 68, 68, 0.15);
     color: #DC2626;
+}
+
+.st-badge-prog {
+    background: rgba(245, 158, 11, 0.15);
+    color: #D97706;
 }
 
 .st-badge-empty {

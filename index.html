@@ -1872,20 +1872,13 @@
 
                                     </div>
 
-                                    <div class="table-actions">
-
-                                        <button class="btn btn-secondary" onclick="exportConsecutivoToCSV()">
-
-                                            <span class="material-symbols-outlined">download</span> Exportar CSV
-
+                                    <div class="table-actions" style="display: flex; gap: 10px; align-items: center;" id="consecutivo-action-buttons">
+                                        <button type="button" class="btn btn-secondary btn-edit-consecutivo" id="btn-edit-consecutivo" onclick="startEditingConsecutivo()" title="Habilitar edición de estatus en la tabla">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
                                         </button>
-
-                                        <button class="btn btn-primary" onclick="addNewConsecutivoRow()">
-
-                                            <span class="material-symbols-outlined">add</span> Agregar Factura
-
+                                        <button type="button" class="btn btn-primary btn-save-consecutivo" id="btn-save-consecutivo" onclick="saveEditingConsecutivo()" disabled title="Guardar cambios y liberar la tabla para otros usuarios">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
                                         </button>
-
                                     </div>
 
                                 </div>
@@ -1966,7 +1959,7 @@
 
                                         <button class="consecutivo-filter-btn" data-st="C" onclick="filterConsecutivoByST('C', this)">Por Cobrar / C</button>
 
-                                        <button class="consecutivo-filter-btn" data-st="Cancelado" onclick="filterConsecutivoByST('Cancelado', this)">Cancelados</button>
+                                        <button class="consecutivo-filter-btn" data-st="PROG" onclick="filterConsecutivoByST('PROG', this)">Por programar</button>
 
                                     </div>
 
@@ -2042,9 +2035,16 @@
 
 
 
-                                <!-- Table Container with Fixed 100% Width (No Horizontal Scroll) -->
+                                <!-- Banner de bloqueo en tiempo real cuando otro usuario está editando Consecutivo -->
+                                <div id="consecutivo-lock-banner" class="proveedores-lock-banner consecutivo-lock-banner" style="display: none;">
+                                    <div class="lock-banner-content">
+                                        <span class="material-symbols-outlined lock-icon">lock</span>
+                                        <span id="consecutivo-lock-banner-text">Esta sección está siendo editada por otro usuario</span>
+                                    </div>
+                                </div>
 
-                                <div class="table-responsive consecutivo-table-container">
+                                <!-- Table Container with Fixed 100% Width (No Horizontal Scroll) -->
+                                <div class="table-responsive consecutivo-table-container" id="consecutivo-table-container">
 
                                     <table class="admond-table excel-style-table consecutivo-table" id="table-consecutivo">
 
