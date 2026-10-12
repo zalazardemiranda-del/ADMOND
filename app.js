@@ -12177,9 +12177,11 @@ function evictUserFromProjectOnSystemUpdate(releaseId, reasonMessage) {
         renderOperaciones();
     }
 
-    const msg = reasonMessage || "🔄 El sistema se ha actualizado en línea. Se cerraron temporalmente los proyectos abiertos para aplicar las mejoras; ya puedes volver a entrar.";
-    if (typeof showCustomNotification === 'function') {
-        showCustomNotification(msg, "info");
+    if (wasInDetail || reasonMessage) {
+        const msg = reasonMessage || "🔄 El sistema se ha actualizado en línea. Se cerraron temporalmente los proyectos abiertos para aplicar las mejoras; ya puedes volver a entrar.";
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification(msg, "info");
+        }
     }
 }
 
@@ -13421,9 +13423,13 @@ function updateProjectHeaderField(key, val) {
 
     if (key === 'numFactura') {
         p.factura = val;
+        const fInput = document.getElementById("op-step1-factura-num");
+        if (fInput && document.activeElement !== fInput) fInput.value = val || "";
         document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = val || "-");
     }
     if (key === 'numOC') {
+        const ocInput = document.getElementById("op-step1-oc-num");
+        if (ocInput && document.activeElement !== ocInput) ocInput.value = val || "";
         document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = val || "-");
     }
     if (key === 'numConsecutivo' || key === 'consecutivo') {
@@ -13435,6 +13441,8 @@ function updateProjectHeaderField(key, val) {
             p.id = cleanVal;
             appState.activeOperacionesProjectId = cleanVal;
         }
+        const cInput = document.getElementById("op-step1-consecutivo-num");
+        if (cInput && document.activeElement !== cInput) cInput.value = cleanVal || "";
         document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = cleanVal || "-");
     }
     // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
@@ -14749,6 +14757,7 @@ const CODIGOS_SERVICIOS_OPERACIONES = {
 
 function handlePartidaServicioInput(idx, inputEl, event) {
     window.handlePartidaServicioInput = handlePartidaServicioInput;
+    if (!appState.isEditingOperacionesDetail) return;
     if (!inputEl) return;
     const prevLen = inputEl._prevLen !== undefined ? inputEl._prevLen : (inputEl.value.length + 1);
     const currLen = inputEl.value.length;
@@ -14814,6 +14823,7 @@ function handlePartidaServicioInput(idx, inputEl, event) {
 
 function handlePartidaServicioSelect(idx, val) {
     window.handlePartidaServicioSelect = handlePartidaServicioSelect;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -14841,11 +14851,11 @@ function handlePartidaServicioSelect(idx, val) {
     }
 
     recalcPartidasTotals(p);
-    saveOperacionesStorage();
 };
 
 function handlePartidaConceptoInput(idx, inputEl, event) {
     window.handlePartidaConceptoInput = handlePartidaConceptoInput;
+    if (!appState.isEditingOperacionesDetail) return;
     if (!inputEl) return;
     const prevLen = inputEl._prevLen !== undefined ? inputEl._prevLen : (inputEl.value.length + 1);
     const currLen = inputEl.value.length;
@@ -14873,6 +14883,7 @@ function handlePartidaConceptoInput(idx, inputEl, event) {
 
 function updatePartidaFieldFast(idx, key, val) {
     window.updatePartidaFieldFast = updatePartidaFieldFast;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -14888,12 +14899,7 @@ function updatePartidaFieldFast(idx, key, val) {
         p.partidasConceptos[idx][key] = val;
     }
     recalcPartidasTotals(p);
-    if (isProjectGenerado(p)) {
-        saveOperacionesStorage();
-        if (typeof window.debouncedRealtimeSync === 'function') {
-            window.debouncedRealtimeSync(false);
-        }
-    }
+    // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 };
 window.updatePartidaField = window.updatePartidaFieldFast;
 
@@ -14970,10 +14976,6 @@ function recalcPartidasTotals(p) {
     if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-
-    if (typeof window.syncProjectToConsecutivo === 'function') {
-        window.syncProjectToConsecutivo(p);
-    }
 }
 
 function renderPartidasTable(p) {
@@ -15111,6 +15113,7 @@ function renderPartidasTable(p) {
 
 function handleClienteInput(val) {
     window.handleClienteInput = handleClienteInput;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -15118,15 +15121,13 @@ function handleClienteInput(val) {
     p.cliente = val;
     p.nombreCliente = val;
     if (p.infoLavado) p.infoLavado.clienteFacturar = val;
-    saveOperacionesStorage();
-    if (typeof window.syncProjectToConsecutivo === 'function') {
-        window.syncProjectToConsecutivo(p);
-    }
+    // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 }
 window.handleClienteInput = handleClienteInput;
 
 function addPartidaConceptoRow() {
     window.addPartidaConceptoRow = addPartidaConceptoRow;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -15134,7 +15135,7 @@ function addPartidaConceptoRow() {
     if (!p.partidasConceptos) p.partidasConceptos = [];
     p.partidasConceptos.push({ servicio: '', num: p.partidasConceptos.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 });
     renderPartidasTable(p);
-    saveOperacionesStorage();
+    updateOperacionesDetailEditUI();
 };
 
 let _realtimeSyncTimer = null;
@@ -15155,6 +15156,7 @@ window.debouncedRealtimeSync = debouncedRealtimeSync;
 
 function updateProveedorClavesFieldFast(idx, key, val) {
     window.updateProveedorClavesFieldFast = updateProveedorClavesFieldFast;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -15178,15 +15180,7 @@ function updateProveedorClavesFieldFast(idx, key, val) {
         p.proveedoresClaves[idx][key] = val;
     }
     recalcProveedorClavesTotals(p);
-    if (isProjectGenerado(p)) {
-        saveOperacionesStorage();
-        if (typeof window.syncAllOperacionesToProveedores === 'function') {
-            window.syncAllOperacionesToProveedores();
-        }
-        if (typeof window.debouncedRealtimeSync === 'function') {
-            window.debouncedRealtimeSync(false);
-        }
-    }
+    // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 };
 window.updateProveedorClavesField = window.updateProveedorClavesFieldFast;
 
@@ -15464,6 +15458,7 @@ function renderProveedorClavesTable(p) {
 
 function addProveedorClavesRow() {
     window.addProveedorClavesRow = addProveedorClavesRow;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -15471,10 +15466,7 @@ function addProveedorClavesRow() {
     if (!p.proveedoresClaves) p.proveedoresClaves = [];
     p.proveedoresClaves.push({ proveedor: '', facturaNum: (p.numFactura && p.numFactura !== '-' ? p.numFactura : ''), num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 });
     renderProveedorClavesTable(p);
-    saveOperacionesStorage();
-    if (typeof window.syncAllOperacionesToProveedores === 'function') {
-        window.syncAllOperacionesToProveedores();
-    }
+    updateOperacionesDetailEditUI();
 };
 
 /* ==============================================================================
@@ -15737,6 +15729,7 @@ function renderDocumentosStatus(p) {
 
 function uploadDocItem(docKey) {
     window.uploadDocItem = uploadDocItem;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.documentos) p.documentos = {};
@@ -15808,16 +15801,9 @@ function uploadDocItem(docKey) {
                     } catch(eWs) {}
                 }
 
-                // 4. Actualizar interfaz
+                // 4. Actualizar interfaz (se persiste al expediente cuando el usuario da clic en "Guardar")
                 renderDocumentosStatus(p);
-
-                // 5. Guardar en almacenamiento seguro LocalStorage
-                saveOperacionesStorage();
-
-                // 6. Sincronizar inmediatamente a la nube Supabase sin demora
-                if (typeof window.syncOperacionesToCloud === 'function') {
-                    window.syncOperacionesToCloud(true);
-                }
+                updateOperacionesDetailEditUI();
             };
             reader.readAsDataURL(file);
         }
@@ -15954,6 +15940,7 @@ async function viewDocItem(docKey) {
 
 async function deleteDocItem(docKey) {
     window.deleteDocItem = deleteDocItem;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p || !p.documentos || !p.documentos[docKey]) return;
     
@@ -15976,11 +15963,7 @@ async function deleteDocItem(docKey) {
     }
 
     renderDocumentosStatus(p);
-    saveOperacionesStorage();
-
-    if (typeof window.syncOperacionesToCloud === 'function') {
-        window.syncOperacionesToCloud(true);
-    }
+    updateOperacionesDetailEditUI();
 }
 
 function finishOperacionesWizard() {
@@ -15993,6 +15976,8 @@ function finishOperacionesWizard() {
             return;
         }
         p.estatus = 'CERRADO';
+        appState.isEditingOperacionesDetail = false;
+        appState._operacionesDetailSnapshot = null;
         saveOperacionesStorage();
     }
     alert("¡Expediente operativo completado y CERRADO con éxito!");
@@ -16026,6 +16011,8 @@ function generarProyectoOperaciones() {
 
         appState.draftOperacionesProject = null;
         appState.activeOperacionesProjectId = p.id;
+        appState.isEditingOperacionesDetail = false;
+        appState._operacionesDetailSnapshot = null;
 
         if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
         // Limpiar cualquier referencia previa por id o consecutivo para asegurar unicidad
@@ -16055,6 +16042,7 @@ function openNuevoProyectoModal() {
     // Si ya existe un borrador no generado en edición, reanudarlo y evitar duplicados por clics múltiples
     if (appState.draftOperacionesProject && !isProjectGenerado(appState.draftOperacionesProject)) {
         openOperacionesDetail(appState.draftOperacionesProject.id);
+        startEditingOperacionesProject();
         goToOperacionesStep(1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
@@ -16119,8 +16107,9 @@ function openNuevoProyectoModal() {
     appState.operacionesProyectos.unshift(newProject);
 
     // NOTA: NO guardamos en LocalStorage y NO sincronizamos a la nube aquí.
-    // Solo cuando el usuario haga clic en GENERAR PROYECTO (Paso 4) se registrará formalmente.
+    // Solo cuando el usuario haga clic en GENERAR PROYECTO o GUARDAR se registrará formalmente.
     openOperacionesDetail(newProject.id);
+    startEditingOperacionesProject();
     goToOperacionesStep(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };

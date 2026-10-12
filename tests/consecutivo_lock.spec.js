@@ -448,4 +448,271 @@ test("8. Cambiar de P a C quita la fecha de pago y los cambios solo se guardan a
   expect(provStoredAfterSave.fechaPago).toBeTruthy();
 });
 
+test("9. Operaciones detalle tiene pasos 1-4 abajo en forma de botones con borde rectangular, sin Anterior/Continuar, y 3 botones superiores (Editar, Guardar, Regresar a operaciones)", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  await page.evaluate(() => {
+    window.switchAdminFicha('operaciones');
+    const testProj = {
+      id: 'RDP2610950-F',
+      numProyecto: 'RDP2610950-F',
+      consecutivo: 'RDP2610950-F',
+      numConsecutivo: 'RDP2610950-F',
+      fechaInicio: '2026-10-12',
+      fechaInicioDisplay: '12/10/2026',
+      numFactura: 'FE-950',
+      factura: 'FE-950',
+      numOC: 'OC-950',
+      cliente: 'CLIENTE OPERACIONES',
+      estatus: 'PENDIENTE',
+      generado: true,
+      tipoProyecto: 'servicio_local',
+      infoViaje: { terminal: 'Manzanillo', mblMawb: 'MBL123', destino: 'CDMX', observaciones: 'Inicial' },
+      contenedores: [{ id: 1, label: 'Contenedor 1', numContenedor: 'CONT-001' }]
+    };
+    window.appState.operacionesProyectos = [testProj];
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify([testProj]));
+    window.renderOperaciones();
+    window.openOperacionesDetail('RDP2610950-F');
+  });
+  await page.waitForTimeout(300);
+
+  // 1. Verificar los 3 botones superiores: Editar, Guardar, Regresar a operaciones
+  const btnEdit = page.locator("#btn-edit-op-detail");
+  const btnSave = page.locator("#btn-save-op-detail");
+  const btnBack = page.locator("#btn-back-op-detail");
+
+  await expect(btnEdit).toBeVisible();
+  await expect(btnEdit).toContainText("Editar");
+  await expect(btnEdit).toBeEnabled();
+
+  await expect(btnSave).toBeVisible();
+  await expect(btnSave).toContainText("Guardar");
+  await expect(btnSave).toBeDisabled();
+
+  await expect(btnBack).toBeVisible();
+  await expect(btnBack).toContainText("Regresar a operaciones");
+  await expect(btnBack).toBeEnabled();
+
+  // 2. Verificar que los botones ANTERIOR y CONTINUAR fueron eliminados de los pasos
+  await expect(page.locator("#operaciones-view-detail button:has-text('CONTINUAR')")).toHaveCount(0);
+  await expect(page.locator("#operaciones-view-detail button:has-text('ANTERIOR')")).toHaveCount(0);
+
+  // 3. Verificar que los pasos 1, 2, 3 y 4 están abajo como botones con margen/borde rectangular
+  const bottomStepper = page.locator("#op-bottom-stepper");
+  await expect(bottomStepper).toBeVisible();
+
+  for (let i = 1; i <= 4; i++) {
+    const stepBtn = page.locator(`#op-step-indicator-${i}`);
+    await expect(stepBtn).toBeVisible();
+    const tagName = await stepBtn.evaluate(el => el.tagName.toLowerCase());
+    expect(tagName).toBe("button");
+    const borderStyle = await stepBtn.evaluate(el => window.getComputedStyle(el).borderStyle);
+    expect(borderStyle).toBe("solid");
+  }
+
+  // Navegar entre pasos dando clic directamente en los botones 1, 2, 3 y 4 de abajo
+  await page.locator("#op-step-indicator-2").click();
+  await expect(page.locator("#op-step-pane-2")).toBeVisible();
+  await page.locator("#op-step-indicator-3").click();
+  await expect(page.locator("#op-step-pane-3")).toBeVisible();
+  await page.locator("#op-step-indicator-4").click();
+  await expect(page.locator("#op-step-pane-4")).toBeVisible();
+  await page.locator("#op-step-indicator-1").click();
+  await expect(page.locator("#op-step-pane-1")).toBeVisible();
+});
+
+test("10. Reglas de bloqueo y edición en Operaciones: fila gris para otros usuarios, edición solo al dar clic en Editar, guardado solo con Guardar, liberación al Regresar a operaciones", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  await page.evaluate(() => {
+    window.switchAdminFicha('operaciones');
+    const testProj = {
+      id: 'RDP2610951-F',
+      numProyecto: 'RDP2610951-F',
+      consecutivo: 'RDP2610951-F',
+      numConsecutivo: 'RDP2610951-F',
+      fechaInicio: '2026-10-12',
+      fechaInicioDisplay: '12/10/2026',
+      numFactura: 'FE-951',
+      factura: 'FE-951',
+      numOC: 'OC-951',
+      cliente: 'CLIENTE REGLAS',
+      estatus: 'PENDIENTE',
+      generado: true,
+      tipoProyecto: 'servicio_local',
+      infoViaje: { terminal: 'Veracruz', mblMawb: 'MBL-951', destino: 'Monterrey', observaciones: '' },
+      contenedores: [{ id: 1, label: 'Contenedor 1', numContenedor: 'CONT-951' }]
+    };
+    window.appState.operacionesProyectos = [testProj];
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify([testProj]));
+    window.renderOperaciones();
+  });
+  await page.waitForTimeout(200);
+
+  // 1. Cuando otro usuario tiene abierto el proyecto, aparece en gris y dice "El proyecto está siendo editado por (nombre)"
+  await page.evaluate(() => {
+    window.handleIncomingOperacionesProjectLock({
+      projectId: 'RDP2610951-F',
+      isLocked: true,
+      userId: 'user-maria-2',
+      userName: 'Maria Perez',
+      clientId: 'client_other_999',
+      timestamp: Date.now()
+    });
+  });
+  await page.waitForTimeout(200);
+
+  const lockedRow = page.locator("#tbody-operaciones-proyectos tr[data-op-id='RDP2610951-F']");
+  await expect(lockedRow).toHaveClass(/op-row-locked/);
+  await expect(lockedRow).toContainText("El proyecto está siendo editado por Maria Perez");
+  const lockedBtn = lockedRow.locator(".btn-op-abrir");
+  await expect(lockedBtn).toBeDisabled();
+  await expect(lockedBtn).toContainText("BLOQUEADO");
+
+  // 2. El otro usuario da clic en "Regresar a operaciones" y libera el bloqueo
+  await page.evaluate(() => {
+    window.handleIncomingOperacionesProjectLock({
+      projectId: 'RDP2610951-F',
+      isLocked: false,
+      userId: 'user-maria-2',
+      userName: 'Maria Perez',
+      clientId: 'client_other_999',
+      timestamp: Date.now()
+    });
+  });
+  await page.waitForTimeout(200);
+
+  await expect(lockedRow).not.toHaveClass(/op-row-locked/);
+  await expect(lockedRow.locator(".btn-op-abrir")).toBeEnabled();
+
+  // 3. Nuestro usuario da clic en "Abrir" -> entra en modo solo lectura (no puede editar sin dar clic en "Editar")
+  await lockedRow.locator(".btn-op-abrir").click();
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("#operaciones-view-detail")).toHaveClass(/op-detail-readonly/);
+  await page.locator("#op-step-indicator-2").click();
+  await expect(page.locator("#op-step1-factura-num")).toBeDisabled();
+
+  // Intentar modificar sin haber dado clic en "Editar" -> es ignorado
+  await page.evaluate(() => {
+    window.updateProjectHeaderField('numFactura', 'FE-NO-PERMITIDO');
+  });
+  const facBeforeEdit = await page.evaluate(() => window.appState.operacionesProyectos[0].numFactura);
+  expect(facBeforeEdit).toBe("FE-951");
+
+  // 4. Dar clic en "Editar" -> habilita la edición, pero NO guarda en localStorage hasta dar clic en "Guardar"
+  await page.locator("#btn-edit-op-detail").click();
+  await page.waitForTimeout(200);
+  await expect(page.locator("#operaciones-view-detail")).not.toHaveClass(/op-detail-readonly/);
+  await expect(page.locator("#op-step1-factura-num")).toBeEnabled();
+
+  await page.evaluate(() => {
+    window.updateProjectHeaderField('numFactura', 'FE-TEMPORAL');
+  });
+  const storedBeforeSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_operaciones_proyectos'))[0].numFactura);
+  expect(storedBeforeSave).toBe("FE-951");
+
+  // Si da clic en "Regresar a operaciones" SIN dar clic en "Guardar", se descartan los cambios no guardados
+  await page.locator("#btn-back-op-detail").click();
+  await page.waitForTimeout(200);
+
+  const facAfterCancel = await page.evaluate(() => window.appState.operacionesProyectos[0].numFactura);
+  expect(facAfterCancel).toBe("FE-951");
+
+  // 5. Volver a abrir, dar clic en "Editar", modificar y dar clic en "Guardar" -> ahora SÍ se guarda
+  await page.locator("#tbody-operaciones-proyectos .btn-op-abrir").first().click();
+  await page.locator("#btn-edit-op-detail").click();
+  await page.evaluate(() => {
+    window.updateProjectHeaderField('numFactura', 'FE-GUARDADO-OK');
+  });
+  await page.locator("#btn-save-op-detail").click();
+  await page.waitForTimeout(200);
+
+  const storedAfterSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_operaciones_proyectos'))[0].numFactura);
+  expect(storedAfterSave).toBe("FE-GUARDADO-OK");
+
+  // Regresar a operaciones libera el bloqueo del proyecto
+  await page.locator("#btn-back-op-detail").click();
+  await page.waitForTimeout(200);
+  const activeLockAfterBack = await page.evaluate(() => window.getOperacionesProjectLock('RDP2610951-F'));
+  expect(activeLockAfterBack).toBeNull();
+});
+
+test("11. Condición de carrera (el que dio clic antes se queda) y expulsión por actualización en línea (suelta los globos)", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  await page.evaluate(() => {
+    window.switchAdminFicha('operaciones');
+    const testProj = {
+      id: 'RDP2610952-F',
+      numProyecto: 'RDP2610952-F',
+      consecutivo: 'RDP2610952-F',
+      numConsecutivo: 'RDP2610952-F',
+      fechaInicio: '2026-10-12',
+      fechaInicioDisplay: '12/10/2026',
+      numFactura: 'FE-952',
+      factura: 'FE-952',
+      numOC: 'OC-952',
+      cliente: 'CLIENTE CARRERA',
+      estatus: 'PENDIENTE',
+      generado: true,
+      tipoProyecto: 'servicio_local',
+      infoViaje: { terminal: 'Manzanillo', mblMawb: 'MBL-952', destino: 'Guadalajara', observaciones: '' },
+      contenedores: [{ id: 1, label: 'Contenedor 1', numContenedor: 'CONT-952' }]
+    };
+    window.appState.operacionesProyectos = [testProj];
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify([testProj]));
+    window.renderOperaciones();
+    window.openOperacionesDetail('RDP2610952-F');
+  });
+  await page.waitForTimeout(200);
+
+  // Caso A: Otro usuario dio clic DESPUÉS (timestamp mayor) -> nuestro usuario dio clic antes y conserva el proyecto abierto
+  await page.evaluate(() => {
+    const myTs = window.appState._myActiveProjectLock.timestamp;
+    window.handleIncomingOperacionesProjectLock({
+      projectId: 'RDP2610952-F',
+      isLocked: true,
+      userId: 'user-late',
+      userName: 'Usuario Tardio',
+      clientId: 'client_late_999',
+      timestamp: myTs + 500
+    });
+  });
+  await page.waitForTimeout(200);
+  await expect(page.locator("#operaciones-view-detail")).toBeVisible();
+
+  // Caso B: Otro usuario dio clic ANTES (timestamp menor) -> el sistema deja adentro al que dio clic antes y saca al segundo a la lista
+  await page.evaluate(() => {
+    const myTs = window.appState._myActiveProjectLock.timestamp;
+    window.handleIncomingOperacionesProjectLock({
+      projectId: 'RDP2610952-F',
+      isLocked: true,
+      userId: 'user-early',
+      userName: 'Diego Miranda',
+      clientId: 'client_early_001',
+      timestamp: myTs - 500
+    });
+  });
+  await page.waitForTimeout(200);
+  await expect(page.locator("#operaciones-view-detail")).toBeHidden();
+  await expect(page.locator("#operaciones-view-list")).toBeVisible();
+  await expect(page.locator("#tbody-operaciones-proyectos tr[data-op-id='RDP2610952-F']")).toContainText("El proyecto está siendo editado por Diego Miranda");
+
+  // Caso C: Actualización en línea ("suelta los globos") saca a los usuarios de los proyectos, limpia bloqueos y después los deja volver a entrar
+  await page.evaluate(async () => {
+    await window.triggerSystemReleaseEviction();
+  });
+  await page.waitForTimeout(200);
+
+  // El bloqueo se limpió y el usuario puede volver a entrar al proyecto actualizado
+  const rowAfterRelease = page.locator("#tbody-operaciones-proyectos tr[data-op-id='RDP2610952-F']");
+  await expect(rowAfterRelease).not.toHaveClass(/op-row-locked/);
+  await rowAfterRelease.locator(".btn-op-abrir").click();
+  await page.waitForTimeout(200);
+  await expect(page.locator("#operaciones-view-detail")).toBeVisible();
+});
+
+
 
