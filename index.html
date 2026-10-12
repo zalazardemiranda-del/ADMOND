@@ -1714,7 +1714,13 @@
 
                                     </div>
 
-                                    <div class="table-actions" style="display: none;">
+                                    <div class="table-actions" style="display: flex; gap: 10px; align-items: center;" id="proveedores-action-buttons">
+                                        <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-proveedores" onclick="startEditingProveedores()" title="Habilitar edición de estatus en la tabla">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
+                                        </button>
+                                        <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-proveedores" onclick="saveEditingProveedores()" disabled title="Guardar cambios y liberar la tabla para otros usuarios">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
+                                        </button>
                                     </div>
                                 </div>
 
@@ -1780,9 +1786,15 @@
 
                                 </div>
 
+                                <!-- Banner de bloqueo en tiempo real cuando otro usuario está editando -->
+                                <div id="proveedores-lock-banner" class="proveedores-lock-banner" style="display: none;">
+                                    <div class="lock-banner-content">
+                                        <span class="material-symbols-outlined lock-icon">lock</span>
+                                        <span id="proveedores-lock-banner-text">Esta tabla está siendo editada por otro usuario</span>
+                                    </div>
+                                </div>
 
-
-                                <div class="table-responsive">
+                                <div class="table-responsive" id="proveedores-table-container">
 
                                     <table class="admond-table excel-style-table compact-proveedores-table" id="table-proveedores">
 

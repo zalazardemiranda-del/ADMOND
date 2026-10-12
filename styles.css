@@ -2702,6 +2702,126 @@ div.user-editing-grey,
     user-select: none;
 }
 
+/* Celdas fijas de solo lectura procedentes de Operaciones (Imagen 3) */
+.cell-locked-val {
+    display: inline-block;
+    padding: 2px 4px;
+    font-size: 12px;
+    line-height: 1.3;
+    user-select: text;
+}
+
+/* Botones de Control de Proveedores (Editar y Guardar) */
+.btn-edit-proveedores {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: #FFFFFF;
+    border: 1.5px solid #CBD5E1;
+    color: #1E293B;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-edit-proveedores:hover:not(:disabled) {
+    background: #F8FAFC;
+    border-color: #2563EB;
+    color: #2563EB;
+}
+
+.btn-edit-proveedores.active-editing {
+    background: #EFF6FF !important;
+    border-color: #2563EB !important;
+    color: #2563EB !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2) !important;
+}
+
+.btn-save-proveedores {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 8px 18px;
+    border-radius: 8px;
+    background: #10B981;
+    border: 1.5px solid #10B981;
+    color: #FFFFFF;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+}
+
+.btn-save-proveedores:hover:not(:disabled) {
+    background: #059669;
+    border-color: #059669;
+}
+
+.btn-save-proveedores:disabled {
+    opacity: 0.45 !important;
+    cursor: not-allowed !important;
+    background: #94A3B8 !important;
+    border-color: #94A3B8 !important;
+    box-shadow: none !important;
+}
+
+/* Banner de Bloqueo de Edición Colaborativa en Proveedores (Imagen 2) */
+.proveedores-lock-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #FEF3C7;
+    border: 1.5px solid #F59E0B;
+    border-radius: 10px;
+    padding: 12px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+    animation: fadeInLock 0.25s ease-in-out;
+}
+
+.proveedores-lock-banner .lock-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #92400E;
+}
+
+.proveedores-lock-banner .lock-icon {
+    font-size: 22px;
+    color: #D97706;
+}
+
+@keyframes fadeInLock {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Estado Gris Bloqueado para la tabla completa de Proveedores (Imagen 2) */
+.tabla-bloqueada-editando {
+    position: relative !important;
+    background-color: #F8FAFC !important;
+    opacity: 0.55 !important;
+    filter: grayscale(80%) !important;
+    pointer-events: none !important;
+    user-select: none !important;
+    transition: all 0.3s ease !important;
+}
+
+/* Estatus bloqueado cuando no está en modo editar */
+.prov-estatus-trigger.trigger-locked {
+    cursor: pointer;
+    opacity: 0.95;
+}
+.prov-estatus-trigger.trigger-locked:hover {
+    filter: brightness(0.96);
+}
+
 .prov-dropdown-option {
     display: flex;
     align-items: center;

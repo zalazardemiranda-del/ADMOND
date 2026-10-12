@@ -90,6 +90,8 @@ let appState = {
     
     // Administration Data
     proveedores: [],
+    isEditingProveedores: false,
+    proveedoresLockedBy: null,
     nominas: [],
     gastosIndirectos: [],
     adminSubSection: 'quincenas', // 'quincenas' o 'gastos-indirectos'
@@ -956,6 +958,12 @@ function switchAdminFicha(fichaName) {
     const topbarBack = document.getElementById("op-detail-topbar");
     if (topbarBack && fichaName !== 'operaciones') topbarBack.style.display = "none";
 
+    if (fichaName !== 'proveedores' && appState.isEditingProveedores) {
+        if (typeof saveEditingProveedores === 'function') {
+            saveEditingProveedores(true);
+        }
+    }
+
     renderAdministracion();
 };
 
@@ -974,11 +982,17 @@ function renderAdministracion() {
             renderNominas();
         }
     } else if (appState.currentAdminFicha === 'proveedores') {
+        if (typeof window.fetchProveedoresLockFromCloud === 'function') {
+            window.fetchProveedoresLockFromCloud();
+        }
         if (typeof window.syncAllOperacionesToProveedores === 'function') {
             window.syncAllOperacionesToProveedores();
         }
         renderProveedorChips();
         renderProveedores();
+        if (typeof window.updateProveedoresEditButtonsUI === 'function') {
+            window.updateProveedoresEditButtonsUI();
+        }
     } else if (appState.currentAdminFicha === 'consecutivo') {
         if (typeof window.fetchConsecutivoFromCloud === 'function') window.fetchConsecutivoFromCloud();
         renderConsecutivo();
@@ -2730,7 +2744,289 @@ function syncProveedorRowBackToOperaciones(row) {
 
     saveOperacionesStorage(true);
 }
-window.syncProveedorRowBackToOperaciones = syncProveedorRowBackToOperaciones;
+// ---------------------------------------------------------------------------------
+// CONTROL DE EDICIÓN EXCLUSIVA Y BLOQUEO EN TIEMPO REAL (IMÁGENES 1, 2 Y 3)
+// ---------------------------------------------------------------------------------
+function formatProvTableDate(val) {
+    if (!val) return '-';
+    const s = String(val).trim();
+    if (s.includes('-')) {
+        const parts = s.split('T')[0].split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+    }
+    return s;
+}
+window.formatProvTableDate = formatProvTableDate;
+
+function formatProvTableNumber(val) {
+    if (val === null || val === undefined || val === '') return '0';
+    const num = Number(val);
+    if (isNaN(num)) return String(val);
+    if (Number.isInteger(num)) return String(num);
+    return Number(num.toFixed(2)).toString();
+}
+window.formatProvTableNumber = formatProvTableNumber;
+
+function handleProvEstatusClick(index, event) {
+    window.handleProvEstatusClick = handleProvEstatusClick;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingProveedores) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para modificar el estatus de los proveedores.", "warning");
+        } else {
+            alert("Haz clic en 'Editar' para modificar el estatus de los proveedores.");
+        }
+        return;
+    }
+    toggleProvEstatusDropdown(index, event);
+}
+window.handleProvEstatusClick = handleProvEstatusClick;
+
+function handleProvEstatusDblClick(index, event) {
+    window.handleProvEstatusDblClick = handleProvEstatusDblClick;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingProveedores) {
+        return;
+    }
+    cycleProveedorEstatus(index, event);
+}
+window.handleProvEstatusDblClick = handleProvEstatusDblClick;
+
+let _editProveedoresTimeout = null;
+
+async function startEditingProveedores() {
+    window.startEditingProveedores = startEditingProveedores;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
+    // Verificar si está bloqueado por otro usuario
+    if (appState.proveedoresLockedBy && appState.proveedoresLockedBy.userId !== currentUserId) {
+        const elapsed = Date.now() - (appState.proveedoresLockedBy.timestamp || 0);
+        if (elapsed < 5 * 60 * 1000) {
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    }
+
+    appState.isEditingProveedores = true;
+    appState.proveedoresLockedBy = {
+        userId: currentUserId,
+        userName: currentUserName,
+        timestamp: Date.now()
+    };
+
+    updateProveedoresEditButtonsUI();
+    renderProveedores();
+
+    // Notificar a otras máquinas por WebSockets
+    broadcastProveedoresLockState(true, currentUserName, currentUserId);
+
+    // Persistir estado de bloqueo en Supabase
+    await syncProveedoresLockToCloud(true, currentUserName, currentUserId);
+
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
+    }
+
+    // Auto-cierre de seguridad a los 5 minutos de inactividad
+    if (_editProveedoresTimeout) clearTimeout(_editProveedoresTimeout);
+    _editProveedoresTimeout = setTimeout(() => {
+        if (appState.isEditingProveedores) {
+            if (typeof showCustomNotification === 'function') {
+                showCustomNotification("Tiempo de edición expirado por inactividad. Guardando cambios automáticamente...", "warning");
+            }
+            saveEditingProveedores(true);
+        }
+    }, 5 * 60 * 1000);
+}
+window.startEditingProveedores = startEditingProveedores;
+
+async function saveEditingProveedores(isAuto = false) {
+    window.saveEditingProveedores = saveEditingProveedores;
+    if (_editProveedoresTimeout) clearTimeout(_editProveedoresTimeout);
+
+    appState.isEditingProveedores = false;
+    appState.proveedoresLockedBy = null;
+
+    updateProveedoresEditButtonsUI();
+    renderProveedores();
+
+    // Guardar en almacenamiento y nube
+    saveToStorage();
+    if (typeof syncProveedoresToCloud === 'function') {
+        syncProveedoresToCloud(true);
+    }
+    if (typeof broadcastProveedoresUpdate === 'function') {
+        broadcastProveedoresUpdate();
+    }
+
+    // Notificar desbloqueo a otras máquinas
+    broadcastProveedoresLockState(false, null, null);
+    await syncProveedoresLockToCloud(false, null, null);
+
+    if (!isAuto && typeof showCustomNotification === 'function') {
+        showCustomNotification("Cambios de estatus guardados y tabla liberada con éxito.", "success");
+    }
+}
+window.saveEditingProveedores = saveEditingProveedores;
+
+function updateProveedoresEditButtonsUI() {
+    window.updateProveedoresEditButtonsUI = updateProveedoresEditButtonsUI;
+    const btnEdit = document.getElementById("btn-edit-proveedores");
+    const btnSave = document.getElementById("btn-save-proveedores");
+    const banner = document.getElementById("proveedores-lock-banner");
+    const bannerText = document.getElementById("proveedores-lock-banner-text");
+    const tableContainer = document.getElementById("proveedores-table-container");
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const isLockedByOther = appState.proveedoresLockedBy && appState.proveedoresLockedBy.userId !== currentUserId;
+
+    if (isLockedByOther) {
+        if (tableContainer) tableContainer.classList.add("tabla-bloqueada-editando");
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) bannerText.innerText = `Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName || 'otro usuario'}`;
+        }
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
+            btnEdit.style.cursor = "not-allowed";
+            btnEdit.style.opacity = "0.5";
+            btnEdit.title = `Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName}`;
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.cursor = "not-allowed";
+            btnSave.style.opacity = "0.45";
+        }
+    } else if (appState.isEditingProveedores) {
+        if (tableContainer) tableContainer.classList.remove("tabla-bloqueada-editando");
+        if (banner) banner.style.display = "none";
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.add("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editando...`;
+            btnEdit.style.cursor = "default";
+            btnEdit.style.opacity = "1";
+            btnEdit.title = "Modo de edición activo";
+        }
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.style.cursor = "pointer";
+            btnSave.style.opacity = "1";
+            btnSave.title = "Guardar cambios y permitir edición a otros usuarios";
+        }
+    } else {
+        if (tableContainer) tableContainer.classList.remove("tabla-bloqueada-editando");
+        if (banner) banner.style.display = "none";
+        if (btnEdit) {
+            btnEdit.disabled = false;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar`;
+            btnEdit.style.cursor = "pointer";
+            btnEdit.style.opacity = "1";
+            btnEdit.title = "Habilitar edición de estatus";
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.cursor = "not-allowed";
+            btnSave.style.opacity = "0.45";
+            btnSave.title = "Haz clic en 'Editar' para comenzar";
+        }
+    }
+}
+window.updateProveedoresEditButtonsUI = updateProveedoresEditButtonsUI;
+
+function broadcastProveedoresLockState(isLocked, userName, userId) {
+    window.broadcastProveedoresLockState = broadcastProveedoresLockState;
+    if (!window.chatRealtimeChannel) return;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'proveedores_lock_update',
+            payload: {
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting proveedores lock state:", e);
+    }
+}
+window.broadcastProveedoresLockState = broadcastProveedoresLockState;
+
+async function syncProveedoresLockToCloud(isLocked, userName, userId) {
+    window.syncProveedoresLockToCloud = syncProveedoresLockToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_proveedores_lock__',
+            contenido: JSON.stringify({
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (e) {
+        console.warn("⚠️ Error persisting proveedores lock to cloud:", e);
+    }
+}
+window.syncProveedoresLockToCloud = syncProveedoresLockToCloud;
+
+async function fetchProveedoresLockFromCloud() {
+    window.fetchProveedoresLockFromCloud = fetchProveedoresLockFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs, error } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_proveedores_lock__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                if (parsed.isLocked) {
+                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                    if (elapsed < 5 * 60 * 1000) {
+                        if (parsed.userId !== currentUserId) {
+                            appState.proveedoresLockedBy = parsed;
+                        }
+                    } else {
+                        appState.proveedoresLockedBy = null;
+                    }
+                } else {
+                    if (!appState.isEditingProveedores) {
+                        appState.proveedoresLockedBy = null;
+                    }
+                }
+                updateProveedoresEditButtonsUI();
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching proveedores lock from cloud:", e);
+    }
+}
+window.fetchProveedoresLockFromCloud = fetchProveedoresLockFromCloud;
 
 function toggleProvEstatusDropdown(index, event) {
     window.toggleProvEstatusDropdown = toggleProvEstatusDropdown;
@@ -2963,7 +3259,7 @@ function renderProveedores() {
         tr.dataset.rowKey = `prov_${realIndex}`;
         tr.innerHTML = `
             <td style="text-align: center;">
-                <input type="text" class="excel-input" value="${factProv}" placeholder="-" oninput="updateProveedorCell(${realIndex}, 'facturaProveedor', this.value)" style="text-align: center; font-weight: 600;">
+                <span class="cell-locked-val" style="font-weight: 600; color: #1E293B;">${factProv || '-'}</span>
             </td>
             <td style="padding-left: 8px;">
                 <span class="prov-name-locked" title="${item.proveedor || ''}">
@@ -2972,40 +3268,40 @@ function renderProveedores() {
                 </span>
             </td>
             <td style="text-align: center;">
-                <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateProveedorCell(${realIndex}, 'fecha', this.value)" style="text-align: center;">
+                <span class="cell-locked-val" style="color: #334155;">${formatProvTableDate(item.fecha)}</span>
             </td>
-            <td>
-                <input type="text" class="excel-input" value="${item.servicio || "Logistic"}" oninput="updateProveedorCell(${realIndex}, 'servicio', this.value)">
+            <td style="padding-left: 8px;">
+                <span class="cell-locked-val" style="color: #334155;">${item.servicio || '-'}</span>
             </td>
-            <td>
-                <input type="number" id="prov-subtotal-input-${realIndex}" class="excel-input number-input" value="${item.subtotal || 0}" step="10" oninput="liveUpdateProveedorTotals(${realIndex})">
+            <td style="text-align: right; padding-right: 6px;">
+                <span class="cell-locked-val font-mono" style="font-weight: 600; color: #1E293B;">${formatProvTableNumber(item.subtotal)}</span>
             </td>
-            <td>
-                <input type="number" id="prov-iva-input-${realIndex}" class="excel-input number-input readonly" value="${item.iva || 0}" readonly>
+            <td style="text-align: right; padding-right: 6px;">
+                <span class="cell-locked-val font-mono" style="color: #334155;">${formatProvTableNumber(item.iva)}</span>
             </td>
-            <td>
-                <input type="number" id="prov-ret4-input-${realIndex}" class="excel-input number-input" value="${item.ret4 || 0}" step="10" oninput="liveUpdateProveedorTotals(${realIndex})">
+            <td style="text-align: right; padding-right: 6px;">
+                <span class="cell-locked-val font-mono" style="color: #334155;">${formatProvTableNumber(item.ret4)}</span>
             </td>
-            <td>
-                <input type="number" id="prov-retisr-input-${realIndex}" class="excel-input number-input" value="${item.retIsr || 0}" step="10" oninput="liveUpdateProveedorTotals(${realIndex})">
+            <td style="text-align: right; padding-right: 6px;">
+                <span class="cell-locked-val font-mono" style="color: #334155;">${formatProvTableNumber(item.retIsr)}</span>
             </td>
-            <td>
-                <input type="number" id="prov-total-input-${realIndex}" class="excel-input number-input readonly" value="${item.total || 0}" readonly style="font-weight: 700;">
+            <td style="text-align: right; padding-right: 6px;">
+                <span class="cell-locked-val font-mono" style="font-weight: 700; color: #0F172A;">${formatProvTableNumber(item.total)}</span>
             </td>
             <td class="td-prov-estatus" style="text-align: center; position: relative;">
-                <div class="prov-estatus-trigger ${estatusClass}" id="prov-estatus-trigger-${realIndex}" onclick="toggleProvEstatusDropdown(${realIndex}, event)" ondblclick="cycleProveedorEstatus(${realIndex}, event)" title="Estatus: ${currentStatus}. Haz clic para cambiar el estatus.">
+                <div class="prov-estatus-trigger ${estatusClass} ${!appState.isEditingProveedores ? 'trigger-locked' : ''}" id="prov-estatus-trigger-${realIndex}" onclick="handleProvEstatusClick(${realIndex}, event)" ondblclick="handleProvEstatusDblClick(${realIndex}, event)" title="${appState.isEditingProveedores ? `Estatus: ${currentStatus}. Haz clic para cambiar.` : 'Haz clic en \'Editar\' arriba para modificar el estatus'}">
                     <span>${displayLabel}</span>
                     <span class="material-symbols-outlined prov-arrow">expand_more</span>
                 </div>
             </td>
             <td style="text-align: center;">
-                <input type="date" class="excel-input" value="${item.fechaPago || ''}" oninput="updateProveedorCell(${realIndex}, 'fechaPago', this.value)" style="text-align: center;" title="Fecha de pago">
+                <span class="cell-locked-val" style="color: #64748B;">${item.fechaPago ? formatProvTableDate(item.fechaPago) : 'mm/dd/yyyy'}</span>
             </td>
             <td style="text-align: center;">
-                <input type="text" class="excel-input readonly" value="${(item.folioFE && item.folioFE !== 'FE-') ? item.folioFE : ''}" placeholder="-" readonly style="text-align: center; font-weight: 700; color: #0F172A; cursor: default;" title="Factura vinculada desde Operaciones">
+                <span class="cell-locked-val" style="font-weight: 700; color: #0F172A;" title="Factura vinculada desde Operaciones">${(item.folioFE && item.folioFE !== 'FE-') ? item.folioFE : (item.facturaProyecto || '-')}</span>
             </td>
             <td style="text-align: center;">
-                <input type="text" class="excel-input" value="${item.op || ""}" oninput="updateProveedorCell(${realIndex}, 'op', this.value)" style="text-align: center;">
+                <span class="cell-locked-val" style="font-weight: 600; color: #1E293B;">${item.op || '-'}</span>
             </td>
         `;
         tbody.appendChild(tr);
@@ -3019,6 +3315,9 @@ function renderProveedores() {
     
     recalculateProveedoresTableTotals();
     updateProveedorStatusCounts();
+    if (typeof updateProveedoresEditButtonsUI === 'function') {
+        updateProveedoresEditButtonsUI();
+    }
 }
 
 function recalculateProveedoresTableTotals() {
@@ -6296,6 +6595,28 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 4b2. Bloqueo exclusivo de edición en tabla de proveedores (Imágenes 1 y 2)
+    window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_lock_update' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        if (data.isLocked) {
+            if (data.userId !== currentUserId) {
+                appState.proveedoresLockedBy = data;
+            }
+        } else {
+            if (!appState.isEditingProveedores) {
+                appState.proveedoresLockedBy = null;
+            }
+        }
+        if (typeof window.updateProveedoresEditButtonsUI === 'function') {
+            window.updateProveedoresEditButtonsUI();
+        }
+        if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
+            window.renderProveedores();
+        }
+    });
+
     // 4c. Recibir Actualizaciones del Catálogo de Proveedores por Broadcast (sincronizado para todos)
     window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_catalog_update' }, payload => {
         const data = payload.payload;
@@ -6464,6 +6785,9 @@ function setupRealtimeSubscriptions() {
             if (channelKey === '__cloud_sync_gastos_indirectos__' && typeof window.fetchGastosIndirectosFromCloud === 'function') {
                 window.fetchGastosIndirectosFromCloud();
             }
+            if (channelKey === '__cloud_sync_proveedores_lock__' && typeof window.fetchProveedoresLockFromCloud === 'function') {
+                window.fetchProveedoresLockFromCloud();
+            }
             return;
         }
         if (!appState.chats[channelKey]) appState.chats[channelKey] = [];
@@ -6586,6 +6910,9 @@ function setupRealtimeSubscriptions() {
                     } else if (appState.currentAdminFicha === 'proveedores') {
                         if (typeof window.fetchProveedoresDataFromCloud === 'function') {
                             await window.fetchProveedoresDataFromCloud();
+                        }
+                        if (typeof window.fetchProveedoresLockFromCloud === 'function') {
+                            await window.fetchProveedoresLockFromCloud();
                         }
                     } else if (appState.currentAdminFicha === 'quincenal') {
                         if (typeof window.fetchNominasFromCloud === 'function') {
@@ -6749,6 +7076,9 @@ async function fetchCloudData() {
         }
         if (typeof window.fetchProveedoresDataFromCloud === 'function') {
             await window.fetchProveedoresDataFromCloud();
+        }
+        if (typeof window.fetchProveedoresLockFromCloud === 'function') {
+            await window.fetchProveedoresLockFromCloud();
         }
 
         // Sincronizar registros de Nóminas Quincenales (nube <-> local para todos los dispositivos)
