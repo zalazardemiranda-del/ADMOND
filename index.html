@@ -1370,8 +1370,8 @@
                                                         <td><strong>Gastos Indirectos</strong></td>
 
                                                         <td class="text-right font-bold">
-                                                            <span id="concept-gastos-ind-val">$670.00</span>
-                                                            <input type="hidden" id="concept-gastos-ind-input" value="670">
+                                                            <span id="concept-gastos-ind-val">$0.00</span>
+                                                            <input type="hidden" id="concept-gastos-ind-input" value="0">
                                                         </td>
 
                                                         <td class="cell-note">Total de Gastos Indirectos en Administración</td>
@@ -1384,7 +1384,7 @@
 
                                                         <td><strong>3 Balance parcial</strong></td>
 
-                                                        <td id="balance-subtotal-3" class="text-right font-bold">$9,330.00</td>
+                                                        <td id="balance-subtotal-3" class="text-right font-bold">$10,000.00</td>
 
                                                         <td class="cell-note">2 Balance parcial - Gastos Indirectos</td>
 
@@ -1496,14 +1496,24 @@
 
                         <div class="admin-subpane" id="admin-subpane-quincenal">
 
-                            <!-- Selector de sub-sección: Cargar Quincenas vs Gastos Indirectos -->
-                            <div class="admin-tabs-segmented" style="display: flex; gap: 12px; margin-bottom: 20px;">
-                                <button type="button" class="btn-segmented active" id="btn-subtab-quincenas" onclick="switchAdminSubSection('quincenas')" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 14px; border: 1.5px solid #2563EB; background: #2563EB; color: #FFFFFF; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 6px rgba(37,99,235,0.25);">
-                                    <span class="material-symbols-outlined" style="font-size: 20px;">payments</span> Cargar Quincenas (Nóminas)
-                                </button>
-                                <button type="button" class="btn-segmented" id="btn-subtab-gastos-ind" onclick="switchAdminSubSection('gastos-indirectos')" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 14px; border: 1.5px solid rgba(15,23,42,0.15); background: #FFFFFF; color: #475569; cursor: pointer; transition: all 0.2s ease;">
-                                    <span class="material-symbols-outlined" style="font-size: 20px;">receipt_long</span> Gastos Indirectos
-                                </button>
+                            <!-- Selector de sub-sección: Cargar Quincenas vs Gastos Indirectos + Botones Editar/Guardar -->
+                            <div class="admin-tabs-segmented" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+                                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                    <button type="button" class="btn-segmented active" id="btn-subtab-quincenas" onclick="switchAdminSubSection('quincenas')" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 14px; border: 1.5px solid #2563EB; background: #2563EB; color: #FFFFFF; cursor: pointer; transition: background 0.2s ease, color 0.2s ease; box-shadow: 0 2px 6px rgba(37,99,235,0.25);">
+                                        <span class="material-symbols-outlined" style="font-size: 20px;">payments</span> Cargar Quincenas (Nóminas)
+                                    </button>
+                                    <button type="button" class="btn-segmented" id="btn-subtab-gastos-ind" onclick="switchAdminSubSection('gastos-indirectos')" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 14px; border: 1.5px solid rgba(15,23,42,0.15); background: #FFFFFF; color: #475569; cursor: pointer; transition: background 0.2s ease, color 0.2s ease;">
+                                        <span class="material-symbols-outlined" style="font-size: 20px;">receipt_long</span> Gastos Indirectos
+                                    </button>
+                                </div>
+                                <div class="admin-quincenal-top-edit-actions" style="display: flex; gap: 10px; align-items: center;">
+                                    <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-admin-top" onclick="handleAdminQuincenalTopEdit()" title="Habilitar edición de la tabla activa">
+                                        <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
+                                    </button>
+                                    <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-admin-top" onclick="handleAdminQuincenalTopSave()" disabled title="Guardar cambios y liberar la tabla para otros usuarios">
+                                        <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
+                                    </button>
+                                </div>
                             </div>
 
                             <!-- SECCIÓN 1: CARGAR QUINCENAS / NÓMINAS -->
@@ -1520,7 +1530,15 @@
 
                                     </div>
 
-                                    <div class="table-actions" style="display: flex; gap: 10px; align-items: center;" id="nomina-action-buttons">
+                                    <div class="table-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;" id="nomina-action-buttons">
+
+                                        <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-nominas" onclick="startEditingNominas()" title="Habilitar edición en Nóminas">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
+                                        </button>
+
+                                        <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-nominas" onclick="saveEditingNominas()" disabled title="Guardar cambios en Nóminas y liberar la tabla para otros usuarios">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
+                                        </button>
 
                                         <button class="btn btn-secondary" onclick="openModalArchivoDigital()" id="btn-archivo-digital">
 
@@ -1534,7 +1552,7 @@
 
                                         </button>
 
-                                        <button class="btn btn-primary" onclick="addNewNominaRow()">
+                                        <button class="btn btn-primary" id="btn-add-nomina-row" onclick="addNewNominaRow()">
 
                                             <span class="material-symbols-outlined">person_add</span> Agregar Empleado / Nómina
 
@@ -1550,7 +1568,15 @@
 
                                 </div>
 
-                                <div class="table-responsive">
+                                <!-- Banner de bloqueo / edición en tiempo real para Nóminas -->
+                                <div id="nominas-lock-banner" class="proveedores-lock-banner" style="display: none;">
+                                    <div class="lock-banner-content">
+                                        <span class="material-symbols-outlined lock-icon">lock</span>
+                                        <span id="nominas-lock-banner-text">Esta tabla está siendo editada por otro usuario — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"</span>
+                                    </div>
+                                </div>
+
+                                <div class="table-responsive" id="nominas-table-container">
 
                                     <table class="admond-table excel-style-table" id="table-nominas">
 
@@ -1599,14 +1625,28 @@
                                             <h3>Gastos Indirectos</h3>
                                             <p>Control, registro y cálculo de gastos indirectos y operativos</p>
                                         </div>
-                                        <div class="table-actions" style="display: flex; gap: 10px; align-items: center;">
-                                            <button type="button" class="btn btn-primary" onclick="addNewGastoIndirectoRow()">
+                                        <div class="table-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;" id="gastos-ind-action-buttons">
+                                            <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-gastos-ind" onclick="startEditingGastosIndirectos()" title="Habilitar edición en Gastos Indirectos">
+                                                <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
+                                            </button>
+                                            <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-gastos-ind" onclick="saveEditingGastosIndirectos()" disabled title="Guardar cambios en Gastos Indirectos y liberar la tabla para otros usuarios">
+                                                <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
+                                            </button>
+                                            <button type="button" class="btn btn-primary" id="btn-add-gasto-indirecto" onclick="addNewGastoIndirectoRow()">
                                                 <span class="material-symbols-outlined">add_circle</span> + Añadir Gasto Indirecto
                                             </button>
                                         </div>
                                     </div>
 
-                                    <div class="table-responsive">
+                                    <!-- Banner de bloqueo / edición en tiempo real para Gastos Indirectos -->
+                                    <div id="gastos-indirectos-lock-banner" class="proveedores-lock-banner" style="display: none;">
+                                        <div class="lock-banner-content">
+                                            <span class="material-symbols-outlined lock-icon">lock</span>
+                                            <span id="gastos-indirectos-lock-banner-text">Esta tabla está siendo editada por otro usuario — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="table-responsive" id="gastos-indirectos-table-container">
                                         <table class="admond-table excel-style-table" id="table-gastos-indirectos">
                                             <thead>
                                                 <tr>

@@ -44,7 +44,7 @@ async function mockNetwork(page, requests = []) {
     if (url.includes("cdn.jsdelivr.net/npm/chart.js")) {
       return route.fulfill({
         contentType: "text/javascript",
-        body: "window.Chart=function(){return {destroy(){},update(){},data:{},options:{}}};window.Chart.register=function(){};",
+        body: "window.Chart=function(ctx,cfg){return {canvas:ctx&&ctx.canvas,destroy(){},update(){},data:(cfg&&cfg.data)||{},options:(cfg&&cfg.options)||{}}};window.Chart.register=function(){};",
       });
     }
     if (url.includes(".supabase.co")) {
@@ -819,3 +819,168 @@ test("13. Visualización: Fórmulas exactas (Bancos + fecha, Ingresos = C + PP, 
   await expect(page.locator("#row-vis-nominas")).toHaveClass(/excel-row-nominas/);
   await expect(page.locator("#row-vis-impuestos")).toHaveClass(/excel-row-impuestos/);
 });
+
+test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info ficticia + menú Categoría armonizado, y botones Editar/Guardar con bloqueo y filtro gris en Nóminas y Gastos Indirectos", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  // 1. Verificar que Gastos Indirectos inicia sin el registro ficticio GI-001 ($670.00) y los colores de la gráfica coinciden con los de la tabla
+  await page.evaluate(() => {
+    window.switchAdminFicha('visualizacion');
+  });
+  await page.waitForTimeout(200);
+
+  const giInitCount = await page.evaluate(() => (window.appState.gastosIndirectos || []).length);
+  expect(giInitCount).toBe(0);
+  await expect(page.locator("#concept-gastos-ind-val")).toHaveText("$0.00");
+
+  const chartColors = await page.evaluate(() => {
+    const chart = window.pieChartInstance;
+    return chart && chart.data ? {
+      labels: chart.data.labels,
+      bg: chart.data.datasets[0].backgroundColor
+    } : null;
+  });
+  expect(chartColors).not.toBeNull();
+  expect(chartColors.labels).toEqual([
+    'Bancos',
+    'Ingresos',
+    'Gastos proveedores',
+    'Gastos Indirectos',
+    'Nominas',
+    'Impuestos'
+  ]);
+  expect(chartColors.bg).toEqual([
+    '#A9D18E', // Bancos (Verde)
+    '#1F4E78', // Ingresos (Azul)
+    '#F8BBD0', // Gastos proveedores (Rosa)
+    '#FFE699', // Gastos Indirectos (Amarillo)
+    '#111827', // Nominas (Negro)
+    '#DC2626'  // Impuestos (Rojo)
+  ]);
+
+  // 2. Ir a Administración -> Nóminas Quincenales y verificar botones Editar y Guardar + filtro gris y mensaje
+  await page.evaluate(() => {
+    window.switchAdminFicha('quincenal');
+    window.switchAdminSubSection('quincenas');
+  });
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("#btn-edit-nominas")).toBeVisible();
+  await expect(page.locator("#btn-save-nominas")).toBeVisible();
+  await expect(page.locator("#btn-save-nominas")).toBeDisabled();
+  await expect(page.locator("#nominas-table-container")).toHaveClass(/tabla-readonly-sin-editar/);
+
+  // Al dar clic en Editar en Nóminas: aparece filtro gris y el mensaje con el nombre de quien edita
+  await page.locator("#btn-edit-nominas").click();
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("#btn-save-nominas")).toBeEnabled();
+  await expect(page.locator("#nominas-lock-banner")).toBeVisible();
+  await expect(page.locator("#nominas-lock-banner")).toContainText("Esta tabla está siendo editada por");
+  await expect(page.locator("#nominas-lock-banner")).toContainText("Los cambios no se guardarán hasta que el usuario dé clic en \"Guardar\"");
+  await expect(page.locator("#nominas-table-container")).toHaveClass(/tabla-filtro-gris-edicion/);
+
+  // Editar un valor en Nóminas: no se guarda en localStorage hasta dar clic en Guardar
+  const prevNominaVal = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_nominas_data') || '[]')[0]?.nomina || 2000);
+  await page.evaluate(() => {
+    window.updateNominaValue(0, 'nomina', 3500);
+  });
+  const storedBeforeSaveNomina = await page.evaluate(() => {
+    const raw = localStorage.getItem('rp_nominas_data');
+    return raw ? JSON.parse(raw)[0]?.nomina : null;
+  });
+  if (storedBeforeSaveNomina !== null) {
+    expect(storedBeforeSaveNomina).toBe(prevNominaVal);
+  }
+
+  // Dar clic en Guardar en Nóminas: guarda cambios y libera bloqueo
+  await page.locator("#btn-save-nominas").click();
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("#btn-save-nominas")).toBeDisabled();
+  await expect(page.locator("#nominas-lock-banner")).toBeHidden();
+  const storedAfterSaveNomina = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_nominas_data'))[0].nomina);
+  expect(storedAfterSaveNomina).toBe(3500);
+
+  // Simular que otro usuario bloquea Nóminas: no deja editar y muestra el filtro gris bloqueado
+  await page.evaluate(() => {
+    window.appState.nominasLockedBy = {
+      isLocked: true,
+      userId: 'other-user-99',
+      userName: 'Carlos Ruiz',
+      timestamp: Date.now()
+    };
+    window.updateNominasEditButtonsUI();
+    window.renderNominas();
+  });
+  await page.waitForTimeout(200);
+  await expect(page.locator("#btn-edit-nominas")).toBeDisabled();
+  await expect(page.locator("#nominas-lock-banner")).toBeVisible();
+  await expect(page.locator("#nominas-lock-banner")).toContainText("Esta tabla está siendo editada por Carlos Ruiz");
+  await expect(page.locator("#nominas-table-container")).toHaveClass(/tabla-bloqueada-editando/);
+
+  // Liberar bloqueo externo de Nóminas
+  await page.evaluate(() => {
+    window.appState.nominasLockedBy = null;
+    window.updateNominasEditButtonsUI();
+    window.renderNominas();
+  });
+
+  // 3. Ir a Gastos Indirectos: verificar que está vacío (sin GI-001 ficticio), habilitar edición con Editar, agregar fila, usar menú armonizado de Categoría y guardar con Guardar
+  await page.evaluate(() => {
+    window.switchAdminSubSection('gastos-indirectos');
+  });
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("#tbody-gastos-indirectos")).not.toContainText("FAC-8821");
+  await expect(page.locator("#tbody-gastos-indirectos")).not.toContainText("Papelería e insumos operativos");
+  await expect(page.locator("#btn-edit-gastos-ind")).toBeVisible();
+  await expect(page.locator("#btn-save-gastos-ind")).toBeDisabled();
+
+  // Dar clic en Editar en Gastos Indirectos
+  await page.locator("#btn-edit-gastos-ind").click();
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("#btn-save-gastos-ind")).toBeEnabled();
+  await expect(page.locator("#gastos-indirectos-lock-banner")).toBeVisible();
+  await expect(page.locator("#gastos-indirectos-lock-banner")).toContainText("Esta tabla está siendo editada por");
+  await expect(page.locator("#gastos-indirectos-table-container")).toHaveClass(/tabla-filtro-gris-edicion/);
+
+  // Agregar un gasto indirecto y abrir el menú desplegable armonizado de Categoría
+  await page.locator("#btn-add-gasto-indirecto").click();
+  await page.waitForTimeout(200);
+
+  const catTrigger = page.locator("#tbody-gastos-indirectos .gi-cat-trigger").first();
+  await expect(catTrigger).toBeVisible();
+  await catTrigger.click();
+  await page.waitForTimeout(150);
+
+  const globalCatMenu = page.locator("#global-gi-categoria-menu");
+  await expect(globalCatMenu).toBeVisible();
+  await globalCatMenu.locator(".gi-cat-option", { hasText: "Combustible" }).click();
+  await page.waitForTimeout(150);
+
+  await expect(catTrigger).toContainText("Combustible");
+
+  // Editar concepto y subtotal: verificar que no se guarda en localStorage hasta dar clic en Guardar
+  await page.evaluate(() => {
+    window.updateGastoIndirectoField(0, 'concepto', 'Carga diésel unidades');
+    window.liveUpdateGastoIndirectoNumber(0, 'subtotal', '1000');
+  });
+  const giStoredBeforeSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_gastos_indirectos') || '[]'));
+  expect(giStoredBeforeSave.length).toBe(0);
+
+  // Dar clic en Guardar en Gastos Indirectos
+  await page.locator("#btn-save-gastos-ind").click();
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("#btn-save-gastos-ind")).toBeDisabled();
+  await expect(page.locator("#gastos-indirectos-lock-banner")).toBeHidden();
+
+  const giStoredAfterSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_gastos_indirectos') || '[]'));
+  expect(giStoredAfterSave.length).toBe(1);
+  expect(giStoredAfterSave[0].categoria).toBe("Combustible");
+  expect(giStoredAfterSave[0].concepto).toBe("Carga diésel unidades");
+  expect(giStoredAfterSave[0].total).toBe(1160);
+});
+

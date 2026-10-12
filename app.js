@@ -93,7 +93,11 @@ let appState = {
     isEditingProveedores: false,
     proveedoresLockedBy: null,
     nominas: [],
+    isEditingNominas: false,
+    nominasLockedBy: null,
     gastosIndirectos: [],
+    isEditingGastosIndirectos: false,
+    gastosIndirectosLockedBy: null,
     adminSubSection: 'quincenas', // 'quincenas' o 'gastos-indirectos'
     archivosQuincenales: [],
     viewingArchiveId: null,
@@ -307,11 +311,37 @@ const runInitialAppSetup = async () => {
     appState.proveedores = Array.isArray(storedProv) ? storedProv : [];
     appState.nominas = JSON.parse(localStorage.getItem('rp_nominas_data')) || defaultNominas;
     appState.archivosQuincenales = JSON.parse(localStorage.getItem('rp_archivos_quincenales')) || [];
+    window.isFictitiousGastoIndirecto = function(g) {
+        if (!g) return true;
+        if (String(g.factura || '').trim().toUpperCase() === 'FAC-8821') return true;
+        if (String(g.concepto || '').trim() === 'Papelería e insumos operativos') return true;
+        if (g.id === 'gi-1' && Number(g.total) === 670) return true;
+        return false;
+    };
     try {
-        appState.gastosIndirectos = JSON.parse(localStorage.getItem('rp_gastos_indirectos')) || [];
+        let rawGI = JSON.parse(localStorage.getItem('rp_gastos_indirectos')) || [];
+        if (Array.isArray(rawGI)) {
+            const cleanGI = rawGI.filter(g => !window.isFictitiousGastoIndirecto(g));
+            if (cleanGI.length !== rawGI.length) {
+                localStorage.setItem('rp_gastos_indirectos', JSON.stringify(cleanGI));
+            }
+            appState.gastosIndirectos = cleanGI;
+        } else {
+            appState.gastosIndirectos = [];
+        }
     } catch(e) {
         appState.gastosIndirectos = [];
     }
+    try {
+        const storedConcepts = JSON.parse(localStorage.getItem('rp_admin_concepts'));
+        if (storedConcepts && typeof storedConcepts === 'object') {
+            appState.concepts = { ...defaultConcepts, ...storedConcepts };
+            if (appState.concepts.gastosInd === 670 && (!appState.gastosIndirectos || appState.gastosIndirectos.length === 0)) {
+                appState.concepts.gastosInd = 0;
+                localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts));
+            }
+        }
+    } catch(e) {}
     appState.viewingArchiveId = null;
     let storedProvNames = [];
     try {
@@ -603,11 +633,13 @@ const runInitialAppSetup = async () => {
         initSchemaEngine();
     }
 
+    window._isBootstrappingApp = true;
     setRole(appState.currentRole);
     switchTab(appState.currentTab);
     if (appState.currentAdminFicha && typeof switchAdminFicha === 'function') {
         switchAdminFicha(appState.currentAdminFicha);
     }
+    window._isBootstrappingApp = false;
 
     renderTasks();
     renderChatMessages(true);
@@ -827,9 +859,16 @@ function setRole(role) {
     }
 
     updateUserSessionUI();
-    renderTasks();
-    renderAdministracion();
-    updateGlobalStats();
+    if (!window._isBootstrappingApp) {
+        if (window._lastRenderedRole !== appState.currentRole) {
+            window._lastRenderedRole = appState.currentRole;
+            renderTasks();
+            renderAdministracion();
+            updateGlobalStats();
+        }
+    } else {
+        window._lastRenderedRole = appState.currentRole;
+    }
 };
 
 function updateUserSessionUI() {
@@ -951,11 +990,11 @@ function switchTab(tabName) {
     if (tabName === 'schema') {
         titleEl.innerText = "Esquematización de Sistema";
         subtitleEl.innerText = "Mapeo jerárquico de proyectos, ramificación por departamentos y trazabilidad de bloqueos";
-        if (typeof renderSchemaView === 'function') renderSchemaView();
+        if (!window._isBootstrappingApp && typeof renderSchemaView === 'function') renderSchemaView();
     } else if (tabName === 'emails') {
         titleEl.innerText = "Centro de Correos";
         subtitleEl.innerText = "Buzón corporativo y mensajería interna sin intermediarios externos";
-        if (typeof renderEmailCenter === 'function') renderEmailCenter();
+        if (!window._isBootstrappingApp && typeof renderEmailCenter === 'function') renderEmailCenter();
     } else if (tabName === 'tasks') {
         titleEl.innerText = "Tablero de Tareas";
         subtitleEl.innerText = "Gestiona y supervisa las tareas del equipo de trabajo";
@@ -963,19 +1002,23 @@ function switchTab(tabName) {
         titleEl.innerText = "Chat Interno";
         subtitleEl.innerText = "Resuelve dudas técnicas o conversa en tiempo real con el equipo";
         document.getElementById("unread-chat-count").style.display = "none";
-        renderChatChannels();
-        renderChatMessages(true);
+        if (!window._isBootstrappingApp) {
+            renderChatChannels();
+            renderChatMessages(true);
+        }
     } else if (tabName === 'meetings') {
         titleEl.innerText = "Calendario de Reuniones";
         subtitleEl.innerText = "Planifica y agenda llamadas de coordinación del equipo";
     } else if (tabName === 'administracion') {
         titleEl.innerText = "Administración General";
         subtitleEl.innerText = "Control financiero, estadísticas por departamento, nóminas quincenales y proveedores";
-        renderAdministracion();
+        if (!window._isBootstrappingApp) {
+            renderAdministracion();
+        }
     } else if (tabName === 'users') {
         titleEl.innerText = "Administración de Usuarios";
         subtitleEl.innerText = "Gestiona perfiles, permisos y alta de colaboradores del sistema";
-        loadProfilesList();
+        if (!window._isBootstrappingApp) loadProfilesList();
     } else if (tabName === 'profile') {
         titleEl.innerText = "Configuración de Perfil";
         subtitleEl.innerText = "Gestiona tu cuenta, datos personales y seguridad";
@@ -1020,8 +1063,18 @@ function switchAdminFicha(fichaName) {
             cancelEditingConsecutivo();
         }
     }
+    if (fichaName !== 'quincenal') {
+        if (appState.isEditingNominas && typeof cancelEditingNominas === 'function') {
+            cancelEditingNominas();
+        }
+        if (appState.isEditingGastosIndirectos && typeof cancelEditingGastosIndirectos === 'function') {
+            cancelEditingGastosIndirectos();
+        }
+    }
 
-    renderAdministracion();
+    if (!window._isBootstrappingApp) {
+        renderAdministracion();
+    }
 };
 
 function renderAdministracion() {
@@ -1033,6 +1086,12 @@ function renderAdministracion() {
     if (appState.currentAdminFicha === 'visualizacion') {
         renderVisualizacion();
     } else if (appState.currentAdminFicha === 'quincenal') {
+        if (typeof window.fetchNominasLockFromCloud === 'function') {
+            window.fetchNominasLockFromCloud();
+        }
+        if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
+            window.fetchGastosIndirectosLockFromCloud();
+        }
         if (typeof window.switchAdminSubSection === 'function') {
             window.switchAdminSubSection(appState.adminSubSection || 'quincenas');
         } else {
@@ -1124,24 +1183,11 @@ function calculateAdminTotals() {
     // 2 Balance parcial = 1 Balance parcial - Gastos proveedores
     const subtotal2 = Math.round((subtotal1 - totalGastosProveedores) * 100) / 100;
 
-    // Gastos Indirectos: resultado del total de los gastos indirectos en Administración
-    if (!appState.gastosIndirectos || !Array.isArray(appState.gastosIndirectos) || appState.gastosIndirectos.length === 0) {
-        if (!appState._giInitializedOnce) {
-            appState._giInitializedOnce = true;
-            appState.gastosIndirectos = [
-                {
-                    id: 'gi-1',
-                    folio: 'GI-001',
-                    fecha: new Date().toISOString().split('T')[0],
-                    concepto: 'Papelería e insumos operativos',
-                    categoria: 'Papelería',
-                    subtotal: 577.59,
-                    iva: 92.41,
-                    total: 670.00,
-                    factura: 'FAC-8821'
-                }
-            ];
-        }
+    // Gastos Indirectos: resultado del total de los gastos indirectos en Administración (sin registros ficticios)
+    if (!appState.gastosIndirectos || !Array.isArray(appState.gastosIndirectos)) {
+        appState.gastosIndirectos = [];
+    } else if (typeof window.isFictitiousGastoIndirecto === 'function') {
+        appState.gastosIndirectos = appState.gastosIndirectos.filter(g => !window.isFictitiousGastoIndirecto(g));
     }
     let gastosInd = 0;
     if (Array.isArray(appState.gastosIndirectos)) {
@@ -1278,41 +1324,71 @@ function updateAdminConcept(key, value) {
 function renderPieChart(totals) {
     const canvas = document.getElementById("admin-pie-chart");
     if (!canvas) return;
-    
-    // Destroy previous chart if exists
-    if (pieChartInstance) {
-        pieChartInstance.destroy();
-    }
-    
-    const dataValues = [
-        Math.max(totals.bancos, 0),
-        totals.totalNominas,
-        Math.max(totals.totalGastosProveedores, 100),
-        totals.gastosInd,
-        totals.impuestos
+
+    // Los colores y conceptos coinciden exactamente con las filas de la tabla Balance y Capital por Departamento:
+    // Bancos (Verde), Ingresos (Azul), Gastos proveedores (Rosa), Gastos Indirectos (Amarillo), Nominas (Negro), Impuestos (Rojo)
+    const chartLabels = ['Bancos', 'Ingresos', 'Gastos proveedores', 'Gastos Indirectos', 'Nominas', 'Impuestos'];
+    const rawValues = [
+        Math.max(Number(totals.bancos) || 0, 0),
+        Math.max(Number(totals.ingresos) || 0, 0),
+        Math.max(Number(totals.totalGastosProveedores) || 0, 0),
+        Math.max(Number(totals.gastosInd) || 0, 0),
+        Math.max(Number(totals.totalNominas) || 0, 0),
+        Math.max(Number(totals.impuestos) || 0, 0)
     ];
-    
+    const sumValues = rawValues.reduce((acc, v) => acc + v, 0);
+    const dataValues = sumValues > 0 ? rawValues : [1, 1, 1, 1, 1, 1];
+
+    const bgColors = [
+        '#A9D18E', // Bancos -> Verde
+        '#1F4E78', // Ingresos -> Azul
+        '#F8BBD0', // Gastos proveedores -> Rosa
+        '#FFE699', // Gastos Indirectos -> Amarillo
+        '#111827', // Nominas -> Negro
+        '#DC2626'  // Impuestos -> Rojo
+    ];
+    const borderColors = [
+        '#4CAF50',
+        '#0070C0',
+        '#EC407A',
+        '#F59E0B',
+        '#000000',
+        '#991B1B'
+    ];
+
+    window._latestPieRawValues = rawValues;
+
+    // Si la instancia ya existe sobre el mismo canvas, actualizar en sitio sin animación para evitar saltos visuales
+    if (pieChartInstance && pieChartInstance.canvas === canvas) {
+        pieChartInstance.data.labels = chartLabels;
+        pieChartInstance.data.datasets[0].data = dataValues;
+        pieChartInstance.data.datasets[0].backgroundColor = bgColors;
+        pieChartInstance.data.datasets[0].borderColor = borderColors;
+        pieChartInstance.update('none');
+        window.pieChartInstance = pieChartInstance;
+        return;
+    }
+
+    if (pieChartInstance) {
+        try { pieChartInstance.destroy(); } catch (e) {}
+    }
+
     const ctx = canvas.getContext('2d');
     pieChartInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['Bancos / Capital', 'Nóminas (Equipo)', 'Gastos Proveedores', 'Gastos Indirectos', 'Impuestos'],
+            labels: chartLabels,
             datasets: [{
                 data: dataValues,
-                backgroundColor: [
-                    '#4caf50', // Green
-                    '#e53935', // Red
-                    '#f58f1f', // Tangerine
-                    '#d5b370', // Gold
-                    '#829191'  // Grey
-                ],
-                borderWidth: 2,
-                borderColor: '#ffffff'
+                backgroundColor: bgColors,
+                borderColor: borderColors,
+                borderWidth: 2
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false,
             plugins: {
                 legend: {
                     position: 'bottom',
@@ -1330,7 +1406,8 @@ function renderPieChart(totals) {
                     callbacks: {
                         label: function(context) {
                             let label = context.label || '';
-                            let value = context.raw || 0;
+                            const rawArr = window._latestPieRawValues || rawValues;
+                            let value = rawArr[context.dataIndex] !== undefined ? rawArr[context.dataIndex] : (context.raw || 0);
                             return `${label}: ${formatCurrency(value)}`;
                         }
                     }
@@ -1339,16 +1416,338 @@ function renderPieChart(totals) {
             cutout: '58%'
         }
     });
+    window.pieChartInstance = pieChartInstance;
 }
 
 // ---------------------------------------------------------------------------------
-// 5. FICHA 2: ADMINISTRACIÓN QUINCENAL (NÓMINAS - IMAGEN 3)
+// 5. FICHA 2: ADMINISTRACIÓN QUINCENAL (NÓMINAS Y GASTOS INDIRECTOS - IMAGEN 4)
 // ---------------------------------------------------------------------------------
+function handleAdminQuincenalTopEdit() {
+    window.handleAdminQuincenalTopEdit = handleAdminQuincenalTopEdit;
+    if (appState.adminSubSection === 'gastos-indirectos') {
+        startEditingGastosIndirectos();
+    } else {
+        startEditingNominas();
+    }
+}
+window.handleAdminQuincenalTopEdit = handleAdminQuincenalTopEdit;
+
+function handleAdminQuincenalTopSave() {
+    window.handleAdminQuincenalTopSave = handleAdminQuincenalTopSave;
+    if (appState.adminSubSection === 'gastos-indirectos') {
+        saveEditingGastosIndirectos();
+    } else {
+        saveEditingNominas();
+    }
+}
+window.handleAdminQuincenalTopSave = handleAdminQuincenalTopSave;
+
+let _editNominasTimeout = null;
+
+async function startEditingNominas() {
+    window.startEditingNominas = startEditingNominas;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
+    if (appState.nominasLockedBy && appState.nominasLockedBy.userId !== currentUserId) {
+        const elapsed = Date.now() - (appState.nominasLockedBy.timestamp || 0);
+        if (elapsed < 5 * 60 * 1000) {
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.nominasLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    }
+
+    // Respaldar estado previo a la edición para que los cambios NO se guarden hasta dar clic en 'Guardar'
+    appState._nominasSnapshot = JSON.parse(JSON.stringify(appState.nominas || []));
+    appState._archivosQuincenalesSnapshot = JSON.parse(JSON.stringify(appState.archivosQuincenales || []));
+
+    appState.isEditingNominas = true;
+    appState.nominasLockedBy = {
+        userId: currentUserId,
+        userName: currentUserName,
+        timestamp: Date.now()
+    };
+
+    updateNominasEditButtonsUI();
+    renderNominas();
+
+    broadcastNominasLockState(true, currentUserName, currentUserId);
+    await syncNominasLockToCloud(true, currentUserName, currentUserId);
+
+    if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
+    _editNominasTimeout = setTimeout(() => {
+        if (appState.isEditingNominas) {
+            cancelEditingNominas();
+        }
+    }, 5 * 60 * 1000);
+}
+window.startEditingNominas = startEditingNominas;
+
+async function saveEditingNominas(isAuto = false) {
+    window.saveEditingNominas = saveEditingNominas;
+    if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
+
+    window._lastLocalNominasSyncTime = Date.now();
+
+    appState.isEditingNominas = false;
+    appState.nominasLockedBy = null;
+    appState._nominasSnapshot = null;
+    appState._archivosQuincenalesSnapshot = null;
+
+    saveToStorage();
+    try {
+        localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas || []));
+    } catch (e) {}
+
+    updateNominasEditButtonsUI();
+    renderNominas();
+    renderVisualizacion();
+
+    if (typeof broadcastNominasUpdate === 'function') {
+        broadcastNominasUpdate();
+    }
+    if (typeof syncNominasToCloud === 'function') {
+        syncNominasToCloud(true);
+    }
+
+    broadcastNominasLockState(false, null, null);
+    await syncNominasLockToCloud(false, null, null);
+
+    if (!isAuto && typeof showCustomNotification === 'function') {
+        showCustomNotification("Cambios de Nóminas guardados y tabla liberada con éxito.", "success");
+    }
+}
+window.saveEditingNominas = saveEditingNominas;
+
+async function cancelEditingNominas() {
+    window.cancelEditingNominas = cancelEditingNominas;
+    if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
+
+    appState.isEditingNominas = false;
+    appState.nominasLockedBy = null;
+
+    if (appState._nominasSnapshot) {
+        appState.nominas = JSON.parse(JSON.stringify(appState._nominasSnapshot));
+        appState._nominasSnapshot = null;
+    }
+    if (appState._archivosQuincenalesSnapshot) {
+        appState.archivosQuincenales = JSON.parse(JSON.stringify(appState._archivosQuincenalesSnapshot));
+        appState._archivosQuincenalesSnapshot = null;
+    }
+
+    updateNominasEditButtonsUI();
+    renderNominas();
+    renderVisualizacion();
+
+    broadcastNominasLockState(false, null, null);
+    await syncNominasLockToCloud(false, null, null);
+}
+window.cancelEditingNominas = cancelEditingNominas;
+
+function updateNominasEditButtonsUI() {
+    window.updateNominasEditButtonsUI = updateNominasEditButtonsUI;
+    const btnEdit = document.getElementById("btn-edit-nominas");
+    const btnSave = document.getElementById("btn-save-nominas");
+    const btnTopEdit = document.getElementById("btn-edit-admin-top");
+    const btnTopSave = document.getElementById("btn-save-admin-top");
+    const btnAddRow = document.getElementById("btn-add-nomina-row");
+    const banner = document.getElementById("nominas-lock-banner");
+    const bannerText = document.getElementById("nominas-lock-banner-text");
+    const tableContainer = document.getElementById("nominas-table-container");
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+    const isLockedByOther = Boolean(appState.nominasLockedBy && appState.nominasLockedBy.userId !== currentUserId);
+    const isQuincenasSubtab = (appState.adminSubSection || 'quincenas') === 'quincenas';
+
+    const applyBtnState = (editEl, saveEl) => {
+        if (isLockedByOther) {
+            if (editEl) {
+                editEl.disabled = true;
+                editEl.classList.remove("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
+                editEl.style.cursor = "not-allowed";
+                editEl.style.opacity = "0.5";
+                editEl.title = `Esta tabla está siendo editada por ${appState.nominasLockedBy.userName}`;
+            }
+            if (saveEl) {
+                saveEl.disabled = true;
+                saveEl.style.cursor = "not-allowed";
+                saveEl.style.opacity = "0.45";
+            }
+        } else if (appState.isEditingNominas) {
+            if (editEl) {
+                editEl.disabled = true;
+                editEl.classList.add("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editando...`;
+                editEl.style.cursor = "default";
+                editEl.style.opacity = "1";
+                editEl.title = "Modo de edición activo";
+            }
+            if (saveEl) {
+                saveEl.disabled = false;
+                saveEl.style.cursor = "pointer";
+                saveEl.style.opacity = "1";
+                saveEl.title = "Guardar cambios y permitir edición a otros usuarios";
+            }
+        } else {
+            if (editEl) {
+                editEl.disabled = false;
+                editEl.classList.remove("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar`;
+                editEl.style.cursor = "pointer";
+                editEl.style.opacity = "1";
+                editEl.title = "Habilitar edición en Nóminas";
+            }
+            if (saveEl) {
+                saveEl.disabled = true;
+                saveEl.style.cursor = "not-allowed";
+                saveEl.style.opacity = "0.45";
+                saveEl.title = "Haz clic en 'Editar' para comenzar";
+            }
+        }
+    };
+
+    applyBtnState(btnEdit, btnSave);
+    if (isQuincenasSubtab) {
+        applyBtnState(btnTopEdit, btnTopSave);
+    }
+
+    if (btnAddRow) {
+        btnAddRow.disabled = !appState.isEditingNominas || isLockedByOther;
+        btnAddRow.style.opacity = (!appState.isEditingNominas || isLockedByOther) ? "0.55" : "1";
+        btnAddRow.style.cursor = (!appState.isEditingNominas || isLockedByOther) ? "not-allowed" : "pointer";
+    }
+
+    if (isLockedByOther) {
+        const editorName = appState.nominasLockedBy?.userName || 'otro usuario';
+        if (tableContainer) {
+            tableContainer.classList.add("tabla-bloqueada-editando");
+            tableContainer.classList.remove("tabla-filtro-gris-edicion", "tabla-readonly-sin-editar");
+        }
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) {
+                bannerText.innerText = `Esta tabla está siendo editada por ${editorName} — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"`;
+            }
+        }
+    } else if (appState.isEditingNominas) {
+        const editorName = appState.nominasLockedBy?.userName || currentUserName;
+        if (tableContainer) {
+            tableContainer.classList.remove("tabla-bloqueada-editando", "tabla-readonly-sin-editar");
+            tableContainer.classList.add("tabla-filtro-gris-edicion");
+        }
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) {
+                bannerText.innerText = `Esta tabla está siendo editada por ${editorName} — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"`;
+            }
+        }
+    } else {
+        if (tableContainer) {
+            tableContainer.classList.remove("tabla-bloqueada-editando", "tabla-filtro-gris-edicion");
+            tableContainer.classList.add("tabla-readonly-sin-editar");
+        }
+        if (banner) banner.style.display = "none";
+    }
+}
+window.updateNominasEditButtonsUI = updateNominasEditButtonsUI;
+
+function broadcastNominasLockState(isLocked, userName, userId) {
+    window.broadcastNominasLockState = broadcastNominasLockState;
+    if (!window.chatRealtimeChannel) return;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'nominas_lock_update',
+            payload: {
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting nominas lock state:", e);
+    }
+}
+window.broadcastNominasLockState = broadcastNominasLockState;
+
+async function syncNominasLockToCloud(isLocked, userName, userId) {
+    window.syncNominasLockToCloud = syncNominasLockToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_nominas_lock__',
+            contenido: JSON.stringify({
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (e) {
+        console.warn("⚠️ Error persisting nominas lock to cloud:", e);
+    }
+}
+window.syncNominasLockToCloud = syncNominasLockToCloud;
+
+async function fetchNominasLockFromCloud() {
+    window.fetchNominasLockFromCloud = fetchNominasLockFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_nominas_lock__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                if (parsed.isLocked) {
+                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                    if (elapsed < 5 * 60 * 1000) {
+                        if (parsed.userId !== currentUserId) {
+                            appState.nominasLockedBy = parsed;
+                        }
+                    } else {
+                        appState.nominasLockedBy = null;
+                    }
+                } else {
+                    if (!appState.isEditingNominas) {
+                        appState.nominasLockedBy = null;
+                    }
+                }
+                updateNominasEditButtonsUI();
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching nominas lock from cloud:", e);
+    }
+}
+window.fetchNominasLockFromCloud = fetchNominasLockFromCloud;
+
 function renderNominas() {
     const tbody = document.getElementById("tbody-nominas");
     if (!tbody) return;
-    tbody.innerHTML = "";
-    
+
+    const mainContent = document.querySelector(".main-content");
+    const prevMainScroll = mainContent ? mainContent.scrollTop : 0;
+    const tableWrap = tbody.closest(".table-responsive");
+    const prevWrapScroll = tableWrap ? tableWrap.scrollTop : 0;
+
+    const isEditable = Boolean(appState.isEditingNominas);
+    const disabledAttr = isEditable ? "" : "disabled";
+
+    const frag = document.createDocumentFragment();
     const list = window.getActiveNominasList();
     
     list.forEach((item, index) => {
@@ -1388,39 +1787,39 @@ function renderNominas() {
 
         const tr = document.createElement("tr");
         tr.setAttribute("data-row-key", `nom_${index}`);
-        tr.setAttribute("oncontextmenu", `if(confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
-        tr.title = "Clic derecho para eliminar fila";
+        tr.setAttribute("oncontextmenu", `if(appState.isEditingNominas && confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
+        tr.title = isEditable ? "Clic derecho para eliminar fila" : "Haz clic en 'Editar' para modificar esta tabla";
         tr.innerHTML = `
             <td>
-                <input type="text" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" style="text-align: center; font-weight: 700;">
+                <input type="text" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
             </td>
             <td>
-                <input type="text" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" placeholder="Empleado..." style="font-weight: 700;">
+                <input type="text" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" placeholder="Empleado..." ${disabledAttr} style="font-weight: 700;">
             </td>
             <td>
-                <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)">
+                <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)" ${disabledAttr}>
             </td>
             <td>
                 <div class="excel-currency-wrap">
                     <span class="currency-symbol">$</span>
-                    <input type="number" id="nom-nomina-input-${index}" class="excel-input number-input" value="${nominaVal || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0.00" style="font-weight: 700;">
+                    <input type="number" id="nom-nomina-input-${index}" class="excel-input number-input" value="${nominaVal || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 700;">
                 </div>
             </td>
             <td>
                 <div class="excel-percent-wrap">
-                    <input type="number" id="nom-iva-input-${index}" class="excel-input number-input" value="${ivaPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0">
+                    <input type="number" id="nom-iva-input-${index}" class="excel-input number-input" value="${ivaPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
                 </div>
             </td>
             <td>
                 <div class="excel-percent-wrap">
-                    <input type="number" id="nom-ret4-input-${index}" class="excel-input number-input" value="${retPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0">
+                    <input type="number" id="nom-ret4-input-${index}" class="excel-input number-input" value="${retPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
                 </div>
             </td>
             <td>
                 <div class="excel-percent-wrap">
-                    <input type="number" id="nom-retisr-input-${index}" class="excel-input number-input" value="${retIsrPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0">
+                    <input type="number" id="nom-retisr-input-${index}" class="excel-input number-input" value="${retIsrPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
                 </div>
             </td>
@@ -1431,16 +1830,22 @@ function renderNominas() {
                 </div>
             </td>
         `;
-        tbody.appendChild(tr);
+        frag.appendChild(tr);
     });
     
     // Bottom Green Summary Row (Imagen 3 style)
     const summaryTr = document.createElement("tr");
     summaryTr.className = "excel-green-row";
     summaryTr.id = "excel-nominas-totals-row";
-    tbody.appendChild(summaryTr);
+    frag.appendChild(summaryTr);
+
+    tbody.replaceChildren(frag);
     
     recalculateNominasTableTotals();
+    updateNominasEditButtonsUI();
+
+    if (tableWrap) tableWrap.scrollTop = prevWrapScroll;
+    if (mainContent) mainContent.scrollTop = prevMainScroll;
 }
 
 function handlePInputChange(inputEl, index, type) {
@@ -1458,43 +1863,43 @@ function handlePInputChange(inputEl, index, type) {
         const list = window.getActiveNominasList();
         if (list[index]) {
             list[index].p = val;
-            saveToStorage();
+            if (!appState.isEditingNominas) saveToStorage();
         }
     } else if (type === 'proveedor') {
         if (appState.proveedores[index]) {
             appState.proveedores[index].p = val;
-            saveToStorage();
+            if (!appState.isEditingProveedores) saveToStorage();
         }
     }
 };
 
 function updateNominaCell(index, key, val) {
     window.updateNominaCell = updateNominaCell;
+    if (!appState.isEditingNominas) return;
     const list = window.getActiveNominasList();
     if (list[index]) {
         list[index][key] = val;
         if (key === 'nomina') {
             list[index].servicio = val;
         }
-        saveToStorage();
-        if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
+        // No guardar en localStorage ni nube hasta dar clic en "Guardar"
     }
 };
 
 function updateNominaManualTotal(index, val) {
     window.updateNominaManualTotal = updateNominaManualTotal;
+    if (!appState.isEditingNominas) return;
     const list = window.getActiveNominasList();
     if (list[index]) {
         list[index].total = Number(val) || 0;
         recalculateNominasTableTotals();
-        saveToStorage();
         renderVisualizacion();
-        if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
     }
 };
 
 function liveUpdateNominaTotals(index) {
     window.liveUpdateNominaTotals = liveUpdateNominaTotals;
+    if (!appState.isEditingNominas) return;
     const list = window.getActiveNominasList();
     if (!list || !list[index]) return;
 
@@ -1535,9 +1940,7 @@ function liveUpdateNominaTotals(index) {
     list[index].total = calculatedTotal;
     
     recalculateNominasTableTotals();
-    saveToStorage();
     renderVisualizacion();
-    if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
 };
 
 function recalculateNominasTableTotals() {
@@ -1585,6 +1988,12 @@ function recalculateNominasTableTotals() {
 
 function addNewNominaRow() {
     window.addNewNominaRow = addNewNominaRow;
+    if (!appState.isEditingNominas) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para agregar o modificar registros de Nómina.", "info");
+        }
+        return;
+    }
     const nextNum = window.getActiveNominasList().length + 1;
     window.getActiveNominasList().push({
         folio: String(nextNum),
@@ -1601,20 +2010,22 @@ function addNewNominaRow() {
         retIsr: 0,
         total: 0
     });
-    saveToStorage();
     renderNominas();
     renderVisualizacion();
-    if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
 };
 
 function deleteNominaRecord(index) {
     window.deleteNominaRecord = deleteNominaRecord;
+    if (!appState.isEditingNominas) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para eliminar registros de Nómina.", "info");
+        }
+        return;
+    }
     if (confirm("¿Estás seguro de que deseas eliminar este registro de nómina?")) {
         window.getActiveNominasList().splice(index, 1);
-        saveToStorage();
         renderNominas();
         renderVisualizacion();
-        if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
     }
 };
 
@@ -1677,12 +2088,14 @@ window.broadcastNominasUpdate = broadcastNominasUpdate;
 
 async function fetchNominasFromCloud() {
     window.fetchNominasFromCloud = fetchNominasFromCloud;
+    if (appState.isEditingNominas) return;
+    if (Date.now() - (window._lastLocalNominasSyncTime || 0) < 5000) return;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
     try {
-        const { data: msgs, error } = await client.from('messages')
+        const { data: msgs } = await client.from('messages')
             .select('contenido, created_at')
             .eq('chat_id', '__cloud_sync_nominas__')
             .order('created_at', { ascending: false })
@@ -1692,14 +2105,19 @@ async function fetchNominasFromCloud() {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
                 if (parsed && Array.isArray(parsed.nominas)) {
+                    const prevJson = JSON.stringify(appState.nominas || []);
+                    const nextJson = JSON.stringify(parsed.nominas);
+                    const changed = prevJson !== nextJson;
                     appState.nominas = parsed.nominas;
                     if (Array.isArray(parsed.archivosQuincenales)) {
                         appState.archivosQuincenales = parsed.archivosQuincenales;
                     }
-                    saveToStorage();
-                    if (appState.currentTab === 'admin') {
-                        renderNominas();
-                        renderVisualizacion();
+                    if (changed) {
+                        saveToStorage();
+                        if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
+                            renderNominas();
+                            renderVisualizacion();
+                        }
                     }
                 }
             } catch (e) {}
@@ -1711,8 +2129,290 @@ async function fetchNominasFromCloud() {
 window.fetchNominasFromCloud = fetchNominasFromCloud;
 
 // ---------------------------------------------------------------------------------
-// 5b. SUB-SECCIÓN: GASTOS INDIRECTOS (IMAGEN 4)
+// 5b. SUB-SECCIÓN: GASTOS INDIRECTOS (IMAGEN 2 Y 4)
 // ---------------------------------------------------------------------------------
+let _editGastosIndirectosTimeout = null;
+
+async function startEditingGastosIndirectos() {
+    window.startEditingGastosIndirectos = startEditingGastosIndirectos;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
+    if (appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId) {
+        const elapsed = Date.now() - (appState.gastosIndirectosLockedBy.timestamp || 0);
+        if (elapsed < 5 * 60 * 1000) {
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.gastosIndirectosLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    }
+
+    appState._gastosIndirectosSnapshot = JSON.parse(JSON.stringify(appState.gastosIndirectos || []));
+
+    appState.isEditingGastosIndirectos = true;
+    appState.gastosIndirectosLockedBy = {
+        userId: currentUserId,
+        userName: currentUserName,
+        timestamp: Date.now()
+    };
+
+    updateGastosIndirectosEditButtonsUI();
+    renderGastosIndirectos();
+
+    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId);
+    await syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId);
+
+    if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
+    _editGastosIndirectosTimeout = setTimeout(() => {
+        if (appState.isEditingGastosIndirectos) {
+            cancelEditingGastosIndirectos();
+        }
+    }, 5 * 60 * 1000);
+}
+window.startEditingGastosIndirectos = startEditingGastosIndirectos;
+
+async function saveEditingGastosIndirectos(isAuto = false) {
+    window.saveEditingGastosIndirectos = saveEditingGastosIndirectos;
+    if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
+
+    window._lastLocalGastosIndSyncTime = Date.now();
+
+    appState.isEditingGastosIndirectos = false;
+    appState.gastosIndirectosLockedBy = null;
+    appState._gastosIndirectosSnapshot = null;
+
+    saveToStorage();
+    try {
+        localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos || []));
+    } catch (e) {}
+
+    updateGastosIndirectosEditButtonsUI();
+    renderGastosIndirectos();
+    renderVisualizacion();
+
+    broadcastGastosIndirectosUpdate();
+    syncGastosIndirectosToCloud(true);
+
+    broadcastGastosIndirectosLockState(false, null, null);
+    await syncGastosIndirectosLockToCloud(false, null, null);
+
+    if (!isAuto && typeof showCustomNotification === 'function') {
+        showCustomNotification("Cambios de Gastos Indirectos guardados y tabla liberada con éxito.", "success");
+    }
+}
+window.saveEditingGastosIndirectos = saveEditingGastosIndirectos;
+
+async function cancelEditingGastosIndirectos() {
+    window.cancelEditingGastosIndirectos = cancelEditingGastosIndirectos;
+    if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
+
+    appState.isEditingGastosIndirectos = false;
+    appState.gastosIndirectosLockedBy = null;
+
+    if (appState._gastosIndirectosSnapshot) {
+        appState.gastosIndirectos = JSON.parse(JSON.stringify(appState._gastosIndirectosSnapshot));
+        appState._gastosIndirectosSnapshot = null;
+    }
+
+    updateGastosIndirectosEditButtonsUI();
+    renderGastosIndirectos();
+    renderVisualizacion();
+
+    broadcastGastosIndirectosLockState(false, null, null);
+    await syncGastosIndirectosLockToCloud(false, null, null);
+}
+window.cancelEditingGastosIndirectos = cancelEditingGastosIndirectos;
+
+function updateGastosIndirectosEditButtonsUI() {
+    window.updateGastosIndirectosEditButtonsUI = updateGastosIndirectosEditButtonsUI;
+    const btnEdit = document.getElementById("btn-edit-gastos-ind");
+    const btnSave = document.getElementById("btn-save-gastos-ind");
+    const btnTopEdit = document.getElementById("btn-edit-admin-top");
+    const btnTopSave = document.getElementById("btn-save-admin-top");
+    const btnAddRow = document.getElementById("btn-add-gasto-indirecto");
+    const banner = document.getElementById("gastos-indirectos-lock-banner");
+    const bannerText = document.getElementById("gastos-indirectos-lock-banner-text");
+    const tableContainer = document.getElementById("gastos-indirectos-table-container");
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+    const isLockedByOther = Boolean(appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId);
+    const isGastosIndSubtab = appState.adminSubSection === 'gastos-indirectos';
+
+    const applyBtnState = (editEl, saveEl) => {
+        if (isLockedByOther) {
+            if (editEl) {
+                editEl.disabled = true;
+                editEl.classList.remove("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
+                editEl.style.cursor = "not-allowed";
+                editEl.style.opacity = "0.5";
+                editEl.title = `Esta tabla está siendo editada por ${appState.gastosIndirectosLockedBy.userName}`;
+            }
+            if (saveEl) {
+                saveEl.disabled = true;
+                saveEl.style.cursor = "not-allowed";
+                saveEl.style.opacity = "0.45";
+            }
+        } else if (appState.isEditingGastosIndirectos) {
+            if (editEl) {
+                editEl.disabled = true;
+                editEl.classList.add("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editando...`;
+                editEl.style.cursor = "default";
+                editEl.style.opacity = "1";
+                editEl.title = "Modo de edición activo";
+            }
+            if (saveEl) {
+                saveEl.disabled = false;
+                saveEl.style.cursor = "pointer";
+                saveEl.style.opacity = "1";
+                saveEl.title = "Guardar cambios y permitir edición a otros usuarios";
+            }
+        } else {
+            if (editEl) {
+                editEl.disabled = false;
+                editEl.classList.remove("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar`;
+                editEl.style.cursor = "pointer";
+                editEl.style.opacity = "1";
+                editEl.title = "Habilitar edición en Gastos Indirectos";
+            }
+            if (saveEl) {
+                saveEl.disabled = true;
+                saveEl.style.cursor = "not-allowed";
+                saveEl.style.opacity = "0.45";
+                saveEl.title = "Haz clic en 'Editar' para comenzar";
+            }
+        }
+    };
+
+    applyBtnState(btnEdit, btnSave);
+    if (isGastosIndSubtab) {
+        applyBtnState(btnTopEdit, btnTopSave);
+    }
+
+    if (btnAddRow) {
+        btnAddRow.disabled = !appState.isEditingGastosIndirectos || isLockedByOther;
+        btnAddRow.style.opacity = (!appState.isEditingGastosIndirectos || isLockedByOther) ? "0.55" : "1";
+        btnAddRow.style.cursor = (!appState.isEditingGastosIndirectos || isLockedByOther) ? "not-allowed" : "pointer";
+    }
+
+    if (isLockedByOther) {
+        const editorName = appState.gastosIndirectosLockedBy?.userName || 'otro usuario';
+        if (tableContainer) {
+            tableContainer.classList.add("tabla-bloqueada-editando");
+            tableContainer.classList.remove("tabla-filtro-gris-edicion", "tabla-readonly-sin-editar");
+        }
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) {
+                bannerText.innerText = `Esta tabla está siendo editada por ${editorName} — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"`;
+            }
+        }
+    } else if (appState.isEditingGastosIndirectos) {
+        const editorName = appState.gastosIndirectosLockedBy?.userName || currentUserName;
+        if (tableContainer) {
+            tableContainer.classList.remove("tabla-bloqueada-editando", "tabla-readonly-sin-editar");
+            tableContainer.classList.add("tabla-filtro-gris-edicion");
+        }
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) {
+                bannerText.innerText = `Esta tabla está siendo editada por ${editorName} — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"`;
+            }
+        }
+    } else {
+        if (tableContainer) {
+            tableContainer.classList.remove("tabla-bloqueada-editando", "tabla-filtro-gris-edicion");
+            tableContainer.classList.add("tabla-readonly-sin-editar");
+        }
+        if (banner) banner.style.display = "none";
+    }
+}
+window.updateGastosIndirectosEditButtonsUI = updateGastosIndirectosEditButtonsUI;
+
+function broadcastGastosIndirectosLockState(isLocked, userName, userId) {
+    window.broadcastGastosIndirectosLockState = broadcastGastosIndirectosLockState;
+    if (!window.chatRealtimeChannel) return;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'gastos_indirectos_lock_update',
+            payload: {
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting gastos indirectos lock state:", e);
+    }
+}
+window.broadcastGastosIndirectosLockState = broadcastGastosIndirectosLockState;
+
+async function syncGastosIndirectosLockToCloud(isLocked, userName, userId) {
+    window.syncGastosIndirectosLockToCloud = syncGastosIndirectosLockToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_gastos_indirectos_lock__',
+            contenido: JSON.stringify({
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (e) {
+        console.warn("⚠️ Error persisting gastos indirectos lock to cloud:", e);
+    }
+}
+window.syncGastosIndirectosLockToCloud = syncGastosIndirectosLockToCloud;
+
+async function fetchGastosIndirectosLockFromCloud() {
+    window.fetchGastosIndirectosLockFromCloud = fetchGastosIndirectosLockFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_gastos_indirectos_lock__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                if (parsed.isLocked) {
+                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                    if (elapsed < 5 * 60 * 1000) {
+                        if (parsed.userId !== currentUserId) {
+                            appState.gastosIndirectosLockedBy = parsed;
+                        }
+                    } else {
+                        appState.gastosIndirectosLockedBy = null;
+                    }
+                } else {
+                    if (!appState.isEditingGastosIndirectos) {
+                        appState.gastosIndirectosLockedBy = null;
+                    }
+                }
+                updateGastosIndirectosEditButtonsUI();
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching gastos indirectos lock from cloud:", e);
+    }
+}
+window.fetchGastosIndirectosLockFromCloud = fetchGastosIndirectosLockFromCloud;
+
 let _syncGastosIndirectosTimer = null;
 function syncGastosIndirectosToCloud(forceImmediate = false) {
     window.syncGastosIndirectosToCloud = syncGastosIndirectosToCloud;
@@ -1722,7 +2422,7 @@ function syncGastosIndirectosToCloud(forceImmediate = false) {
 
     const doSync = async () => {
         try {
-            const list = appState.gastosIndirectos || [];
+            const list = (appState.gastosIndirectos || []).filter(g => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(g));
             await client.from('messages').insert({
                 chat_id: '__cloud_sync_gastos_indirectos__',
                 contenido: JSON.stringify(list),
@@ -1776,12 +2476,14 @@ window.debouncedBroadcastGastosIndirectos = debouncedBroadcastGastosIndirectos;
 
 async function fetchGastosIndirectosFromCloud() {
     window.fetchGastosIndirectosFromCloud = fetchGastosIndirectosFromCloud;
+    if (appState.isEditingGastosIndirectos) return;
+    if (Date.now() - (window._lastLocalGastosIndSyncTime || 0) < 5000) return;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
     try {
-        const { data: msgs, error } = await client.from('messages')
+        const { data: msgs } = await client.from('messages')
             .select('contenido, created_at')
             .eq('chat_id', '__cloud_sync_gastos_indirectos__')
             .order('created_at', { ascending: false })
@@ -1790,13 +2492,18 @@ async function fetchGastosIndirectosFromCloud() {
         if (msgs && msgs.length > 0 && msgs[0].contenido) {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    appState.gastosIndirectos = parsed;
-                    saveToStorage();
-                    if (appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
-                        renderGastosIndirectos();
+                if (Array.isArray(parsed)) {
+                    const cleanParsed = parsed.filter(g => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(g));
+                    const prevJson = JSON.stringify(appState.gastosIndirectos || []);
+                    const nextJson = JSON.stringify(cleanParsed);
+                    if (prevJson !== nextJson) {
+                        appState.gastosIndirectos = cleanParsed;
+                        saveToStorage();
+                        if (appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
+                            renderGastosIndirectos();
+                        }
+                        recalculateGastosIndirectosTotals();
                     }
-                    recalculateGastosIndirectosTotals();
                 }
             } catch (e) {}
         }
@@ -1808,6 +2515,15 @@ window.fetchGastosIndirectosFromCloud = fetchGastosIndirectosFromCloud;
 
 function switchAdminSubSection(subSec) {
     window.switchAdminSubSection = switchAdminSubSection;
+    const prevSub = appState.adminSubSection || 'quincenas';
+    if (prevSub !== subSec) {
+        if (prevSub === 'quincenas' && appState.isEditingNominas && typeof cancelEditingNominas === 'function') {
+            cancelEditingNominas();
+        }
+        if (prevSub === 'gastos-indirectos' && appState.isEditingGastosIndirectos && typeof cancelEditingGastosIndirectos === 'function') {
+            cancelEditingGastosIndirectos();
+        }
+    }
     appState.adminSubSection = subSec || 'quincenas';
     const btnQuincenas = document.getElementById('btn-subtab-quincenas');
     const btnGastosInd = document.getElementById('btn-subtab-gastos-ind');
@@ -1833,6 +2549,7 @@ function switchAdminSubSection(subSec) {
             btnGastosInd.style.boxShadow = '0 2px 6px rgba(37,99,235,0.25)';
         }
         renderGastosIndirectos();
+        updateGastosIndirectosEditButtonsUI();
     } else {
         if (secQuincenas) secQuincenas.style.display = 'block';
         if (secGastosInd) secGastosInd.style.display = 'none';
@@ -1852,91 +2569,183 @@ function switchAdminSubSection(subSec) {
             btnGastosInd.style.boxShadow = 'none';
         }
         renderNominas();
+        updateNominasEditButtonsUI();
     }
 }
 window.switchAdminSubSection = switchAdminSubSection;
+
+const GI_CATEGORIAS_CONFIG = [
+    { value: 'Servicios', label: 'Servicios', slug: 'servicios' },
+    { value: 'Papelería', label: 'Papelería', slug: 'papeleria' },
+    { value: 'Combustible', label: 'Combustible', slug: 'combustible' },
+    { value: 'Mantenimiento', label: 'Mantenimiento', slug: 'mantenimiento' },
+    { value: 'Renta', label: 'Renta', slug: 'renta' },
+    { value: 'Sistemas', label: 'Sistemas', slug: 'sistemas' },
+    { value: 'Otros', label: 'Otros', slug: 'otros' }
+];
+
+function getGastoIndCatConfig(catName) {
+    const norm = String(catName || 'Servicios').trim().toLowerCase();
+    return GI_CATEGORIAS_CONFIG.find(c => c.value.toLowerCase() === norm || c.slug === norm) || GI_CATEGORIAS_CONFIG[0];
+}
+
+function toggleGastoIndCategoriaDropdown(index, event) {
+    window.toggleGastoIndCategoriaDropdown = toggleGastoIndCategoriaDropdown;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingGastosIndirectos) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para cambiar la categoría o modificar Gastos Indirectos.", "info");
+        }
+        return;
+    }
+
+    let menu = document.getElementById("global-gi-categoria-menu");
+    if (!menu) {
+        menu = document.createElement("div");
+        menu.id = "global-gi-categoria-menu";
+        menu.className = "gi-cat-global-menu";
+        document.body.appendChild(menu);
+    }
+
+    if (menu.style.display === "block" && menu.dataset.currentIndex === String(index)) {
+        menu.style.display = "none";
+        return;
+    }
+
+    menu.dataset.currentIndex = String(index);
+    const currentItem = (appState.gastosIndirectos || [])[index];
+    const currentCat = getGastoIndCatConfig(currentItem ? currentItem.categoria : 'Servicios');
+
+    menu.innerHTML = GI_CATEGORIAS_CONFIG.map(cat => {
+        const isSel = cat.value === currentCat.value;
+        return `
+            <div class="gi-cat-option ${isSel ? 'selected' : ''}" data-cat="${cat.value}" onclick="selectGastoIndCategoria('${cat.value}', event)">
+                <span class="gi-cat-option-left">
+                    <span class="gi-cat-dot gi-cat-dot-${cat.slug}"></span>
+                    <span>${cat.label}</span>
+                </span>
+                <span class="material-symbols-outlined gi-check">check</span>
+            </div>
+        `;
+    }).join('');
+
+    const trigger = (event && (event.currentTarget || event.target.closest(".gi-cat-trigger"))) || document.getElementById(`gi-cat-trigger-${index}`);
+    if (trigger) {
+        const rect = trigger.getBoundingClientRect();
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.left = `${rect.left}px`;
+        menu.style.display = "block";
+    }
+}
+window.toggleGastoIndCategoriaDropdown = toggleGastoIndCategoriaDropdown;
+
+function selectGastoIndCategoria(newCat, event) {
+    window.selectGastoIndCategoria = selectGastoIndCategoria;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const menu = document.getElementById("global-gi-categoria-menu");
+    if (!menu) return;
+    const idx = parseInt(menu.dataset.currentIndex, 10);
+    menu.style.display = "none";
+
+    if (!appState.isEditingGastosIndirectos) return;
+    if (isNaN(idx) || !appState.gastosIndirectos || !appState.gastosIndirectos[idx]) return;
+
+    const cfg = getGastoIndCatConfig(newCat);
+    appState.gastosIndirectos[idx].categoria = cfg.value;
+
+    const trigger = document.getElementById(`gi-cat-trigger-${idx}`);
+    if (trigger) {
+        trigger.className = `gi-cat-trigger gi-cat-${cfg.slug}`;
+        trigger.innerHTML = `
+            <span class="gi-cat-trigger-left">
+                <span class="gi-cat-dot gi-cat-dot-${cfg.slug}"></span>
+                <span class="gi-cat-label">${cfg.label}</span>
+            </span>
+            <span class="material-symbols-outlined" style="font-size: 16px;">expand_more</span>
+        `;
+    }
+}
+window.selectGastoIndCategoria = selectGastoIndCategoria;
 
 function renderGastosIndirectos() {
     window.renderGastosIndirectos = renderGastosIndirectos;
     const tbody = document.getElementById('tbody-gastos-indirectos');
     if (!tbody) return;
-    tbody.innerHTML = '';
+
+    const mainContent = document.querySelector(".main-content");
+    const prevMainScroll = mainContent ? mainContent.scrollTop : 0;
+    const tableWrap = tbody.closest(".table-responsive");
+    const prevWrapScroll = tableWrap ? tableWrap.scrollTop : 0;
 
     if (!appState.gastosIndirectos || !Array.isArray(appState.gastosIndirectos)) {
         appState.gastosIndirectos = [];
+    } else if (typeof window.isFictitiousGastoIndirecto === 'function') {
+        appState.gastosIndirectos = appState.gastosIndirectos.filter(g => !window.isFictitiousGastoIndirecto(g));
     }
 
-    if (appState.gastosIndirectos.length === 0) {
-        // Inicializar con un registro base alineado al balance si está completamente vacío
-        appState.gastosIndirectos = [
-            {
-                id: 'gi-1',
-                folio: 'GI-001',
-                fecha: new Date().toISOString().split('T')[0],
-                concepto: 'Papelería e insumos operativos',
-                categoria: 'Papelería',
-                subtotal: 577.59,
-                iva: 92.41,
-                total: 670.00,
-                factura: 'FAC-8821'
-            }
-        ];
-        saveToStorage();
-    }
+    const isEditable = Boolean(appState.isEditingGastosIndirectos);
+    const disabledAttr = isEditable ? "" : "disabled";
+
+    const frag = document.createDocumentFragment();
 
     appState.gastosIndirectos.forEach((item, index) => {
+        const catCfg = getGastoIndCatConfig(item.categoria);
         const tr = document.createElement('tr');
         tr.id = `gi-row-${index}`;
         tr.setAttribute('data-row-key', `gasto_ind_${index}`);
         tr.innerHTML = `
             <td style="text-align: center;">
-                <input type="text" class="excel-input" value="${item.folio || ('GI-' + String(index + 1).padStart(3, '0'))}" oninput="updateGastoIndirectoCell(${index}, 'folio', this.value)" style="text-align: center; font-weight: 700;">
+                <input type="text" class="excel-input" value="${item.folio || ('GI-' + String(index + 1).padStart(3, '0'))}" oninput="updateGastoIndirectoCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
             </td>
             <td style="text-align: center;">
-                <input type="date" class="excel-input" value="${item.fecha || ''}" oninput="updateGastoIndirectoCell(${index}, 'fecha', this.value)" style="text-align: center;">
+                <input type="date" class="excel-input" value="${item.fecha || ''}" oninput="updateGastoIndirectoCell(${index}, 'fecha', this.value)" ${disabledAttr} style="text-align: center;">
             </td>
             <td>
-                <input type="text" class="excel-input" value="${item.concepto || ''}" oninput="updateGastoIndirectoCell(${index}, 'concepto', this.value)" placeholder="Descripción del gasto..." style="font-weight: 600;">
+                <input type="text" class="excel-input" value="${item.concepto || ''}" oninput="updateGastoIndirectoCell(${index}, 'concepto', this.value)" placeholder="Descripción del gasto..." ${disabledAttr} style="font-weight: 600;">
             </td>
             <td>
-                <select class="excel-input" onchange="updateGastoIndirectoCell(${index}, 'categoria', this.value)" style="font-size: 13px; font-weight: 600; cursor: pointer;">
-                    <option value="Servicios" ${item.categoria === 'Servicios' ? 'selected' : ''}>Servicios</option>
-                    <option value="Papelería" ${item.categoria === 'Papelería' ? 'selected' : ''}>Papelería</option>
-                    <option value="Combustible" ${item.categoria === 'Combustible' ? 'selected' : ''}>Combustible</option>
-                    <option value="Mantenimiento" ${item.categoria === 'Mantenimiento' ? 'selected' : ''}>Mantenimiento</option>
-                    <option value="Renta" ${item.categoria === 'Renta' ? 'selected' : ''}>Renta</option>
-                    <option value="Sistemas" ${item.categoria === 'Sistemas' ? 'selected' : ''}>Sistemas</option>
-                    <option value="Otros" ${item.categoria === 'Otros' ? 'selected' : ''}>Otros</option>
-                </select>
+                <button type="button" id="gi-cat-trigger-${index}" class="gi-cat-trigger gi-cat-${catCfg.slug} ${!isEditable ? 'trigger-locked' : ''}" onclick="toggleGastoIndCategoriaDropdown(${index}, event)" title="${isEditable ? 'Seleccionar categoría' : 'Haz clic en \'Editar\' para cambiar categoría'}">
+                    <span class="gi-cat-trigger-left">
+                        <span class="gi-cat-dot gi-cat-dot-${catCfg.slug}"></span>
+                        <span class="gi-cat-label">${catCfg.label}</span>
+                    </span>
+                    <span class="material-symbols-outlined" style="font-size: 16px;">expand_more</span>
+                </button>
             </td>
             <td>
                 <div class="excel-currency-wrap">
                     <span class="currency-symbol">$</span>
-                    <input type="number" id="gi-subtotal-input-${index}" class="excel-input number-input" value="${item.subtotal || 0}" step="any" oninput="liveUpdateGastoIndirectoTotals(${index})" placeholder="0.00" style="font-weight: 700;">
+                    <input type="number" id="gi-subtotal-input-${index}" class="excel-input number-input" value="${item.subtotal || 0}" step="any" oninput="liveUpdateGastoIndirectoTotals(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 700;">
                 </div>
             </td>
             <td>
                 <div class="excel-currency-wrap">
                     <span class="currency-symbol">$</span>
-                    <input type="number" id="gi-iva-input-${index}" class="excel-input number-input" value="${item.iva || 0}" step="any" oninput="liveUpdateGastoIndirectoTotals(${index})" placeholder="0.00">
+                    <input type="number" id="gi-iva-input-${index}" class="excel-input number-input" value="${item.iva || 0}" step="any" oninput="liveUpdateGastoIndirectoTotals(${index})" placeholder="0.00" ${disabledAttr}>
                 </div>
             </td>
             <td>
                 <div class="excel-currency-wrap">
                     <span class="currency-symbol">$</span>
-                    <input type="number" id="gi-total-input-${index}" class="excel-input number-input" value="${item.total || 0}" step="any" readonly style="font-weight: 800; background: #F8FAFC; color: #1E293B;">
+                    <input type="number" id="gi-total-input-${index}" class="excel-input number-input" value="${item.total || 0}" step="any" oninput="liveUpdateGastoIndirectoFromTotal(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 800; color: #1E293B;">
                 </div>
             </td>
             <td>
-                <input type="text" class="excel-input" value="${item.factura || ''}" oninput="updateGastoIndirectoCell(${index}, 'factura', this.value)" placeholder="Folio/Factura" style="text-align: center;">
+                <input type="text" class="excel-input" value="${item.factura || ''}" oninput="updateGastoIndirectoCell(${index}, 'factura', this.value)" placeholder="Folio/Factura" ${disabledAttr} style="text-align: center;">
             </td>
             <td style="text-align: center;">
-                <button type="button" class="btn-icon text-danger" onclick="deleteGastoIndirectoRow(${index})" title="Eliminar este gasto indirecto" style="background: none; border: none; cursor: pointer; color: #EF4444;">
+                <button type="button" class="btn-icon text-danger" onclick="deleteGastoIndirectoRow(${index})" ${disabledAttr} title="${isEditable ? 'Eliminar este gasto indirecto' : 'Haz clic en Editar para eliminar'}" style="background: none; border: none; cursor: ${isEditable ? 'pointer' : 'not-allowed'}; color: #EF4444; opacity: ${isEditable ? '1' : '0.45'};">
                     <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
                 </button>
             </td>
         `;
-        tbody.appendChild(tr);
+        frag.appendChild(tr);
     });
 
     const totalsRow = document.createElement('tr');
@@ -1944,14 +2753,26 @@ function renderGastosIndirectos() {
     totalsRow.className = 'excel-totals-row';
     totalsRow.style.background = '#F8FAFC';
     totalsRow.style.borderTop = '2px solid #CBD5E1';
-    tbody.appendChild(totalsRow);
+    frag.appendChild(totalsRow);
+
+    tbody.replaceChildren(frag);
 
     recalculateGastosIndirectosTotals();
+    updateGastosIndirectosEditButtonsUI();
+
+    if (tableWrap) tableWrap.scrollTop = prevWrapScroll;
+    if (mainContent) mainContent.scrollTop = prevMainScroll;
 }
 window.renderGastosIndirectos = renderGastosIndirectos;
 
 function addNewGastoIndirectoRow() {
     window.addNewGastoIndirectoRow = addNewGastoIndirectoRow;
+    if (!appState.isEditingGastosIndirectos) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para agregar un Gasto Indirecto.", "info");
+        }
+        return;
+    }
     if (!appState.gastosIndirectos) appState.gastosIndirectos = [];
     const nextFolioNum = appState.gastosIndirectos.length + 1;
     const newRow = {
@@ -1966,35 +2787,37 @@ function addNewGastoIndirectoRow() {
         factura: ''
     };
     appState.gastosIndirectos.push(newRow);
-    saveToStorage();
     renderGastosIndirectos();
-    broadcastGastosIndirectosUpdate();
 }
 window.addNewGastoIndirectoRow = addNewGastoIndirectoRow;
 
 function deleteGastoIndirectoRow(index) {
     window.deleteGastoIndirectoRow = deleteGastoIndirectoRow;
+    if (!appState.isEditingGastosIndirectos) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para eliminar un Gasto Indirecto.", "info");
+        }
+        return;
+    }
     if (confirm("¿Estás seguro de que deseas eliminar este gasto indirecto?")) {
         appState.gastosIndirectos.splice(index, 1);
-        saveToStorage();
         renderGastosIndirectos();
-        broadcastGastosIndirectosUpdate();
     }
 }
 window.deleteGastoIndirectoRow = deleteGastoIndirectoRow;
 
 function updateGastoIndirectoCell(index, key, val) {
     window.updateGastoIndirectoCell = updateGastoIndirectoCell;
+    if (!appState.isEditingGastosIndirectos) return;
     if (appState.gastosIndirectos && appState.gastosIndirectos[index]) {
         appState.gastosIndirectos[index][key] = val;
-        saveToStorage();
-        debouncedBroadcastGastosIndirectos();
     }
 }
 window.updateGastoIndirectoCell = updateGastoIndirectoCell;
 
 function liveUpdateGastoIndirectoTotals(index) {
     window.liveUpdateGastoIndirectoTotals = liveUpdateGastoIndirectoTotals;
+    if (!appState.isEditingGastosIndirectos) return;
     const subtotalEl = document.getElementById(`gi-subtotal-input-${index}`);
     const ivaEl = document.getElementById(`gi-iva-input-${index}`);
     const totalEl = document.getElementById(`gi-total-input-${index}`);
@@ -2018,11 +2841,32 @@ function liveUpdateGastoIndirectoTotals(index) {
         appState.gastosIndirectos[index].total = total;
 
         recalculateGastosIndirectosTotals();
-        saveToStorage();
-        debouncedBroadcastGastosIndirectos();
     }
 }
 window.liveUpdateGastoIndirectoTotals = liveUpdateGastoIndirectoTotals;
+
+function liveUpdateGastoIndirectoFromTotal(index) {
+    window.liveUpdateGastoIndirectoFromTotal = liveUpdateGastoIndirectoFromTotal;
+    if (!appState.isEditingGastosIndirectos) return;
+    const subtotalEl = document.getElementById(`gi-subtotal-input-${index}`);
+    const ivaEl = document.getElementById(`gi-iva-input-${index}`);
+    const totalEl = document.getElementById(`gi-total-input-${index}`);
+
+    if (totalEl && appState.gastosIndirectos && appState.gastosIndirectos[index]) {
+        const total = Number(totalEl.value) || 0;
+        const subtotal = Number((total / 1.16).toFixed(2));
+        const iva = Number((total - subtotal).toFixed(2));
+        if (subtotalEl && document.activeElement !== subtotalEl) subtotalEl.value = subtotal;
+        if (ivaEl && document.activeElement !== ivaEl) ivaEl.value = iva;
+
+        appState.gastosIndirectos[index].subtotal = subtotal;
+        appState.gastosIndirectos[index].iva = iva;
+        appState.gastosIndirectos[index].total = total;
+
+        recalculateGastosIndirectosTotals();
+    }
+}
+window.liveUpdateGastoIndirectoFromTotal = liveUpdateGastoIndirectoFromTotal;
 
 function recalculateGastosIndirectosTotals() {
     window.recalculateGastosIndirectosTotals = recalculateGastosIndirectosTotals;
@@ -2031,6 +2875,7 @@ function recalculateGastosIndirectosTotals() {
     let sumTotal = 0;
 
     (appState.gastosIndirectos || []).forEach(item => {
+        if (!item) return;
         sumSubtotal += Number(item.subtotal) || 0;
         sumIva += Number(item.iva) || 0;
         sumTotal += Number(item.total) || 0;
@@ -2051,13 +2896,12 @@ function recalculateGastosIndirectosTotals() {
         `;
     }
 
-    if (sumTotal > 0 || (appState.gastosIndirectos && appState.gastosIndirectos.length > 0)) {
-        appState.concepts.gastosInd = sumTotal;
-        const inputConcept = document.getElementById("concept-gastos-ind-input");
-        if (inputConcept) inputConcept.value = sumTotal.toFixed(2);
-        if (typeof window.renderVisualizacion === 'function') {
-            window.renderVisualizacion();
-        }
+    if (!appState.concepts) appState.concepts = {};
+    appState.concepts.gastosInd = Math.round(sumTotal * 100) / 100;
+    const inputConcept = document.getElementById("concept-gastos-ind-input");
+    if (inputConcept) inputConcept.value = sumTotal.toFixed(2);
+    if (typeof window.renderVisualizacion === 'function') {
+        window.renderVisualizacion();
     }
 }
 window.recalculateGastosIndirectosTotals = recalculateGastosIndirectosTotals;
@@ -3360,7 +4204,13 @@ function renderProveedores() {
     window.renderProveedores = renderProveedores;
     const tbody = document.getElementById("tbody-proveedores");
     if (!tbody) return;
-    tbody.innerHTML = "";
+
+    const mainContent = document.querySelector(".main-content");
+    const prevMainScroll = mainContent ? mainContent.scrollTop : 0;
+    const tableWrap = tbody.closest(".table-responsive");
+    const prevWrapScroll = tableWrap ? tableWrap.scrollTop : 0;
+
+    const frag = document.createDocumentFragment();
     
     // Filtrar filas válidas para mostrar en Control de Proveedores
     let list = (appState.proveedores || []).filter(p => p && (
@@ -3463,20 +4313,25 @@ function renderProveedores() {
                 <span class="cell-locked-val" style="font-weight: 600; color: #1E293B;">${item.op || '-'}</span>
             </td>
         `;
-        tbody.appendChild(tr);
+        frag.appendChild(tr);
     });
     
     // Bottom total summary row colored in Green (Image 4 style)
     const summaryTr = document.createElement("tr");
     summaryTr.className = "excel-green-row";
     summaryTr.id = "excel-proveedores-totals-row";
-    tbody.appendChild(summaryTr);
+    frag.appendChild(summaryTr);
+
+    tbody.replaceChildren(frag);
     
     recalculateProveedoresTableTotals();
     updateProveedorStatusCounts();
     if (typeof updateProveedoresEditButtonsUI === 'function') {
         updateProveedoresEditButtonsUI();
     }
+
+    if (tableWrap) tableWrap.scrollTop = prevWrapScroll;
+    if (mainContent) mainContent.scrollTop = prevMainScroll;
 }
 
 function recalculateProveedoresTableTotals() {
@@ -5697,7 +6552,11 @@ function renderConsecutivo() {
     if (typeof window.updateConsecutivoEditButtonsUI === "function") window.updateConsecutivoEditButtonsUI();
     const tbody = document.getElementById("tbody-consecutivo");
     if (!tbody) return;
-    tbody.innerHTML = "";
+    const tableScrollWrap = tbody.closest(".table-responsive");
+    const prevScrollTop = tableScrollWrap ? tableScrollWrap.scrollTop : 0;
+    const mainScrollEl = document.querySelector(".main-content");
+    const prevMainScroll = mainScrollEl ? mainScrollEl.scrollTop : 0;
+    const frag = document.createDocumentFragment();
     
     const filteredList = getFilteredConsecutivoList();
     const totalFiltered = filteredList.length;
@@ -5750,7 +6609,7 @@ function renderConsecutivo() {
     if (pageItems.length === 0) {
         const emptyTr = document.createElement("tr");
         emptyTr.innerHTML = `<td colspan="12" style="text-align: center; padding: 30px; color: var(--text-muted);">No se encontraron facturas que coincidan con los filtros aplicados.</td>`;
-        tbody.appendChild(emptyTr);
+        frag.appendChild(emptyTr);
     } else {
         pageItems.forEach((item) => {
             const realIndex = appState.consecutivo.indexOf(item);
@@ -5837,9 +6696,12 @@ function renderConsecutivo() {
                     <span class="cell-locked-val">${item.servicio || '-'}</span>
                 </td>
             `;
-            tbody.appendChild(tr);
+            frag.appendChild(tr);
         });
     }
+    tbody.replaceChildren(frag);
+    if (tableScrollWrap && prevScrollTop > 0) tableScrollWrap.scrollTop = prevScrollTop;
+    if (mainScrollEl && prevMainScroll > 0) mainScrollEl.scrollTop = prevMainScroll;
     
     // Render Summary row at the bottom
     renderConsecutivoFooterTotals(filteredList);
@@ -6293,6 +7155,12 @@ document.addEventListener("click", function(event) {
             globalProvMenu.style.display = "none";
         }
     }
+    const globalGiCatMenu = document.getElementById("global-gi-categoria-menu");
+    if (globalGiCatMenu && globalGiCatMenu.style.display === "block") {
+        if (!event.target.closest("#global-gi-categoria-menu") && !event.target.closest(".gi-cat-trigger")) {
+            globalGiCatMenu.style.display = "none";
+        }
+    }
     if (!event.target.closest(".assignee-autocomplete-wrapper")) {
         if (typeof closeAssigneeDropdown === 'function') closeAssigneeDropdown();
         if (window.schemaEngine && typeof window.schemaEngine.closeSchemaAssigneeDropdown === 'function') {
@@ -6303,11 +7171,15 @@ document.addEventListener("click", function(event) {
 
 // Close dropdowns on scroll
 window.addEventListener("scroll", function(e) {
-    if (e && e.target && e.target.closest && (e.target.closest(".st-dropdown-menu") || e.target.closest(".st-custom-dropdown-wrap"))) return;
+    if (e && e.target && e.target.closest && (e.target.closest(".st-dropdown-menu") || e.target.closest(".st-custom-dropdown-wrap") || e.target.closest(".gi-cat-global-menu"))) return;
     document.querySelectorAll(".st-custom-dropdown-wrap.open").forEach(w => w.classList.remove("open"));
     const globalProvMenu = document.getElementById("global-prov-estatus-menu");
     if (globalProvMenu && globalProvMenu.style.display === "block") {
         globalProvMenu.style.display = "none";
+    }
+    const globalGiCatMenu = document.getElementById("global-gi-categoria-menu");
+    if (globalGiCatMenu && globalGiCatMenu.style.display === "block") {
+        globalGiCatMenu.style.display = "none";
     }
 }, false);
 
@@ -7324,6 +8196,7 @@ function setupRealtimeSubscriptions() {
 
     // 4g. Actualización en tiempo real de nóminas quincenales por broadcast
     window.chatRealtimeChannel.on('broadcast', { event: 'nominas_update' }, payload => {
+        if (appState.isEditingNominas) return;
         const data = payload.payload;
         if (!data) return;
         if (Array.isArray(data.nominas)) {
@@ -7332,26 +8205,71 @@ function setupRealtimeSubscriptions() {
                 appState.archivosQuincenales = data.archivosQuincenales;
             }
             saveToStorage();
-            if (appState.currentTab === 'admin') {
+            if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
                 renderNominas();
                 renderVisualizacion();
             }
         }
     });
 
+    // 4g-lock. Bloqueo de Edición Exclusiva de Nóminas en tiempo real
+    window.chatRealtimeChannel.on('broadcast', { event: 'nominas_lock_update' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        if (data.isLocked) {
+            if (data.userId !== currentUserId) {
+                appState.nominasLockedBy = data;
+            }
+        } else {
+            if (!appState.isEditingNominas) {
+                appState.nominasLockedBy = null;
+            }
+        }
+        if (typeof window.updateNominasEditButtonsUI === 'function') {
+            window.updateNominasEditButtonsUI();
+        }
+        if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderNominas === 'function') {
+            window.renderNominas();
+        }
+    });
+
     // 4h. Actualización en tiempo real de gastos indirectos por broadcast
     window.chatRealtimeChannel.on('broadcast', { event: 'gastos_indirectos_update' }, payload => {
+        if (appState.isEditingGastosIndirectos) return;
         const data = payload.payload;
         if (!data || !Array.isArray(data.gastosIndirectos)) return;
-        appState.gastosIndirectos = data.gastosIndirectos;
+        appState.gastosIndirectos = data.gastosIndirectos.filter(item => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(item));
         saveToStorage();
-        if (appState.currentTab === 'admin' && appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
+        if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
             if (typeof window.renderGastosIndirectos === 'function') {
                 window.renderGastosIndirectos();
             }
         }
         if (typeof window.recalculateGastosIndirectosTotals === 'function') {
             window.recalculateGastosIndirectosTotals();
+        }
+    });
+
+    // 4h-lock. Bloqueo de Edición Exclusiva de Gastos Indirectos en tiempo real
+    window.chatRealtimeChannel.on('broadcast', { event: 'gastos_indirectos_lock_update' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        if (data.isLocked) {
+            if (data.userId !== currentUserId) {
+                appState.gastosIndirectosLockedBy = data;
+            }
+        } else {
+            if (!appState.isEditingGastosIndirectos) {
+                appState.gastosIndirectosLockedBy = null;
+            }
+        }
+        if (typeof window.updateGastosIndirectosEditButtonsUI === 'function') {
+            window.updateGastosIndirectosEditButtonsUI();
+        }
+        if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderGastosIndirectos === 'function') {
+            window.renderGastosIndirectos();
         }
     });
 
@@ -7428,8 +8346,14 @@ function setupRealtimeSubscriptions() {
             if (channelKey === '__cloud_sync_nominas__' && typeof window.fetchNominasFromCloud === 'function') {
                 window.fetchNominasFromCloud();
             }
+            if (channelKey === '__cloud_sync_nominas_lock__' && typeof window.fetchNominasLockFromCloud === 'function') {
+                window.fetchNominasLockFromCloud();
+            }
             if (channelKey === '__cloud_sync_gastos_indirectos__' && typeof window.fetchGastosIndirectosFromCloud === 'function') {
                 window.fetchGastosIndirectosFromCloud();
+            }
+            if (channelKey === '__cloud_sync_gastos_indirectos_lock__' && typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
+                window.fetchGastosIndirectosLockFromCloud();
             }
             if (channelKey === '__cloud_sync_proveedores_lock__' && typeof window.fetchProveedoresLockFromCloud === 'function') {
                 window.fetchProveedoresLockFromCloud();
@@ -7569,11 +8493,17 @@ function setupRealtimeSubscriptions() {
                             await window.fetchProveedoresLockFromCloud();
                         }
                     } else if (appState.currentAdminFicha === 'quincenal') {
-                        if (typeof window.fetchNominasFromCloud === 'function') {
+                        if (!appState.isEditingNominas && typeof window.fetchNominasFromCloud === 'function') {
                             await window.fetchNominasFromCloud();
                         }
-                        if (typeof window.fetchGastosIndirectosFromCloud === 'function') {
+                        if (typeof window.fetchNominasLockFromCloud === 'function') {
+                            await window.fetchNominasLockFromCloud();
+                        }
+                        if (!appState.isEditingGastosIndirectos && typeof window.fetchGastosIndirectosFromCloud === 'function') {
                             await window.fetchGastosIndirectosFromCloud();
+                        }
+                        if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
+                            await window.fetchGastosIndirectosLockFromCloud();
                         }
                     } else if (appState.currentAdminFicha === 'consecutivo') {
                         if (!appState.isEditingConsecutivo && !document.querySelector(".st-custom-dropdown-wrap.open")) {
@@ -7752,13 +8682,19 @@ async function fetchCloudData() {
         }
 
         // Sincronizar registros de Nóminas Quincenales (nube <-> local para todos los dispositivos)
-        if (typeof window.fetchNominasFromCloud === 'function') {
+        if (!appState.isEditingNominas && typeof window.fetchNominasFromCloud === 'function') {
             await window.fetchNominasFromCloud();
+        }
+        if (typeof window.fetchNominasLockFromCloud === 'function') {
+            await window.fetchNominasLockFromCloud();
         }
 
         // Sincronizar registros de Gastos Indirectos (nube <-> local)
-        if (typeof window.fetchGastosIndirectosFromCloud === 'function') {
+        if (!appState.isEditingGastosIndirectos && typeof window.fetchGastosIndirectosFromCloud === 'function') {
             await window.fetchGastosIndirectosFromCloud();
+        }
+        if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
+            await window.fetchGastosIndirectosLockFromCloud();
         }
         
         // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)

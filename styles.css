@@ -458,12 +458,11 @@ body.role-colaborador #sidebar-item-administracion,
 
 .tab-pane.active {
     display: block;
-    animation: fadeIn 0.3s ease-out;
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 1; transform: none; }
+    to { opacity: 1; transform: none; }
 }
 
 /* -------------------------------------------------------------
@@ -2157,7 +2156,6 @@ select option {
 
 .admin-subpane.active {
     display: block;
-    animation: fadeIn 0.3s ease-out;
 }
 
 /* Ficha 1: Visualización Layout */
@@ -12195,3 +12193,177 @@ body {
     flex-direction: column;
     font-size: 12px;
 }
+
+/* =============================================================
+   GASTOS INDIRECTOS: MENÚ DESPLEGABLE ARMONIZADO DE CATEGORÍA
+   Y BLOQUEO COLABORATIVO NÓMINAS / GASTOS INDIRECTOS
+   ============================================================= */
+
+.gi-cat-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-width: 138px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1.5px solid #CBD5E1;
+    background: #F8FAFC;
+    color: #1E293B;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    user-select: none;
+    box-sizing: border-box;
+}
+
+.gi-cat-trigger:hover:not(:disabled) {
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+    filter: brightness(0.98);
+}
+
+.gi-cat-trigger:disabled,
+.gi-cat-trigger.trigger-locked {
+    cursor: not-allowed;
+    opacity: 0.85;
+}
+
+.gi-cat-trigger-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gi-cat-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+/* Colores armónicos por categoría */
+.gi-cat-servicios { background: #EFF6FF; color: #1D4ED8; border-color: #BFDBFE; }
+.gi-cat-dot-servicios { background: #2563EB; }
+
+.gi-cat-papeleria { background: #FFFBEB; color: #B45309; border-color: #FDE68A; }
+.gi-cat-dot-papeleria { background: #F59E0B; }
+
+.gi-cat-combustible { background: #FFF1F2; color: #BE123C; border-color: #FECDD3; }
+.gi-cat-dot-combustible { background: #E11D48; }
+
+.gi-cat-mantenimiento { background: #F5F3FF; color: #6D28D9; border-color: #DDD6FE; }
+.gi-cat-dot-mantenimiento { background: #7C3AED; }
+
+.gi-cat-renta { background: #ECFDF5; color: #047857; border-color: #A7F3D0; }
+.gi-cat-dot-renta { background: #10B981; }
+
+.gi-cat-sistemas { background: #ECFEFF; color: #0E7490; border-color: #A5F3FC; }
+.gi-cat-dot-sistemas { background: #06B6D4; }
+
+.gi-cat-otros { background: #F8FAFC; color: #334155; border-color: #CBD5E1; }
+.gi-cat-dot-otros { background: #64748B; }
+
+.gi-cat-global-menu {
+    position: fixed;
+    min-width: 185px;
+    background: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 12px;
+    padding: 6px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16), 0 4px 10px rgba(15, 23, 42, 0.06);
+    z-index: 99999999;
+    display: none;
+}
+
+.gi-cat-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #1E293B;
+    cursor: pointer;
+    transition: background 0.12s ease;
+    user-select: none;
+}
+
+.gi-cat-option:hover {
+    background: #F1F5F9;
+}
+
+.gi-cat-option.selected {
+    background: #EFF6FF;
+    color: #1D4ED8;
+    font-weight: 700;
+}
+
+.gi-cat-option-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gi-cat-option .gi-check {
+    font-size: 15px;
+    color: #2563EB;
+    opacity: 0;
+}
+
+.gi-cat-option.selected .gi-check {
+    opacity: 1;
+}
+
+/* Filtro gris y banner de edición en Nóminas y Gastos Indirectos (Imagen 4) */
+#nominas-lock-banner,
+#gastos-indirectos-lock-banner {
+    background: linear-gradient(90deg, #E2E8F0 0%, #F1F5F9 100%) !important;
+    border: 1.5px solid #94A3B8 !important;
+    color: #1E293B !important;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08) !important;
+    animation: none !important;
+}
+
+#nominas-lock-banner .lock-banner-content,
+#gastos-indirectos-lock-banner .lock-banner-content {
+    color: #334155 !important;
+    font-weight: 700 !important;
+}
+
+#nominas-lock-banner .lock-icon,
+#gastos-indirectos-lock-banner .lock-icon {
+    color: #475569 !important;
+}
+
+.tabla-filtro-gris-edicion {
+    background-color: rgba(226, 232, 240, 0.55) !important;
+    box-shadow: inset 0 0 0 2px #94A3B8 !important;
+    border-radius: 10px !important;
+    padding: 4px !important;
+}
+
+.tabla-filtro-gris-edicion table tbody tr:not(.excel-total-row) {
+    background-color: rgba(241, 245, 249, 0.88) !important;
+}
+
+.tabla-filtro-gris-edicion table tbody tr input.excel-input:not(:disabled) {
+    background-color: #FFFFFF !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 6px !important;
+}
+
+.tabla-readonly-sin-editar input.excel-input:disabled {
+    background: transparent !important;
+    color: #334155 !important;
+    cursor: not-allowed !important;
+    opacity: 0.9 !important;
+}
+
