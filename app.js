@@ -9182,8 +9182,10 @@ async function loadProfilesList() {
     }
 };
 
-async function handleSupabaseLogin(event) {
-    window.handleSupabaseLogin = handleSupabaseLogin;
+async function handleFirebaseLogin(event) {
+    window.handleFirebaseLogin = handleFirebaseLogin;
+    window.handleSupabaseLogin = handleFirebaseLogin;
+    const handleSupabaseLogin = handleFirebaseLogin;
     event.preventDefault();
     const email = document.getElementById("login-email").value.trim();
     const password = document.getElementById("login-password").value;
@@ -9310,8 +9312,10 @@ async function handleSupabaseLogin(event) {
     }
 };
 
-async function handleSupabaseRegister(event) {
-    window.handleSupabaseRegister = handleSupabaseRegister;
+async function handleFirebaseRegister(event) {
+    window.handleFirebaseRegister = handleFirebaseRegister;
+    window.handleSupabaseRegister = handleFirebaseRegister;
+    const handleSupabaseRegister = handleFirebaseRegister;
     event.preventDefault();
     const nombre = document.getElementById("reg-nombre").value.trim();
     const email = document.getElementById("reg-email").value.trim();
@@ -9794,8 +9798,9 @@ async function handleGlobalLoginSubmit(event) {
     }
 };
 
-async function handleSupabaseLogout() {
-    window.handleSupabaseLogout = handleSupabaseLogout;
+async function handleFirebaseLogout() {
+    window.handleFirebaseLogout = handleFirebaseLogout;
+    window.handleSupabaseLogout = handleFirebaseLogout;
     try {
         if (window.isSupabaseActive()) {
             await window.SUPABASE_CONFIG.client.auth.signOut();
@@ -17179,7 +17184,7 @@ function openNuevoProyectoModal() {
         }
 
         // 2. Generar y descargar el acceso directo de escritorio para Windows (.url)
-        var origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'https://admond.rodilaw.com';
+        var origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'https://mirandascorp.com';
         var shortcutContent = '[InternetShortcut]\r\nURL=' + origin + '/\r\nIconIndex=0\r\nHotKey=0\r\nIconFile=' + origin + '/Logo%20interno.png\r\n[{000214A0-0000-0000-C000-000000000046}]\r\nProp3=19,0\r\n[InternetShortcut.A]\r\nURL=' + origin + '/\r\n';
         
         var blob = new Blob([shortcutContent], { type: 'application/octet-stream' });
@@ -17201,7 +17206,7 @@ function openNuevoProyectoModal() {
 
     window.descargarSistemaMac = function() {
         // 1. Generar y descargar el acceso directo nativo para macOS (.webloc)
-        var origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'https://admond.rodilaw.com';
+        var origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'https://mirandascorp.com';
         var weblocXml = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>URL</key>\n\t<string>' + origin + '/</string>\n</dict>\n</plist>';
 
         var blob = new Blob([weblocXml], { type: 'application/x-apple-aspen-config;charset=utf-8' });

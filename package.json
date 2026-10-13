@@ -4,7 +4,7 @@
   "description": "",
   "main": "electron-main.js",
   "scripts": {
-    "lint": "eslint app.js schema.js supabase_config.js consecutivo_data.js --quiet",
+    "lint": "eslint app.js schema.js firebase_config.js supabase_config.js consecutivo_data.js --quiet",
     "test": "playwright test",
     "test:static": "playwright test tests/static.spec.js",
     "check": "npm run lint && npm test",
@@ -52,6 +52,7 @@
       "app.js",
       "styles.css",
       "schema.js",
+      "firebase_config.js",
       "supabase_config.js",
       "consecutivo_data.js",
       "Logo interno.png",

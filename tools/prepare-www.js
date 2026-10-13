@@ -13,11 +13,13 @@ const files = [
     'app.js',
     'styles.css',
     'schema.js',
+    'firebase_config.js',
     'supabase_config.js',
     'consecutivo_data.js',
     'Logo interno.png',
     'logo sin fondo.png',
-    'fondo sistema.png'
+    'fondo sistema.png',
+    'CNAME'
 ];
 
 for (const file of files) {

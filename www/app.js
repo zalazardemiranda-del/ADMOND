@@ -90,7 +90,15 @@ let appState = {
     
     // Administration Data
     proveedores: [],
+    isEditingProveedores: false,
+    proveedoresLockedBy: null,
     nominas: [],
+    isEditingNominas: false,
+    nominasLockedBy: null,
+    gastosIndirectos: [],
+    isEditingGastosIndirectos: false,
+    gastosIndirectosLockedBy: null,
+    adminSubSection: 'quincenas', // 'quincenas' o 'gastos-indirectos'
     archivosQuincenales: [],
     viewingArchiveId: null,
     concepts: defaultConcepts,
@@ -98,6 +106,8 @@ let appState = {
     
     // Consecutivo Data & Filter State
     consecutivo: [],
+    isEditingConsecutivo: false,
+    consecutivoLockedBy: null,
     consecutivoSearch: '',
     consecutivoStFilter: 'all',
     consecutivoClientFilter: 'all',
@@ -114,6 +124,7 @@ let appState = {
     selectedEmailIds: new Set(),
     composeAttachments: []
 };
+window.appState = appState;
 
 let pieChartInstance = null;
 
@@ -272,7 +283,8 @@ const runInitialAppSetup = async () => {
         'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
         'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
-        'RDP261074-', 'RDP261075-'
+        'RDP261074-', 'RDP261075-',
+        'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
     ]);
     window.purgedProjectIds = purgedProjectIds;
 
@@ -299,22 +311,66 @@ const runInitialAppSetup = async () => {
     appState.proveedores = Array.isArray(storedProv) ? storedProv : [];
     appState.nominas = JSON.parse(localStorage.getItem('rp_nominas_data')) || defaultNominas;
     appState.archivosQuincenales = JSON.parse(localStorage.getItem('rp_archivos_quincenales')) || [];
+    window.isFictitiousGastoIndirecto = function(g) {
+        if (!g) return true;
+        if (String(g.factura || '').trim().toUpperCase() === 'FAC-8821') return true;
+        if (String(g.concepto || '').trim() === 'Papelería e insumos operativos') return true;
+        if (g.id === 'gi-1' && Number(g.total) === 670) return true;
+        return false;
+    };
+    try {
+        let rawGI = JSON.parse(localStorage.getItem('rp_gastos_indirectos')) || [];
+        if (Array.isArray(rawGI)) {
+            const cleanGI = rawGI.filter(g => !window.isFictitiousGastoIndirecto(g));
+            if (cleanGI.length !== rawGI.length) {
+                localStorage.setItem('rp_gastos_indirectos', JSON.stringify(cleanGI));
+            }
+            appState.gastosIndirectos = cleanGI;
+        } else {
+            appState.gastosIndirectos = [];
+        }
+    } catch(e) {
+        appState.gastosIndirectos = [];
+    }
+    try {
+        const storedConcepts = JSON.parse(localStorage.getItem('rp_admin_concepts'));
+        if (storedConcepts && typeof storedConcepts === 'object') {
+            appState.concepts = { ...defaultConcepts, ...storedConcepts };
+            if (appState.concepts.gastosInd === 670 && (!appState.gastosIndirectos || appState.gastosIndirectos.length === 0)) {
+                appState.concepts.gastosInd = 0;
+                localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts));
+            }
+        }
+    } catch(e) {}
     appState.viewingArchiveId = null;
     let storedProvNames = [];
     try {
         storedProvNames = JSON.parse(localStorage.getItem('rp_proveedor_names')) || [];
     } catch(e) {}
-    // Purga definitiva de proveedores no deseados (Jennifer y Rama)
-    storedProvNames = storedProvNames.filter(n => {
+    // Purga y normalización de proveedores (corrección de errores tipográficos como TRASNPORTES RAMIRES -> TRANSPORTES RAMIREZ)
+    storedProvNames = storedProvNames.map(n => {
+        const s = String(n || '').trim();
+        if (s.toLowerCase() === 'trasnportes ramires' || s.toLowerCase() === 'transportes ramires') return 'TRANSPORTES RAMIREZ';
+        return s;
+    }).filter(n => {
         const lower = String(n || '').trim().toLowerCase();
-        return lower !== 'jennifer' && lower !== 'rama';
+        return lower !== 'jennifer' && lower !== 'rama' && !lower.includes('-- seleccionar') && lower !== '';
     });
-    defaultProveedorNames.forEach(n => {
-        if (!storedProvNames.some(s => s.toLowerCase() === n.toLowerCase())) {
-            storedProvNames.push(n);
+    const provSeen = new Set();
+    const dedupedProv = [];
+    storedProvNames.forEach(n => {
+        const low = n.toLowerCase();
+        if (!provSeen.has(low)) {
+            provSeen.add(low);
+            dedupedProv.push(n);
         }
     });
-    appState.proveedorNamesList = storedProvNames;
+    defaultProveedorNames.forEach(n => {
+        if (!dedupedProv.some(s => s.toLowerCase() === n.toLowerCase())) {
+            dedupedProv.push(n);
+        }
+    });
+    appState.proveedorNamesList = dedupedProv;
     try {
         localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
     } catch(e) {}
@@ -352,21 +408,60 @@ const runInitialAppSetup = async () => {
         }
     }
     
-    // Ensure consecutivo rows default to 'sin estatus' ("")
+    // Por defecto todos los proyectos en Consecutivo se ponen en "Por programar" ('PP') y se elimina "Sin Estatus"
+    const migratedConsecutivoPP = localStorage.getItem('rp_consecutivo_default_pp_v3');
     if (appState.consecutivo && Array.isArray(appState.consecutivo)) {
+        let consecChanged = false;
         appState.consecutivo.forEach(item => {
+            if (!item) return;
             const stVal = String(item.st || '').trim().toUpperCase();
-            if (stVal === 'P' || !item.st) {
-                item.st = '';
+            if (!migratedConsecutivoPP) {
+                // En la migración inicial, todos los que no estén en Pagado ('P') pasan por defecto a 'PP' (Por programar)
+                if (stVal === 'P') {
+                    item.st = 'P';
+                } else {
+                    item.st = 'PP';
+                    consecChanged = true;
+                }
+            } else {
+                if (stVal === 'P') {
+                    item.st = 'P';
+                } else if (stVal === 'C') {
+                    item.st = 'C';
+                } else {
+                    item.st = 'PP';
+                    consecChanged = true;
+                }
+            }
+            if (item.st !== 'P') {
+                item.fechaPago = '';
             }
         });
+        if (!migratedConsecutivoPP) {
+            try { localStorage.setItem('rp_consecutivo_default_pp_v3', 'true'); } catch (e) {}
+        }
+        if (consecChanged) {
+            try { localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo)); } catch (e) {}
+        }
     }
     
-    // Purga de filas de proveedores con "Jennifer" o "Rama" y restaurar montos si están en ceros
+    // Por defecto todos los proyectos de Proveedores están en "Programar a pago" ('PROG')
     if (appState.proveedores && Array.isArray(appState.proveedores)) {
         let changed = false;
         appState.proveedores.forEach(p => {
             if (!p) return;
+            const rawSt = String(p.p || p.estatus || '').trim().toLowerCase();
+            if (rawSt !== 'pagado') {
+                if (p.p !== 'PROG' || p.estatus !== 'PROG') {
+                    p.p = 'PROG';
+                    p.estatus = 'PROG';
+                    changed = true;
+                }
+                if (p.fechaPago) {
+                    p.fechaPago = '';
+                    changed = true;
+                }
+            }
             const cur = String(p.proveedor || '').trim().toLowerCase();
             if (cur === 'jennifer' || cur === 'rama') {
                 p.proveedor = cur === 'rama' ? "RAMA MULTIMODAL S DE RL DE CV" : "Jennufer Marylin Gonzales Franco";
@@ -387,8 +482,8 @@ const runInitialAppSetup = async () => {
                     p.retencion4 = 1932;
                     p.retencionIsr = 0;
                     p.total = 54096;
-                    p.estatus = p.estatus || 'P';
-                    p.p = p.p || 'P';
+                    p.estatus = (!p.estatus || String(p.estatus).toLowerCase() !== 'pagado') ? 'PROG' : 'PAGADO';
+                    p.p = p.estatus;
                     p.factura = p.factura || '-';
                     p.op = 'RDP2610172-F';
                     changed = true;
@@ -538,11 +633,13 @@ const runInitialAppSetup = async () => {
         initSchemaEngine();
     }
 
+    window._isBootstrappingApp = true;
     setRole(appState.currentRole);
     switchTab(appState.currentTab);
     if (appState.currentAdminFicha && typeof switchAdminFicha === 'function') {
         switchAdminFicha(appState.currentAdminFicha);
     }
+    window._isBootstrappingApp = false;
 
     renderTasks();
     renderChatMessages(true);
@@ -634,6 +731,7 @@ function saveToStorage() {
         if (appState.meetings) localStorage.setItem('rp_meetings', JSON.stringify(appState.meetings));
         if (appState.proveedores) localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
         if (appState.nominas) localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
+        if (appState.gastosIndirectos) localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos));
         if (appState.archivosQuincenales) localStorage.setItem('rp_archivos_quincenales', JSON.stringify(appState.archivosQuincenales));
         if (appState.concepts) localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts));
         if (appState.proveedorNamesList) localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
@@ -761,9 +859,16 @@ function setRole(role) {
     }
 
     updateUserSessionUI();
-    renderTasks();
-    renderAdministracion();
-    updateGlobalStats();
+    if (!window._isBootstrappingApp) {
+        if (window._lastRenderedRole !== appState.currentRole) {
+            window._lastRenderedRole = appState.currentRole;
+            renderTasks();
+            renderAdministracion();
+            updateGlobalStats();
+        }
+    } else {
+        window._lastRenderedRole = appState.currentRole;
+    }
 };
 
 function updateUserSessionUI() {
@@ -876,14 +981,20 @@ function switchTab(tabName) {
     const titleEl = document.getElementById("page-main-title");
     const subtitleEl = document.getElementById("page-subtitle");
     
+    if (tabName !== 'administracion' && appState.activeOperacionesProjectId) {
+        if (typeof closeOperacionesDetail === 'function') {
+            closeOperacionesDetail();
+        }
+    }
+
     if (tabName === 'schema') {
         titleEl.innerText = "Esquematización de Sistema";
         subtitleEl.innerText = "Mapeo jerárquico de proyectos, ramificación por departamentos y trazabilidad de bloqueos";
-        if (typeof renderSchemaView === 'function') renderSchemaView();
+        if (!window._isBootstrappingApp && typeof renderSchemaView === 'function') renderSchemaView();
     } else if (tabName === 'emails') {
         titleEl.innerText = "Centro de Correos";
         subtitleEl.innerText = "Buzón corporativo y mensajería interna sin intermediarios externos";
-        if (typeof renderEmailCenter === 'function') renderEmailCenter();
+        if (!window._isBootstrappingApp && typeof renderEmailCenter === 'function') renderEmailCenter();
     } else if (tabName === 'tasks') {
         titleEl.innerText = "Tablero de Tareas";
         subtitleEl.innerText = "Gestiona y supervisa las tareas del equipo de trabajo";
@@ -891,19 +1002,23 @@ function switchTab(tabName) {
         titleEl.innerText = "Chat Interno";
         subtitleEl.innerText = "Resuelve dudas técnicas o conversa en tiempo real con el equipo";
         document.getElementById("unread-chat-count").style.display = "none";
-        renderChatChannels();
-        renderChatMessages(true);
+        if (!window._isBootstrappingApp) {
+            renderChatChannels();
+            renderChatMessages(true);
+        }
     } else if (tabName === 'meetings') {
         titleEl.innerText = "Calendario de Reuniones";
         subtitleEl.innerText = "Planifica y agenda llamadas de coordinación del equipo";
     } else if (tabName === 'administracion') {
         titleEl.innerText = "Administración General";
         subtitleEl.innerText = "Control financiero, estadísticas por departamento, nóminas quincenales y proveedores";
-        renderAdministracion();
+        if (!window._isBootstrappingApp) {
+            renderAdministracion();
+        }
     } else if (tabName === 'users') {
         titleEl.innerText = "Administración de Usuarios";
         subtitleEl.innerText = "Gestiona perfiles, permisos y alta de colaboradores del sistema";
-        loadProfilesList();
+        if (!window._isBootstrappingApp) loadProfilesList();
     } else if (tabName === 'profile') {
         titleEl.innerText = "Configuración de Perfil";
         subtitleEl.innerText = "Gestiona tu cuenta, datos personales y seguridad";
@@ -932,10 +1047,34 @@ function switchAdminFicha(fichaName) {
     const subpane = document.getElementById(`admin-subpane-${fichaName}`);
     if (subpane) subpane.classList.add("active");
 
-    const topbarBack = document.getElementById("op-detail-topbar");
-    if (topbarBack && fichaName !== 'operaciones') topbarBack.style.display = "none";
+    if (fichaName !== 'operaciones' && appState.activeOperacionesProjectId) {
+        if (typeof closeOperacionesDetail === 'function') {
+            closeOperacionesDetail();
+        }
+    }
 
-    renderAdministracion();
+    if (fichaName !== 'proveedores' && appState.isEditingProveedores) {
+        if (typeof cancelEditingProveedores === 'function') {
+            cancelEditingProveedores();
+        }
+    }
+    if (fichaName !== 'consecutivo' && appState.isEditingConsecutivo) {
+        if (typeof cancelEditingConsecutivo === 'function') {
+            cancelEditingConsecutivo();
+        }
+    }
+    if (fichaName !== 'quincenal') {
+        if (appState.isEditingNominas && typeof cancelEditingNominas === 'function') {
+            cancelEditingNominas();
+        }
+        if (appState.isEditingGastosIndirectos && typeof cancelEditingGastosIndirectos === 'function') {
+            cancelEditingGastosIndirectos();
+        }
+    }
+
+    if (!window._isBootstrappingApp) {
+        renderAdministracion();
+    }
 };
 
 function renderAdministracion() {
@@ -947,19 +1086,44 @@ function renderAdministracion() {
     if (appState.currentAdminFicha === 'visualizacion') {
         renderVisualizacion();
     } else if (appState.currentAdminFicha === 'quincenal') {
-        renderNominas();
+        if (typeof window.fetchNominasLockFromCloud === 'function') {
+            window.fetchNominasLockFromCloud();
+        }
+        if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
+            window.fetchGastosIndirectosLockFromCloud();
+        }
+        if (typeof window.switchAdminSubSection === 'function') {
+            window.switchAdminSubSection(appState.adminSubSection || 'quincenas');
+        } else {
+            renderNominas();
+        }
     } else if (appState.currentAdminFicha === 'proveedores') {
+        if (typeof window.fetchProveedoresLockFromCloud === 'function') {
+            window.fetchProveedoresLockFromCloud();
+        }
         if (typeof window.syncAllOperacionesToProveedores === 'function') {
             window.syncAllOperacionesToProveedores();
         }
         renderProveedorChips();
         renderProveedores();
+        if (typeof window.updateProveedoresEditButtonsUI === 'function') {
+            window.updateProveedoresEditButtonsUI();
+        }
     } else if (appState.currentAdminFicha === 'consecutivo') {
+        if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
+            window.fetchConsecutivoLockFromCloud();
+        }
         if (typeof window.fetchConsecutivoFromCloud === 'function') window.fetchConsecutivoFromCloud();
         renderConsecutivo();
+        if (typeof window.updateConsecutivoEditButtonsUI === 'function') {
+            window.updateConsecutivoEditButtonsUI();
+        }
     } else if (appState.currentAdminFicha === 'archivo-digital') {
         renderArchivoDigital();
     } else if (appState.currentAdminFicha === 'operaciones') {
+        if (typeof window.fetchOperacionesProjectLocksFromCloud === 'function') {
+            window.fetchOperacionesProjectLocksFromCloud();
+        }
         if (typeof window.fetchOperacionesFromCloud === 'function') window.fetchOperacionesFromCloud();
         if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
     }
@@ -974,29 +1138,86 @@ function formatCurrency(val) {
 }
 
 function calculateAdminTotals() {
-    const bancos = Number(appState.concepts.bancos) || 10000;
-    const ingresos = Number(appState.concepts.ingresos) || 0;
-    const subtotal1 = bancos + ingresos;
+    if (!appState.concepts) appState.concepts = {};
+    const bancos = (appState.concepts.bancos !== undefined && appState.concepts.bancos !== null && appState.concepts.bancos !== '')
+        ? (Number(appState.concepts.bancos) || 0)
+        : 10000;
+
+    // Ingresos: resultado del total de todos los proyectos en "Por cobrar" (C) y "Por programar" (PP) en Consecutivo
+    let ingresos = 0;
+    if (Array.isArray(appState.consecutivo)) {
+        appState.consecutivo.forEach(item => {
+            if (!item) return;
+            const stVal = String(item.st || 'PP').trim().toUpperCase();
+            if (stVal === 'C' || stVal === 'POR COBRAR' || stVal === 'PP' || stVal === 'PROG' || stVal === 'POR PROGRAMAR' || stVal !== 'P') {
+                if (stVal !== 'P') {
+                    const sub = Number(item.subtotal) || 0;
+                    const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined)
+                        ? Number(item.iva)
+                        : (sub > 0 ? Math.round(sub * 0.16 * 100) / 100 : 0);
+                    const tot = (item.total !== '' && item.total !== null && item.total !== undefined && Number(item.total) > 0)
+                        ? Number(item.total)
+                        : (sub + iv);
+                    ingresos += tot;
+                }
+            }
+        });
+    }
+    ingresos = Math.round(ingresos * 100) / 100;
+    appState.concepts.ingresos = ingresos;
+
+    // 1 Balance parcial = Bancos + Ingresos
+    const subtotal1 = Math.round((bancos + ingresos) * 100) / 100;
     
-    // Sum from proveedores table
+    // Gastos proveedores: Todo lo que esté por pagar / programar a pago en Proveedores (excluyendo Pagado)
     let totalGastosProveedores = 0;
-    appState.proveedores.forEach(p => {
-        totalGastosProveedores += Number(p.total) || 0;
+    (appState.proveedores || []).forEach(p => {
+        if (!p) return;
+        const st = String(p.p || p.estatus || 'PROG').trim().toLowerCase();
+        if (st !== 'pagado') {
+            totalGastosProveedores += Number(p.total) || 0;
+        }
     });
+    totalGastosProveedores = Math.round(totalGastosProveedores * 100) / 100;
     
-    const subtotal2 = subtotal1 - totalGastosProveedores;
-    const gastosInd = Number(appState.concepts.gastosInd) || 670;
-    const subtotal3 = subtotal2 - gastosInd;
+    // 2 Balance parcial = 1 Balance parcial - Gastos proveedores
+    const subtotal2 = Math.round((subtotal1 - totalGastosProveedores) * 100) / 100;
+
+    // Gastos Indirectos: resultado del total de los gastos indirectos en Administración (sin registros ficticios)
+    if (!appState.gastosIndirectos || !Array.isArray(appState.gastosIndirectos)) {
+        appState.gastosIndirectos = [];
+    } else if (typeof window.isFictitiousGastoIndirecto === 'function') {
+        appState.gastosIndirectos = appState.gastosIndirectos.filter(g => !window.isFictitiousGastoIndirecto(g));
+    }
+    let gastosInd = 0;
+    if (Array.isArray(appState.gastosIndirectos)) {
+        appState.gastosIndirectos.forEach(g => {
+            if (g) gastosInd += Number(g.total) || 0;
+        });
+    }
+    gastosInd = Math.round(gastosInd * 100) / 100;
+    appState.concepts.gastosInd = gastosInd;
+
+    // 3 Balance parcial = 2 Balance parcial - Gastos Indirectos
+    const subtotal3 = Math.round((subtotal2 - gastosInd) * 100) / 100;
     
-    // Sum from nóminas table
+    // Nominas: resultado del total de nóminas
     let totalNominas = 0;
     window.getActiveNominasList().forEach(n => {
-        totalNominas += Number(n.total) || 0;
+        if (n) totalNominas += Number(n.total) || 0;
     });
+    totalNominas = Math.round(totalNominas * 100) / 100;
     
-    const subtotal4 = subtotal3 - totalNominas;
-    const impuestos = Number(appState.concepts.impuestos) || 0;
-    const totalFinal = subtotal4 - impuestos;
+    // 4 Balance parcial = 3 Balance parcial - Nominas
+    const subtotal4 = Math.round((subtotal3 - totalNominas) * 100) / 100;
+
+    // Impuestos: edición manual
+    const impuestos = (appState.concepts.impuestos !== undefined && appState.concepts.impuestos !== null && appState.concepts.impuestos !== '')
+        ? (Number(appState.concepts.impuestos) || 0)
+        : 0;
+
+    // TOTAL GENERAL = 4 Balance parcial - Impuestos
+    const totalFinal = Math.round((subtotal4 - impuestos) * 100) / 100;
     
     return {
         bancos,
@@ -1032,7 +1253,15 @@ function renderVisualizacion() {
         kpiBal.style.color = totals.totalFinal < 0 ? "#c62828" : "#2e7d32";
     }
     
-    // Update Concept Table (Imagen 2 format)
+    // Update Concept Table
+    const elBancosFecha = document.getElementById("concept-bancos-fecha");
+    if (elBancosFecha) {
+        elBancosFecha.innerText = appState.concepts?.bancosFecha ? `Fecha: ${appState.concepts.bancosFecha}` : "";
+    }
+
+    const elIngresosVal = document.getElementById("concept-ingresos-val");
+    if (elIngresosVal) elIngresosVal.innerText = formatCurrency(totals.ingresos);
+
     const elSub1 = document.getElementById("balance-subtotal-1");
     if (elSub1) elSub1.innerText = formatCurrency(totals.subtotal1);
     
@@ -1041,6 +1270,9 @@ function renderVisualizacion() {
     
     const elSub2 = document.getElementById("balance-subtotal-2");
     if (elSub2) elSub2.innerText = formatCurrency(totals.subtotal2);
+
+    const elGastosIndVal = document.getElementById("concept-gastos-ind-val");
+    if (elGastosIndVal) elGastosIndVal.innerText = formatCurrency(totals.gastosInd);
     
     const elSub3 = document.getElementById("balance-subtotal-3");
     if (elSub3) elSub3.innerText = formatCurrency(totals.subtotal3);
@@ -1076,7 +1308,15 @@ function renderVisualizacion() {
 
 function updateAdminConcept(key, value) {
     window.updateAdminConcept = updateAdminConcept;
-    appState.concepts[key] = Number(value) || 0;
+    if (!appState.concepts) appState.concepts = {};
+    appState.concepts[key] = value === '' ? 0 : (Number(value) || 0);
+    if (key === 'bancos') {
+        const now = new Date();
+        const dd = String(now.getDate()).padStart(2, '0');
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const yyyy = now.getFullYear();
+        appState.concepts.bancosFecha = `${dd}/${mm}/${yyyy}`;
+    }
     saveToStorage();
     renderVisualizacion();
 };
@@ -1084,41 +1324,71 @@ function updateAdminConcept(key, value) {
 function renderPieChart(totals) {
     const canvas = document.getElementById("admin-pie-chart");
     if (!canvas) return;
-    
-    // Destroy previous chart if exists
-    if (pieChartInstance) {
-        pieChartInstance.destroy();
-    }
-    
-    const dataValues = [
-        Math.max(totals.bancos, 0),
-        totals.totalNominas,
-        Math.max(totals.totalGastosProveedores, 100),
-        totals.gastosInd,
-        totals.impuestos
+
+    // Los colores y conceptos coinciden exactamente con las filas de la tabla Balance y Capital por Departamento:
+    // Bancos (Verde), Ingresos (Azul), Gastos proveedores (Rosa), Gastos Indirectos (Amarillo), Nominas (Negro), Impuestos (Rojo)
+    const chartLabels = ['Bancos', 'Ingresos', 'Gastos proveedores', 'Gastos Indirectos', 'Nominas', 'Impuestos'];
+    const rawValues = [
+        Math.max(Number(totals.bancos) || 0, 0),
+        Math.max(Number(totals.ingresos) || 0, 0),
+        Math.max(Number(totals.totalGastosProveedores) || 0, 0),
+        Math.max(Number(totals.gastosInd) || 0, 0),
+        Math.max(Number(totals.totalNominas) || 0, 0),
+        Math.max(Number(totals.impuestos) || 0, 0)
     ];
-    
+    const sumValues = rawValues.reduce((acc, v) => acc + v, 0);
+    const dataValues = sumValues > 0 ? rawValues : [1, 1, 1, 1, 1, 1];
+
+    const bgColors = [
+        '#A9D18E', // Bancos -> Verde
+        '#1F4E78', // Ingresos -> Azul
+        '#F8BBD0', // Gastos proveedores -> Rosa
+        '#FFE699', // Gastos Indirectos -> Amarillo
+        '#111827', // Nominas -> Negro
+        '#DC2626'  // Impuestos -> Rojo
+    ];
+    const borderColors = [
+        '#4CAF50',
+        '#0070C0',
+        '#EC407A',
+        '#F59E0B',
+        '#000000',
+        '#991B1B'
+    ];
+
+    window._latestPieRawValues = rawValues;
+
+    // Si la instancia ya existe sobre el mismo canvas, actualizar en sitio sin animación para evitar saltos visuales
+    if (pieChartInstance && pieChartInstance.canvas === canvas) {
+        pieChartInstance.data.labels = chartLabels;
+        pieChartInstance.data.datasets[0].data = dataValues;
+        pieChartInstance.data.datasets[0].backgroundColor = bgColors;
+        pieChartInstance.data.datasets[0].borderColor = borderColors;
+        pieChartInstance.update('none');
+        window.pieChartInstance = pieChartInstance;
+        return;
+    }
+
+    if (pieChartInstance) {
+        try { pieChartInstance.destroy(); } catch (e) {}
+    }
+
     const ctx = canvas.getContext('2d');
     pieChartInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['Bancos / Capital', 'Nóminas (Equipo)', 'Gastos Proveedores', 'Gastos Indirectos', 'Impuestos'],
+            labels: chartLabels,
             datasets: [{
                 data: dataValues,
-                backgroundColor: [
-                    '#4caf50', // Green
-                    '#e53935', // Red
-                    '#f58f1f', // Tangerine
-                    '#d5b370', // Gold
-                    '#829191'  // Grey
-                ],
-                borderWidth: 2,
-                borderColor: '#ffffff'
+                backgroundColor: bgColors,
+                borderColor: borderColors,
+                borderWidth: 2
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false,
             plugins: {
                 legend: {
                     position: 'bottom',
@@ -1136,7 +1406,8 @@ function renderPieChart(totals) {
                     callbacks: {
                         label: function(context) {
                             let label = context.label || '';
-                            let value = context.raw || 0;
+                            const rawArr = window._latestPieRawValues || rawValues;
+                            let value = rawArr[context.dataIndex] !== undefined ? rawArr[context.dataIndex] : (context.raw || 0);
                             return `${label}: ${formatCurrency(value)}`;
                         }
                     }
@@ -1145,16 +1416,338 @@ function renderPieChart(totals) {
             cutout: '58%'
         }
     });
+    window.pieChartInstance = pieChartInstance;
 }
 
 // ---------------------------------------------------------------------------------
-// 5. FICHA 2: ADMINISTRACIÓN QUINCENAL (NÓMINAS - IMAGEN 3)
+// 5. FICHA 2: ADMINISTRACIÓN QUINCENAL (NÓMINAS Y GASTOS INDIRECTOS - IMAGEN 4)
 // ---------------------------------------------------------------------------------
+function handleAdminQuincenalTopEdit() {
+    window.handleAdminQuincenalTopEdit = handleAdminQuincenalTopEdit;
+    if (appState.adminSubSection === 'gastos-indirectos') {
+        startEditingGastosIndirectos();
+    } else {
+        startEditingNominas();
+    }
+}
+window.handleAdminQuincenalTopEdit = handleAdminQuincenalTopEdit;
+
+function handleAdminQuincenalTopSave() {
+    window.handleAdminQuincenalTopSave = handleAdminQuincenalTopSave;
+    if (appState.adminSubSection === 'gastos-indirectos') {
+        saveEditingGastosIndirectos();
+    } else {
+        saveEditingNominas();
+    }
+}
+window.handleAdminQuincenalTopSave = handleAdminQuincenalTopSave;
+
+let _editNominasTimeout = null;
+
+async function startEditingNominas() {
+    window.startEditingNominas = startEditingNominas;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
+    if (appState.nominasLockedBy && appState.nominasLockedBy.userId !== currentUserId) {
+        const elapsed = Date.now() - (appState.nominasLockedBy.timestamp || 0);
+        if (elapsed < 5 * 60 * 1000) {
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.nominasLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    }
+
+    // Respaldar estado previo a la edición para que los cambios NO se guarden hasta dar clic en 'Guardar'
+    appState._nominasSnapshot = JSON.parse(JSON.stringify(appState.nominas || []));
+    appState._archivosQuincenalesSnapshot = JSON.parse(JSON.stringify(appState.archivosQuincenales || []));
+
+    appState.isEditingNominas = true;
+    appState.nominasLockedBy = {
+        userId: currentUserId,
+        userName: currentUserName,
+        timestamp: Date.now()
+    };
+
+    updateNominasEditButtonsUI();
+    renderNominas();
+
+    broadcastNominasLockState(true, currentUserName, currentUserId);
+    await syncNominasLockToCloud(true, currentUserName, currentUserId);
+
+    if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
+    _editNominasTimeout = setTimeout(() => {
+        if (appState.isEditingNominas) {
+            cancelEditingNominas();
+        }
+    }, 5 * 60 * 1000);
+}
+window.startEditingNominas = startEditingNominas;
+
+async function saveEditingNominas(isAuto = false) {
+    window.saveEditingNominas = saveEditingNominas;
+    if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
+
+    window._lastLocalNominasSyncTime = Date.now();
+
+    appState.isEditingNominas = false;
+    appState.nominasLockedBy = null;
+    appState._nominasSnapshot = null;
+    appState._archivosQuincenalesSnapshot = null;
+
+    saveToStorage();
+    try {
+        localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas || []));
+    } catch (e) {}
+
+    updateNominasEditButtonsUI();
+    renderNominas();
+    renderVisualizacion();
+
+    if (typeof broadcastNominasUpdate === 'function') {
+        broadcastNominasUpdate();
+    }
+    if (typeof syncNominasToCloud === 'function') {
+        syncNominasToCloud(true);
+    }
+
+    broadcastNominasLockState(false, null, null);
+    await syncNominasLockToCloud(false, null, null);
+
+    if (!isAuto && typeof showCustomNotification === 'function') {
+        showCustomNotification("Cambios de Nóminas guardados y tabla liberada con éxito.", "success");
+    }
+}
+window.saveEditingNominas = saveEditingNominas;
+
+async function cancelEditingNominas() {
+    window.cancelEditingNominas = cancelEditingNominas;
+    if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
+
+    appState.isEditingNominas = false;
+    appState.nominasLockedBy = null;
+
+    if (appState._nominasSnapshot) {
+        appState.nominas = JSON.parse(JSON.stringify(appState._nominasSnapshot));
+        appState._nominasSnapshot = null;
+    }
+    if (appState._archivosQuincenalesSnapshot) {
+        appState.archivosQuincenales = JSON.parse(JSON.stringify(appState._archivosQuincenalesSnapshot));
+        appState._archivosQuincenalesSnapshot = null;
+    }
+
+    updateNominasEditButtonsUI();
+    renderNominas();
+    renderVisualizacion();
+
+    broadcastNominasLockState(false, null, null);
+    await syncNominasLockToCloud(false, null, null);
+}
+window.cancelEditingNominas = cancelEditingNominas;
+
+function updateNominasEditButtonsUI() {
+    window.updateNominasEditButtonsUI = updateNominasEditButtonsUI;
+    const btnEdit = document.getElementById("btn-edit-nominas");
+    const btnSave = document.getElementById("btn-save-nominas");
+    const btnTopEdit = document.getElementById("btn-edit-admin-top");
+    const btnTopSave = document.getElementById("btn-save-admin-top");
+    const btnAddRow = document.getElementById("btn-add-nomina-row");
+    const banner = document.getElementById("nominas-lock-banner");
+    const bannerText = document.getElementById("nominas-lock-banner-text");
+    const tableContainer = document.getElementById("nominas-table-container");
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+    const isLockedByOther = Boolean(appState.nominasLockedBy && appState.nominasLockedBy.userId !== currentUserId);
+    const isQuincenasSubtab = (appState.adminSubSection || 'quincenas') === 'quincenas';
+
+    const applyBtnState = (editEl, saveEl) => {
+        if (isLockedByOther) {
+            if (editEl) {
+                editEl.disabled = true;
+                editEl.classList.remove("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
+                editEl.style.cursor = "not-allowed";
+                editEl.style.opacity = "0.5";
+                editEl.title = `Esta tabla está siendo editada por ${appState.nominasLockedBy.userName}`;
+            }
+            if (saveEl) {
+                saveEl.disabled = true;
+                saveEl.style.cursor = "not-allowed";
+                saveEl.style.opacity = "0.45";
+            }
+        } else if (appState.isEditingNominas) {
+            if (editEl) {
+                editEl.disabled = true;
+                editEl.classList.add("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editando...`;
+                editEl.style.cursor = "default";
+                editEl.style.opacity = "1";
+                editEl.title = "Modo de edición activo";
+            }
+            if (saveEl) {
+                saveEl.disabled = false;
+                saveEl.style.cursor = "pointer";
+                saveEl.style.opacity = "1";
+                saveEl.title = "Guardar cambios y permitir edición a otros usuarios";
+            }
+        } else {
+            if (editEl) {
+                editEl.disabled = false;
+                editEl.classList.remove("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar`;
+                editEl.style.cursor = "pointer";
+                editEl.style.opacity = "1";
+                editEl.title = "Habilitar edición en Nóminas";
+            }
+            if (saveEl) {
+                saveEl.disabled = true;
+                saveEl.style.cursor = "not-allowed";
+                saveEl.style.opacity = "0.45";
+                saveEl.title = "Haz clic en 'Editar' para comenzar";
+            }
+        }
+    };
+
+    applyBtnState(btnEdit, btnSave);
+    if (isQuincenasSubtab) {
+        applyBtnState(btnTopEdit, btnTopSave);
+    }
+
+    if (btnAddRow) {
+        btnAddRow.disabled = !appState.isEditingNominas || isLockedByOther;
+        btnAddRow.style.opacity = (!appState.isEditingNominas || isLockedByOther) ? "0.55" : "1";
+        btnAddRow.style.cursor = (!appState.isEditingNominas || isLockedByOther) ? "not-allowed" : "pointer";
+    }
+
+    if (isLockedByOther) {
+        const editorName = appState.nominasLockedBy?.userName || 'otro usuario';
+        if (tableContainer) {
+            tableContainer.classList.add("tabla-bloqueada-editando");
+            tableContainer.classList.remove("tabla-filtro-gris-edicion", "tabla-readonly-sin-editar");
+        }
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) {
+                bannerText.innerText = `Esta tabla está siendo editada por ${editorName} — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"`;
+            }
+        }
+    } else if (appState.isEditingNominas) {
+        const editorName = appState.nominasLockedBy?.userName || currentUserName;
+        if (tableContainer) {
+            tableContainer.classList.remove("tabla-bloqueada-editando", "tabla-readonly-sin-editar");
+            tableContainer.classList.add("tabla-filtro-gris-edicion");
+        }
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) {
+                bannerText.innerText = `Esta tabla está siendo editada por ${editorName} — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"`;
+            }
+        }
+    } else {
+        if (tableContainer) {
+            tableContainer.classList.remove("tabla-bloqueada-editando", "tabla-filtro-gris-edicion");
+            tableContainer.classList.add("tabla-readonly-sin-editar");
+        }
+        if (banner) banner.style.display = "none";
+    }
+}
+window.updateNominasEditButtonsUI = updateNominasEditButtonsUI;
+
+function broadcastNominasLockState(isLocked, userName, userId) {
+    window.broadcastNominasLockState = broadcastNominasLockState;
+    if (!window.chatRealtimeChannel) return;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'nominas_lock_update',
+            payload: {
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting nominas lock state:", e);
+    }
+}
+window.broadcastNominasLockState = broadcastNominasLockState;
+
+async function syncNominasLockToCloud(isLocked, userName, userId) {
+    window.syncNominasLockToCloud = syncNominasLockToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_nominas_lock__',
+            contenido: JSON.stringify({
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (e) {
+        console.warn("⚠️ Error persisting nominas lock to cloud:", e);
+    }
+}
+window.syncNominasLockToCloud = syncNominasLockToCloud;
+
+async function fetchNominasLockFromCloud() {
+    window.fetchNominasLockFromCloud = fetchNominasLockFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_nominas_lock__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                if (parsed.isLocked) {
+                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                    if (elapsed < 5 * 60 * 1000) {
+                        if (parsed.userId !== currentUserId) {
+                            appState.nominasLockedBy = parsed;
+                        }
+                    } else {
+                        appState.nominasLockedBy = null;
+                    }
+                } else {
+                    if (!appState.isEditingNominas) {
+                        appState.nominasLockedBy = null;
+                    }
+                }
+                updateNominasEditButtonsUI();
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching nominas lock from cloud:", e);
+    }
+}
+window.fetchNominasLockFromCloud = fetchNominasLockFromCloud;
+
 function renderNominas() {
     const tbody = document.getElementById("tbody-nominas");
     if (!tbody) return;
-    tbody.innerHTML = "";
-    
+
+    const mainContent = document.querySelector(".main-content");
+    const prevMainScroll = mainContent ? mainContent.scrollTop : 0;
+    const tableWrap = tbody.closest(".table-responsive");
+    const prevWrapScroll = tableWrap ? tableWrap.scrollTop : 0;
+
+    const isEditable = Boolean(appState.isEditingNominas);
+    const disabledAttr = isEditable ? "" : "disabled";
+
+    const frag = document.createDocumentFragment();
     const list = window.getActiveNominasList();
     
     list.forEach((item, index) => {
@@ -1193,39 +1786,40 @@ function renderNominas() {
         item.total = calculatedTotal;
 
         const tr = document.createElement("tr");
-        tr.setAttribute("oncontextmenu", `if(confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
-        tr.title = "Clic derecho para eliminar fila";
+        tr.setAttribute("data-row-key", `nom_${index}`);
+        tr.setAttribute("oncontextmenu", `if(appState.isEditingNominas && confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
+        tr.title = isEditable ? "Clic derecho para eliminar fila" : "Haz clic en 'Editar' para modificar esta tabla";
         tr.innerHTML = `
             <td>
-                <input type="text" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" style="text-align: center; font-weight: 700;">
+                <input type="text" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
             </td>
             <td>
-                <input type="text" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" placeholder="Empleado..." style="font-weight: 700;">
+                <input type="text" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" placeholder="Empleado..." ${disabledAttr} style="font-weight: 700;">
             </td>
             <td>
-                <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)">
+                <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)" ${disabledAttr}>
             </td>
             <td>
                 <div class="excel-currency-wrap">
                     <span class="currency-symbol">$</span>
-                    <input type="number" id="nom-nomina-input-${index}" class="excel-input number-input" value="${nominaVal || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0.00" style="font-weight: 700;">
+                    <input type="number" id="nom-nomina-input-${index}" class="excel-input number-input" value="${nominaVal || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 700;">
                 </div>
             </td>
             <td>
                 <div class="excel-percent-wrap">
-                    <input type="number" id="nom-iva-input-${index}" class="excel-input number-input" value="${ivaPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0">
+                    <input type="number" id="nom-iva-input-${index}" class="excel-input number-input" value="${ivaPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
                 </div>
             </td>
             <td>
                 <div class="excel-percent-wrap">
-                    <input type="number" id="nom-ret4-input-${index}" class="excel-input number-input" value="${retPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0">
+                    <input type="number" id="nom-ret4-input-${index}" class="excel-input number-input" value="${retPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
                 </div>
             </td>
             <td>
                 <div class="excel-percent-wrap">
-                    <input type="number" id="nom-retisr-input-${index}" class="excel-input number-input" value="${retIsrPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0">
+                    <input type="number" id="nom-retisr-input-${index}" class="excel-input number-input" value="${retIsrPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
                 </div>
             </td>
@@ -1236,16 +1830,22 @@ function renderNominas() {
                 </div>
             </td>
         `;
-        tbody.appendChild(tr);
+        frag.appendChild(tr);
     });
     
     // Bottom Green Summary Row (Imagen 3 style)
     const summaryTr = document.createElement("tr");
     summaryTr.className = "excel-green-row";
     summaryTr.id = "excel-nominas-totals-row";
-    tbody.appendChild(summaryTr);
+    frag.appendChild(summaryTr);
+
+    tbody.replaceChildren(frag);
     
     recalculateNominasTableTotals();
+    updateNominasEditButtonsUI();
+
+    if (tableWrap) tableWrap.scrollTop = prevWrapScroll;
+    if (mainContent) mainContent.scrollTop = prevMainScroll;
 }
 
 function handlePInputChange(inputEl, index, type) {
@@ -1263,43 +1863,44 @@ function handlePInputChange(inputEl, index, type) {
         const list = window.getActiveNominasList();
         if (list[index]) {
             list[index].p = val;
-            saveToStorage();
+            if (!appState.isEditingNominas) saveToStorage();
         }
     } else if (type === 'proveedor') {
         if (appState.proveedores[index]) {
             appState.proveedores[index].p = val;
-            saveToStorage();
+            if (!appState.isEditingProveedores) saveToStorage();
         }
     }
 };
 
 function updateNominaCell(index, key, val) {
     window.updateNominaCell = updateNominaCell;
+    if (!appState.isEditingNominas) return;
     const list = window.getActiveNominasList();
     if (list[index]) {
         list[index][key] = val;
         if (key === 'nomina') {
             list[index].servicio = val;
         }
-        saveToStorage();
-        if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
+        // No guardar en localStorage ni nube hasta dar clic en "Guardar"
     }
 };
+window.updateNominaCell = updateNominaCell;
 
 function updateNominaManualTotal(index, val) {
     window.updateNominaManualTotal = updateNominaManualTotal;
+    if (!appState.isEditingNominas) return;
     const list = window.getActiveNominasList();
     if (list[index]) {
         list[index].total = Number(val) || 0;
         recalculateNominasTableTotals();
-        saveToStorage();
         renderVisualizacion();
-        if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
     }
 };
 
 function liveUpdateNominaTotals(index) {
     window.liveUpdateNominaTotals = liveUpdateNominaTotals;
+    if (!appState.isEditingNominas) return;
     const list = window.getActiveNominasList();
     if (!list || !list[index]) return;
 
@@ -1340,9 +1941,7 @@ function liveUpdateNominaTotals(index) {
     list[index].total = calculatedTotal;
     
     recalculateNominasTableTotals();
-    saveToStorage();
     renderVisualizacion();
-    if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
 };
 
 function recalculateNominasTableTotals() {
@@ -1390,6 +1989,12 @@ function recalculateNominasTableTotals() {
 
 function addNewNominaRow() {
     window.addNewNominaRow = addNewNominaRow;
+    if (!appState.isEditingNominas) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para agregar o modificar registros de Nómina.", "info");
+        }
+        return;
+    }
     const nextNum = window.getActiveNominasList().length + 1;
     window.getActiveNominasList().push({
         folio: String(nextNum),
@@ -1406,20 +2011,22 @@ function addNewNominaRow() {
         retIsr: 0,
         total: 0
     });
-    saveToStorage();
     renderNominas();
     renderVisualizacion();
-    if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
 };
 
 function deleteNominaRecord(index) {
     window.deleteNominaRecord = deleteNominaRecord;
+    if (!appState.isEditingNominas) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para eliminar registros de Nómina.", "info");
+        }
+        return;
+    }
     if (confirm("¿Estás seguro de que deseas eliminar este registro de nómina?")) {
         window.getActiveNominasList().splice(index, 1);
-        saveToStorage();
         renderNominas();
         renderVisualizacion();
-        if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
     }
 };
 
@@ -1482,12 +2089,14 @@ window.broadcastNominasUpdate = broadcastNominasUpdate;
 
 async function fetchNominasFromCloud() {
     window.fetchNominasFromCloud = fetchNominasFromCloud;
+    if (appState.isEditingNominas) return;
+    if (Date.now() - (window._lastLocalNominasSyncTime || 0) < 5000) return;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
     try {
-        const { data: msgs, error } = await client.from('messages')
+        const { data: msgs } = await client.from('messages')
             .select('contenido, created_at')
             .eq('chat_id', '__cloud_sync_nominas__')
             .order('created_at', { ascending: false })
@@ -1497,14 +2106,19 @@ async function fetchNominasFromCloud() {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
                 if (parsed && Array.isArray(parsed.nominas)) {
+                    const prevJson = JSON.stringify(appState.nominas || []);
+                    const nextJson = JSON.stringify(parsed.nominas);
+                    const changed = prevJson !== nextJson;
                     appState.nominas = parsed.nominas;
                     if (Array.isArray(parsed.archivosQuincenales)) {
                         appState.archivosQuincenales = parsed.archivosQuincenales;
                     }
-                    saveToStorage();
-                    if (appState.currentTab === 'admin') {
-                        renderNominas();
-                        renderVisualizacion();
+                    if (changed) {
+                        saveToStorage();
+                        if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
+                            renderNominas();
+                            renderVisualizacion();
+                        }
                     }
                 }
             } catch (e) {}
@@ -1516,6 +2130,784 @@ async function fetchNominasFromCloud() {
 window.fetchNominasFromCloud = fetchNominasFromCloud;
 
 // ---------------------------------------------------------------------------------
+// 5b. SUB-SECCIÓN: GASTOS INDIRECTOS (IMAGEN 2 Y 4)
+// ---------------------------------------------------------------------------------
+let _editGastosIndirectosTimeout = null;
+
+async function startEditingGastosIndirectos() {
+    window.startEditingGastosIndirectos = startEditingGastosIndirectos;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
+    if (appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId) {
+        const elapsed = Date.now() - (appState.gastosIndirectosLockedBy.timestamp || 0);
+        if (elapsed < 5 * 60 * 1000) {
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.gastosIndirectosLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    }
+
+    appState._gastosIndirectosSnapshot = JSON.parse(JSON.stringify(appState.gastosIndirectos || []));
+
+    appState.isEditingGastosIndirectos = true;
+    appState.gastosIndirectosLockedBy = {
+        userId: currentUserId,
+        userName: currentUserName,
+        timestamp: Date.now()
+    };
+
+    updateGastosIndirectosEditButtonsUI();
+    renderGastosIndirectos();
+
+    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId);
+    await syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId);
+
+    if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
+    _editGastosIndirectosTimeout = setTimeout(() => {
+        if (appState.isEditingGastosIndirectos) {
+            cancelEditingGastosIndirectos();
+        }
+    }, 5 * 60 * 1000);
+}
+window.startEditingGastosIndirectos = startEditingGastosIndirectos;
+
+async function saveEditingGastosIndirectos(isAuto = false) {
+    window.saveEditingGastosIndirectos = saveEditingGastosIndirectos;
+    if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
+
+    window._lastLocalGastosIndSyncTime = Date.now();
+
+    appState.isEditingGastosIndirectos = false;
+    appState.gastosIndirectosLockedBy = null;
+    appState._gastosIndirectosSnapshot = null;
+
+    saveToStorage();
+    try {
+        localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos || []));
+    } catch (e) {}
+
+    updateGastosIndirectosEditButtonsUI();
+    renderGastosIndirectos();
+    renderVisualizacion();
+
+    broadcastGastosIndirectosUpdate();
+    syncGastosIndirectosToCloud(true);
+
+    broadcastGastosIndirectosLockState(false, null, null);
+    await syncGastosIndirectosLockToCloud(false, null, null);
+
+    if (!isAuto && typeof showCustomNotification === 'function') {
+        showCustomNotification("Cambios de Gastos Indirectos guardados y tabla liberada con éxito.", "success");
+    }
+}
+window.saveEditingGastosIndirectos = saveEditingGastosIndirectos;
+
+async function cancelEditingGastosIndirectos() {
+    window.cancelEditingGastosIndirectos = cancelEditingGastosIndirectos;
+    if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
+
+    appState.isEditingGastosIndirectos = false;
+    appState.gastosIndirectosLockedBy = null;
+
+    if (appState._gastosIndirectosSnapshot) {
+        appState.gastosIndirectos = JSON.parse(JSON.stringify(appState._gastosIndirectosSnapshot));
+        appState._gastosIndirectosSnapshot = null;
+    }
+
+    updateGastosIndirectosEditButtonsUI();
+    renderGastosIndirectos();
+    renderVisualizacion();
+
+    broadcastGastosIndirectosLockState(false, null, null);
+    await syncGastosIndirectosLockToCloud(false, null, null);
+}
+window.cancelEditingGastosIndirectos = cancelEditingGastosIndirectos;
+
+function updateGastosIndirectosEditButtonsUI() {
+    window.updateGastosIndirectosEditButtonsUI = updateGastosIndirectosEditButtonsUI;
+    const btnEdit = document.getElementById("btn-edit-gastos-ind");
+    const btnSave = document.getElementById("btn-save-gastos-ind");
+    const btnTopEdit = document.getElementById("btn-edit-admin-top");
+    const btnTopSave = document.getElementById("btn-save-admin-top");
+    const btnAddRow = document.getElementById("btn-add-gasto-indirecto");
+    const banner = document.getElementById("gastos-indirectos-lock-banner");
+    const bannerText = document.getElementById("gastos-indirectos-lock-banner-text");
+    const tableContainer = document.getElementById("gastos-indirectos-table-container");
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+    const isLockedByOther = Boolean(appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId);
+    const isGastosIndSubtab = appState.adminSubSection === 'gastos-indirectos';
+
+    const applyBtnState = (editEl, saveEl) => {
+        if (isLockedByOther) {
+            if (editEl) {
+                editEl.disabled = true;
+                editEl.classList.remove("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
+                editEl.style.cursor = "not-allowed";
+                editEl.style.opacity = "0.5";
+                editEl.title = `Esta tabla está siendo editada por ${appState.gastosIndirectosLockedBy.userName}`;
+            }
+            if (saveEl) {
+                saveEl.disabled = true;
+                saveEl.style.cursor = "not-allowed";
+                saveEl.style.opacity = "0.45";
+            }
+        } else if (appState.isEditingGastosIndirectos) {
+            if (editEl) {
+                editEl.disabled = true;
+                editEl.classList.add("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editando...`;
+                editEl.style.cursor = "default";
+                editEl.style.opacity = "1";
+                editEl.title = "Modo de edición activo";
+            }
+            if (saveEl) {
+                saveEl.disabled = false;
+                saveEl.style.cursor = "pointer";
+                saveEl.style.opacity = "1";
+                saveEl.title = "Guardar cambios y permitir edición a otros usuarios";
+            }
+        } else {
+            if (editEl) {
+                editEl.disabled = false;
+                editEl.classList.remove("active-editing");
+                editEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar`;
+                editEl.style.cursor = "pointer";
+                editEl.style.opacity = "1";
+                editEl.title = "Habilitar edición en Gastos Indirectos";
+            }
+            if (saveEl) {
+                saveEl.disabled = true;
+                saveEl.style.cursor = "not-allowed";
+                saveEl.style.opacity = "0.45";
+                saveEl.title = "Haz clic en 'Editar' para comenzar";
+            }
+        }
+    };
+
+    applyBtnState(btnEdit, btnSave);
+    if (isGastosIndSubtab) {
+        applyBtnState(btnTopEdit, btnTopSave);
+    }
+
+    if (btnAddRow) {
+        btnAddRow.disabled = !appState.isEditingGastosIndirectos || isLockedByOther;
+        btnAddRow.style.opacity = (!appState.isEditingGastosIndirectos || isLockedByOther) ? "0.55" : "1";
+        btnAddRow.style.cursor = (!appState.isEditingGastosIndirectos || isLockedByOther) ? "not-allowed" : "pointer";
+    }
+
+    if (isLockedByOther) {
+        const editorName = appState.gastosIndirectosLockedBy?.userName || 'otro usuario';
+        if (tableContainer) {
+            tableContainer.classList.add("tabla-bloqueada-editando");
+            tableContainer.classList.remove("tabla-filtro-gris-edicion", "tabla-readonly-sin-editar");
+        }
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) {
+                bannerText.innerText = `Esta tabla está siendo editada por ${editorName} — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"`;
+            }
+        }
+    } else if (appState.isEditingGastosIndirectos) {
+        const editorName = appState.gastosIndirectosLockedBy?.userName || currentUserName;
+        if (tableContainer) {
+            tableContainer.classList.remove("tabla-bloqueada-editando", "tabla-readonly-sin-editar");
+            tableContainer.classList.add("tabla-filtro-gris-edicion");
+        }
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) {
+                bannerText.innerText = `Esta tabla está siendo editada por ${editorName} — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"`;
+            }
+        }
+    } else {
+        if (tableContainer) {
+            tableContainer.classList.remove("tabla-bloqueada-editando", "tabla-filtro-gris-edicion");
+            tableContainer.classList.add("tabla-readonly-sin-editar");
+        }
+        if (banner) banner.style.display = "none";
+    }
+}
+window.updateGastosIndirectosEditButtonsUI = updateGastosIndirectosEditButtonsUI;
+
+function broadcastGastosIndirectosLockState(isLocked, userName, userId) {
+    window.broadcastGastosIndirectosLockState = broadcastGastosIndirectosLockState;
+    if (!window.chatRealtimeChannel) return;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'gastos_indirectos_lock_update',
+            payload: {
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting gastos indirectos lock state:", e);
+    }
+}
+window.broadcastGastosIndirectosLockState = broadcastGastosIndirectosLockState;
+
+async function syncGastosIndirectosLockToCloud(isLocked, userName, userId) {
+    window.syncGastosIndirectosLockToCloud = syncGastosIndirectosLockToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_gastos_indirectos_lock__',
+            contenido: JSON.stringify({
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (e) {
+        console.warn("⚠️ Error persisting gastos indirectos lock to cloud:", e);
+    }
+}
+window.syncGastosIndirectosLockToCloud = syncGastosIndirectosLockToCloud;
+
+async function fetchGastosIndirectosLockFromCloud() {
+    window.fetchGastosIndirectosLockFromCloud = fetchGastosIndirectosLockFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_gastos_indirectos_lock__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                if (parsed.isLocked) {
+                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                    if (elapsed < 5 * 60 * 1000) {
+                        if (parsed.userId !== currentUserId) {
+                            appState.gastosIndirectosLockedBy = parsed;
+                        }
+                    } else {
+                        appState.gastosIndirectosLockedBy = null;
+                    }
+                } else {
+                    if (!appState.isEditingGastosIndirectos) {
+                        appState.gastosIndirectosLockedBy = null;
+                    }
+                }
+                updateGastosIndirectosEditButtonsUI();
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching gastos indirectos lock from cloud:", e);
+    }
+}
+window.fetchGastosIndirectosLockFromCloud = fetchGastosIndirectosLockFromCloud;
+
+let _syncGastosIndirectosTimer = null;
+function syncGastosIndirectosToCloud(forceImmediate = false) {
+    window.syncGastosIndirectosToCloud = syncGastosIndirectosToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    const doSync = async () => {
+        try {
+            const list = (appState.gastosIndirectos || []).filter(g => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(g));
+            await client.from('messages').insert({
+                chat_id: '__cloud_sync_gastos_indirectos__',
+                contenido: JSON.stringify(list),
+                emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                emisor_role: 'sistema'
+            });
+        } catch (e) {
+            console.warn("⚠️ Error persisting gastos indirectos to Supabase:", e);
+        }
+    };
+
+    if (_syncGastosIndirectosTimer) clearTimeout(_syncGastosIndirectosTimer);
+    if (forceImmediate) {
+        doSync();
+    } else {
+        _syncGastosIndirectosTimer = setTimeout(doSync, 500);
+    }
+}
+window.syncGastosIndirectosToCloud = syncGastosIndirectosToCloud;
+
+function broadcastGastosIndirectosUpdate() {
+    window.broadcastGastosIndirectosUpdate = broadcastGastosIndirectosUpdate;
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'gastos_indirectos_update',
+                payload: {
+                    gastosIndirectos: appState.gastosIndirectos || [],
+                    sender: appState.currentUser?.email || 'admin',
+                    timestamp: new Date().toISOString()
+                }
+            });
+        } catch (e) {
+            console.warn("⚠️ Error broadcasting gastos indirectos update:", e);
+        }
+    }
+    syncGastosIndirectosToCloud();
+}
+window.broadcastGastosIndirectosUpdate = broadcastGastosIndirectosUpdate;
+
+let _debouncedGastosIndTimer = null;
+function debouncedBroadcastGastosIndirectos() {
+    window.debouncedBroadcastGastosIndirectos = debouncedBroadcastGastosIndirectos;
+    if (_debouncedGastosIndTimer) clearTimeout(_debouncedGastosIndTimer);
+    _debouncedGastosIndTimer = setTimeout(() => {
+        broadcastGastosIndirectosUpdate();
+    }, 250);
+}
+window.debouncedBroadcastGastosIndirectos = debouncedBroadcastGastosIndirectos;
+
+async function fetchGastosIndirectosFromCloud() {
+    window.fetchGastosIndirectosFromCloud = fetchGastosIndirectosFromCloud;
+    if (appState.isEditingGastosIndirectos) return;
+    if (Date.now() - (window._lastLocalGastosIndSyncTime || 0) < 5000) return;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_gastos_indirectos__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                if (Array.isArray(parsed)) {
+                    const cleanParsed = parsed.filter(g => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(g));
+                    const prevJson = JSON.stringify(appState.gastosIndirectos || []);
+                    const nextJson = JSON.stringify(cleanParsed);
+                    if (prevJson !== nextJson) {
+                        appState.gastosIndirectos = cleanParsed;
+                        saveToStorage();
+                        if (appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
+                            renderGastosIndirectos();
+                        }
+                        recalculateGastosIndirectosTotals();
+                    }
+                }
+            } catch (e) {}
+        }
+    } catch (err) {
+        console.warn("⚠️ Error fetching gastos indirectos from cloud:", err);
+    }
+}
+window.fetchGastosIndirectosFromCloud = fetchGastosIndirectosFromCloud;
+
+function switchAdminSubSection(subSec) {
+    window.switchAdminSubSection = switchAdminSubSection;
+    const prevSub = appState.adminSubSection || 'quincenas';
+    if (prevSub !== subSec) {
+        if (prevSub === 'quincenas' && appState.isEditingNominas && typeof cancelEditingNominas === 'function') {
+            cancelEditingNominas();
+        }
+        if (prevSub === 'gastos-indirectos' && appState.isEditingGastosIndirectos && typeof cancelEditingGastosIndirectos === 'function') {
+            cancelEditingGastosIndirectos();
+        }
+    }
+    appState.adminSubSection = subSec || 'quincenas';
+    const btnQuincenas = document.getElementById('btn-subtab-quincenas');
+    const btnGastosInd = document.getElementById('btn-subtab-gastos-ind');
+    const secQuincenas = document.getElementById('admin-sec-quincenas');
+    const secGastosInd = document.getElementById('admin-sec-gastos-indirectos');
+
+    if (subSec === 'gastos-indirectos') {
+        if (secQuincenas) secQuincenas.style.display = 'none';
+        if (secGastosInd) secGastosInd.style.display = 'block';
+
+        if (btnQuincenas) {
+            btnQuincenas.classList.remove('active');
+            btnQuincenas.style.background = '#FFFFFF';
+            btnQuincenas.style.color = '#475569';
+            btnQuincenas.style.borderColor = 'rgba(15,23,42,0.15)';
+            btnQuincenas.style.boxShadow = 'none';
+        }
+        if (btnGastosInd) {
+            btnGastosInd.classList.add('active');
+            btnGastosInd.style.background = '#2563EB';
+            btnGastosInd.style.color = '#FFFFFF';
+            btnGastosInd.style.borderColor = '#2563EB';
+            btnGastosInd.style.boxShadow = '0 2px 6px rgba(37,99,235,0.25)';
+        }
+        renderGastosIndirectos();
+        updateGastosIndirectosEditButtonsUI();
+    } else {
+        if (secQuincenas) secQuincenas.style.display = 'block';
+        if (secGastosInd) secGastosInd.style.display = 'none';
+
+        if (btnQuincenas) {
+            btnQuincenas.classList.add('active');
+            btnQuincenas.style.background = '#2563EB';
+            btnQuincenas.style.color = '#FFFFFF';
+            btnQuincenas.style.borderColor = '#2563EB';
+            btnQuincenas.style.boxShadow = '0 2px 6px rgba(37,99,235,0.25)';
+        }
+        if (btnGastosInd) {
+            btnGastosInd.classList.remove('active');
+            btnGastosInd.style.background = '#FFFFFF';
+            btnGastosInd.style.color = '#475569';
+            btnGastosInd.style.borderColor = 'rgba(15,23,42,0.15)';
+            btnGastosInd.style.boxShadow = 'none';
+        }
+        renderNominas();
+        updateNominasEditButtonsUI();
+    }
+}
+window.switchAdminSubSection = switchAdminSubSection;
+
+const GI_CATEGORIAS_CONFIG = [
+    { value: 'Servicios', label: 'Servicios', slug: 'servicios' },
+    { value: 'Papelería', label: 'Papelería', slug: 'papeleria' },
+    { value: 'Combustible', label: 'Combustible', slug: 'combustible' },
+    { value: 'Mantenimiento', label: 'Mantenimiento', slug: 'mantenimiento' },
+    { value: 'Renta', label: 'Renta', slug: 'renta' },
+    { value: 'Sistemas', label: 'Sistemas', slug: 'sistemas' },
+    { value: 'Otros', label: 'Otros', slug: 'otros' }
+];
+
+function getGastoIndCatConfig(catName) {
+    const norm = String(catName || 'Servicios').trim().toLowerCase();
+    return GI_CATEGORIAS_CONFIG.find(c => c.value.toLowerCase() === norm || c.slug === norm) || GI_CATEGORIAS_CONFIG[0];
+}
+
+function toggleGastoIndCategoriaDropdown(index, event) {
+    window.toggleGastoIndCategoriaDropdown = toggleGastoIndCategoriaDropdown;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingGastosIndirectos) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para cambiar la categoría o modificar Gastos Indirectos.", "info");
+        }
+        return;
+    }
+
+    let menu = document.getElementById("global-gi-categoria-menu");
+    if (!menu) {
+        menu = document.createElement("div");
+        menu.id = "global-gi-categoria-menu";
+        menu.className = "gi-cat-global-menu";
+        document.body.appendChild(menu);
+    }
+
+    if (menu.style.display === "block" && menu.dataset.currentIndex === String(index)) {
+        menu.style.display = "none";
+        return;
+    }
+
+    menu.dataset.currentIndex = String(index);
+    const currentItem = (appState.gastosIndirectos || [])[index];
+    const currentCat = getGastoIndCatConfig(currentItem ? currentItem.categoria : 'Servicios');
+
+    menu.innerHTML = GI_CATEGORIAS_CONFIG.map(cat => {
+        const isSel = cat.value === currentCat.value;
+        return `
+            <div class="gi-cat-option ${isSel ? 'selected' : ''}" data-cat="${cat.value}" onclick="selectGastoIndCategoria('${cat.value}', event)">
+                <span class="gi-cat-option-left">
+                    <span class="gi-cat-dot gi-cat-dot-${cat.slug}"></span>
+                    <span>${cat.label}</span>
+                </span>
+                <span class="material-symbols-outlined gi-check">check</span>
+            </div>
+        `;
+    }).join('');
+
+    const trigger = (event && (event.currentTarget || event.target.closest(".gi-cat-trigger"))) || document.getElementById(`gi-cat-trigger-${index}`);
+    if (trigger) {
+        const rect = trigger.getBoundingClientRect();
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.left = `${rect.left}px`;
+        menu.style.display = "block";
+    }
+}
+window.toggleGastoIndCategoriaDropdown = toggleGastoIndCategoriaDropdown;
+
+function selectGastoIndCategoria(newCat, event) {
+    window.selectGastoIndCategoria = selectGastoIndCategoria;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const menu = document.getElementById("global-gi-categoria-menu");
+    if (!menu) return;
+    const idx = parseInt(menu.dataset.currentIndex, 10);
+    menu.style.display = "none";
+
+    if (!appState.isEditingGastosIndirectos) return;
+    if (isNaN(idx) || !appState.gastosIndirectos || !appState.gastosIndirectos[idx]) return;
+
+    const cfg = getGastoIndCatConfig(newCat);
+    appState.gastosIndirectos[idx].categoria = cfg.value;
+
+    const trigger = document.getElementById(`gi-cat-trigger-${idx}`);
+    if (trigger) {
+        trigger.className = `gi-cat-trigger gi-cat-${cfg.slug}`;
+        trigger.innerHTML = `
+            <span class="gi-cat-trigger-left">
+                <span class="gi-cat-dot gi-cat-dot-${cfg.slug}"></span>
+                <span class="gi-cat-label">${cfg.label}</span>
+            </span>
+            <span class="material-symbols-outlined" style="font-size: 16px;">expand_more</span>
+        `;
+    }
+}
+window.selectGastoIndCategoria = selectGastoIndCategoria;
+
+function renderGastosIndirectos() {
+    window.renderGastosIndirectos = renderGastosIndirectos;
+    const tbody = document.getElementById('tbody-gastos-indirectos');
+    if (!tbody) return;
+
+    const mainContent = document.querySelector(".main-content");
+    const prevMainScroll = mainContent ? mainContent.scrollTop : 0;
+    const tableWrap = tbody.closest(".table-responsive");
+    const prevWrapScroll = tableWrap ? tableWrap.scrollTop : 0;
+
+    if (!appState.gastosIndirectos || !Array.isArray(appState.gastosIndirectos)) {
+        appState.gastosIndirectos = [];
+    } else if (typeof window.isFictitiousGastoIndirecto === 'function') {
+        appState.gastosIndirectos = appState.gastosIndirectos.filter(g => !window.isFictitiousGastoIndirecto(g));
+    }
+
+    const isEditable = Boolean(appState.isEditingGastosIndirectos);
+    const disabledAttr = isEditable ? "" : "disabled";
+
+    const frag = document.createDocumentFragment();
+
+    appState.gastosIndirectos.forEach((item, index) => {
+        const catCfg = getGastoIndCatConfig(item.categoria);
+        const tr = document.createElement('tr');
+        tr.id = `gi-row-${index}`;
+        tr.setAttribute('data-row-key', `gasto_ind_${index}`);
+        tr.innerHTML = `
+            <td style="text-align: center;">
+                <input type="text" class="excel-input" value="${item.folio || ('GI-' + String(index + 1).padStart(3, '0'))}" oninput="updateGastoIndirectoCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
+            </td>
+            <td style="text-align: center;">
+                <input type="date" class="excel-input" value="${item.fecha || ''}" oninput="updateGastoIndirectoCell(${index}, 'fecha', this.value)" ${disabledAttr} style="text-align: center;">
+            </td>
+            <td>
+                <input type="text" class="excel-input" value="${item.concepto || ''}" oninput="updateGastoIndirectoCell(${index}, 'concepto', this.value)" placeholder="Descripción del gasto..." ${disabledAttr} style="font-weight: 600;">
+            </td>
+            <td>
+                <button type="button" id="gi-cat-trigger-${index}" class="gi-cat-trigger gi-cat-${catCfg.slug} ${!isEditable ? 'trigger-locked' : ''}" onclick="toggleGastoIndCategoriaDropdown(${index}, event)" title="${isEditable ? 'Seleccionar categoría' : 'Haz clic en \'Editar\' para cambiar categoría'}">
+                    <span class="gi-cat-trigger-left">
+                        <span class="gi-cat-dot gi-cat-dot-${catCfg.slug}"></span>
+                        <span class="gi-cat-label">${catCfg.label}</span>
+                    </span>
+                    <span class="material-symbols-outlined" style="font-size: 16px;">expand_more</span>
+                </button>
+            </td>
+            <td>
+                <div class="excel-currency-wrap">
+                    <span class="currency-symbol">$</span>
+                    <input type="number" id="gi-subtotal-input-${index}" class="excel-input number-input" value="${item.subtotal || 0}" step="any" oninput="liveUpdateGastoIndirectoTotals(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 700;">
+                </div>
+            </td>
+            <td>
+                <div class="excel-currency-wrap">
+                    <span class="currency-symbol">$</span>
+                    <input type="number" id="gi-iva-input-${index}" class="excel-input number-input" value="${item.iva || 0}" step="any" oninput="liveUpdateGastoIndirectoTotals(${index})" placeholder="0.00" ${disabledAttr}>
+                </div>
+            </td>
+            <td>
+                <div class="excel-currency-wrap">
+                    <span class="currency-symbol">$</span>
+                    <input type="number" id="gi-total-input-${index}" class="excel-input number-input" value="${item.total || 0}" step="any" oninput="liveUpdateGastoIndirectoFromTotal(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 800; color: #1E293B;">
+                </div>
+            </td>
+            <td>
+                <input type="text" class="excel-input" value="${item.factura || ''}" oninput="updateGastoIndirectoCell(${index}, 'factura', this.value)" placeholder="Folio/Factura" ${disabledAttr} style="text-align: center;">
+            </td>
+            <td style="text-align: center;">
+                <button type="button" class="btn-icon text-danger" onclick="deleteGastoIndirectoRow(${index})" ${disabledAttr} title="${isEditable ? 'Eliminar este gasto indirecto' : 'Haz clic en Editar para eliminar'}" style="background: none; border: none; cursor: ${isEditable ? 'pointer' : 'not-allowed'}; color: #EF4444; opacity: ${isEditable ? '1' : '0.45'};">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+                </button>
+            </td>
+        `;
+        frag.appendChild(tr);
+    });
+
+    const totalsRow = document.createElement('tr');
+    totalsRow.id = 'excel-gastos-indirectos-totals-row';
+    totalsRow.className = 'excel-totals-row';
+    totalsRow.style.background = '#F8FAFC';
+    totalsRow.style.borderTop = '2px solid #CBD5E1';
+    frag.appendChild(totalsRow);
+
+    tbody.replaceChildren(frag);
+
+    recalculateGastosIndirectosTotals();
+    updateGastosIndirectosEditButtonsUI();
+
+    if (tableWrap) tableWrap.scrollTop = prevWrapScroll;
+    if (mainContent) mainContent.scrollTop = prevMainScroll;
+}
+window.renderGastosIndirectos = renderGastosIndirectos;
+
+function addNewGastoIndirectoRow() {
+    window.addNewGastoIndirectoRow = addNewGastoIndirectoRow;
+    if (!appState.isEditingGastosIndirectos) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para agregar un Gasto Indirecto.", "info");
+        }
+        return;
+    }
+    if (!appState.gastosIndirectos) appState.gastosIndirectos = [];
+    const nextFolioNum = appState.gastosIndirectos.length + 1;
+    const newRow = {
+        id: `gi_${Date.now()}`,
+        folio: `GI-${String(nextFolioNum).padStart(3, '0')}`,
+        fecha: new Date().toISOString().split('T')[0],
+        concepto: '',
+        categoria: 'Servicios',
+        subtotal: 0,
+        iva: 0,
+        total: 0,
+        factura: ''
+    };
+    appState.gastosIndirectos.push(newRow);
+    renderGastosIndirectos();
+}
+window.addNewGastoIndirectoRow = addNewGastoIndirectoRow;
+
+function deleteGastoIndirectoRow(index) {
+    window.deleteGastoIndirectoRow = deleteGastoIndirectoRow;
+    if (!appState.isEditingGastosIndirectos) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para eliminar un Gasto Indirecto.", "info");
+        }
+        return;
+    }
+    if (confirm("¿Estás seguro de que deseas eliminar este gasto indirecto?")) {
+        appState.gastosIndirectos.splice(index, 1);
+        renderGastosIndirectos();
+    }
+}
+window.deleteGastoIndirectoRow = deleteGastoIndirectoRow;
+
+function updateGastoIndirectoCell(index, key, val) {
+    window.updateGastoIndirectoCell = updateGastoIndirectoCell;
+    if (!appState.isEditingGastosIndirectos) return;
+    if (appState.gastosIndirectos && appState.gastosIndirectos[index]) {
+        appState.gastosIndirectos[index][key] = val;
+    }
+}
+window.updateGastoIndirectoCell = updateGastoIndirectoCell;
+
+function liveUpdateGastoIndirectoTotals(index) {
+    window.liveUpdateGastoIndirectoTotals = liveUpdateGastoIndirectoTotals;
+    if (!appState.isEditingGastosIndirectos) return;
+    const subtotalEl = document.getElementById(`gi-subtotal-input-${index}`);
+    const ivaEl = document.getElementById(`gi-iva-input-${index}`);
+    const totalEl = document.getElementById(`gi-total-input-${index}`);
+
+    if (subtotalEl && totalEl && appState.gastosIndirectos && appState.gastosIndirectos[index]) {
+        const subtotal = Number(subtotalEl.value) || 0;
+        let iva = 0;
+        if (ivaEl) {
+            if (document.activeElement === ivaEl) {
+                iva = Number(ivaEl.value) || 0;
+            } else {
+                iva = Number((subtotal * 0.16).toFixed(2));
+                ivaEl.value = iva;
+            }
+        }
+        const total = Number((subtotal + iva).toFixed(2));
+        totalEl.value = total;
+
+        appState.gastosIndirectos[index].subtotal = subtotal;
+        appState.gastosIndirectos[index].iva = iva;
+        appState.gastosIndirectos[index].total = total;
+
+        recalculateGastosIndirectosTotals();
+    }
+}
+window.liveUpdateGastoIndirectoTotals = liveUpdateGastoIndirectoTotals;
+
+function liveUpdateGastoIndirectoFromTotal(index) {
+    window.liveUpdateGastoIndirectoFromTotal = liveUpdateGastoIndirectoFromTotal;
+    if (!appState.isEditingGastosIndirectos) return;
+    const subtotalEl = document.getElementById(`gi-subtotal-input-${index}`);
+    const ivaEl = document.getElementById(`gi-iva-input-${index}`);
+    const totalEl = document.getElementById(`gi-total-input-${index}`);
+
+    if (totalEl && appState.gastosIndirectos && appState.gastosIndirectos[index]) {
+        const total = Number(totalEl.value) || 0;
+        const subtotal = Number((total / 1.16).toFixed(2));
+        const iva = Number((total - subtotal).toFixed(2));
+        if (subtotalEl && document.activeElement !== subtotalEl) subtotalEl.value = subtotal;
+        if (ivaEl && document.activeElement !== ivaEl) ivaEl.value = iva;
+
+        appState.gastosIndirectos[index].subtotal = subtotal;
+        appState.gastosIndirectos[index].iva = iva;
+        appState.gastosIndirectos[index].total = total;
+
+        recalculateGastosIndirectosTotals();
+    }
+}
+window.liveUpdateGastoIndirectoFromTotal = liveUpdateGastoIndirectoFromTotal;
+
+function recalculateGastosIndirectosTotals() {
+    window.recalculateGastosIndirectosTotals = recalculateGastosIndirectosTotals;
+    let sumSubtotal = 0;
+    let sumIva = 0;
+    let sumTotal = 0;
+
+    (appState.gastosIndirectos || []).forEach(item => {
+        if (!item) return;
+        sumSubtotal += Number(item.subtotal) || 0;
+        sumIva += Number(item.iva) || 0;
+        sumTotal += Number(item.total) || 0;
+    });
+
+    const totalsRow = document.getElementById("excel-gastos-indirectos-totals-row");
+    if (totalsRow) {
+        totalsRow.innerHTML = `
+            <td style="text-align: center; font-weight: 700;">Total</td>
+            <td style="text-align: center; font-weight: 600;">Suma Calculada</td>
+            <td></td>
+            <td></td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumSubtotal)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumIva)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px; color: #B91C1C;">${formatCurrency(sumTotal)}</td>
+            <td></td>
+            <td style="text-align: center;"><span class="material-symbols-outlined" style="font-size: 15px;">lock</span></td>
+        `;
+    }
+
+    if (!appState.concepts) appState.concepts = {};
+    appState.concepts.gastosInd = Math.round(sumTotal * 100) / 100;
+    const inputConcept = document.getElementById("concept-gastos-ind-input");
+    if (inputConcept) inputConcept.value = sumTotal.toFixed(2);
+    if (typeof window.renderVisualizacion === 'function') {
+        window.renderVisualizacion();
+    }
+}
+window.recalculateGastosIndirectosTotals = recalculateGastosIndirectosTotals;
+
+// ---------------------------------------------------------------------------------
 // 6. FICHA 3: PROVEEDORES CON CHIPS (IMAGEN 4)
 // ---------------------------------------------------------------------------------
 function renderProveedorChips() {
@@ -1524,20 +2916,37 @@ function renderProveedorChips() {
     if (!container) return;
     container.innerHTML = "";
     
-    // Purga activa de Jennifer y Rama de la lista de proveedores
+    // Purga y normalización activa del catálogo (resolviendo duplicado/falso de "TRASNPORTES RAMIRES" -> "TRANSPORTES RAMIREZ")
     if (appState.proveedorNamesList && Array.isArray(appState.proveedorNamesList)) {
-        const filteredNames = appState.proveedorNamesList.filter(n => {
-            const low = String(n || '').trim().toLowerCase();
-            return low !== 'jennifer' && low !== 'rama';
+        const seen = new Set();
+        const cleanList = [];
+        appState.proveedorNamesList.forEach(raw => {
+            let n = String(raw || '').trim();
+            const low = n.toLowerCase();
+            if (!n || low === 'jennifer' || low === 'rama' || low.includes('-- seleccionar')) return;
+            if (low === 'trasnportes ramires' || low === 'transportes ramires') {
+                n = 'TRANSPORTES RAMIREZ';
+            }
+            const cleanLow = n.toLowerCase();
+            if (!seen.has(cleanLow)) {
+                seen.add(cleanLow);
+                cleanList.push(n);
+            }
         });
-        if (filteredNames.length !== appState.proveedorNamesList.length) {
-            appState.proveedorNamesList = filteredNames;
+        if (cleanList.length !== appState.proveedorNamesList.length || !cleanList.every((v, i) => v === appState.proveedorNamesList[i])) {
+            appState.proveedorNamesList = cleanList;
             saveToStorage();
         }
     }
 
-    if (appState.selectedProveedorFilter && (appState.selectedProveedorFilter.toLowerCase() === 'jennifer' || appState.selectedProveedorFilter.toLowerCase() === 'rama')) {
-        appState.selectedProveedorFilter = 'all';
+    // Normalizar si el filtro seleccionado era el nombre con falta ortográfica
+    if (appState.selectedProveedorFilter) {
+        const sLow = appState.selectedProveedorFilter.trim().toLowerCase();
+        if (sLow === 'jennifer' || sLow === 'rama') {
+            appState.selectedProveedorFilter = 'all';
+        } else if (sLow === 'trasnportes ramires' || sLow === 'transportes ramires') {
+            appState.selectedProveedorFilter = 'TRANSPORTES RAMIREZ';
+        }
     }
 
     const validLinked = (appState.proveedores || []).filter(p => p && (
@@ -1552,9 +2961,14 @@ function renderProveedorChips() {
 
     // "Todos" Chip
     const allChip = document.createElement("button");
+    allChip.type = "button";
     allChip.className = `proveedor-chip ${appState.selectedProveedorFilter === 'all' ? 'active' : ''}`;
     allChip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">apps</span> Todos (${validLinked.length})`;
-    allChip.onclick = () => filterByProveedor('all');
+    allChip.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        filterByProveedor('all');
+    };
     container.appendChild(allChip);
     
     // Dynamic Chips from provider names list
@@ -1562,16 +2976,47 @@ function renderProveedorChips() {
         const low = String(name || '').trim().toLowerCase();
         if (low === 'jennifer' || low === 'rama') return;
 
-        const count = validLinked.filter(p => p.proveedor && p.proveedor.toLowerCase() === name.toLowerCase()).length;
-        const chip = document.createElement("button");
-        chip.className = `proveedor-chip ${appState.selectedProveedorFilter.toLowerCase() === name.toLowerCase() ? 'active' : ''}`;
-        chip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">person</span> ${name} (${count}) ` +
-            `<span class="material-symbols-outlined chip-edit-btn" style="font-size: 14px; margin-left: 6px; opacity: 0.7; cursor: pointer;" title="Editar nombre de proveedor" onclick="editProveedorName('${name}', event)">edit</span> ` +
-            `<span class="material-symbols-outlined chip-delete-btn" style="font-size: 14px; margin-left: 4px; opacity: 0.7; cursor: pointer;" title="Eliminar proveedor" onclick="deleteProveedorName('${name}', event)">close</span>`;
+        const count = validLinked.filter(p => p.proveedor && p.proveedor.toLowerCase() === low).length;
+        const chip = document.createElement("div");
+        chip.className = `proveedor-chip ${appState.selectedProveedorFilter.toLowerCase() === low ? 'active' : ''}`;
+        chip.setAttribute('role', 'button');
+        chip.setAttribute('tabindex', '0');
+        chip.style.cursor = 'pointer';
+        
+        chip.innerHTML = `
+            <span class="chip-label-area" style="display:inline-flex; align-items:center; gap:6px;">
+                <span class="material-symbols-outlined" style="font-size: 16px;">person</span>
+                <span>${name} (${count})</span>
+            </span>
+            <span class="material-symbols-outlined chip-edit-btn" style="font-size: 14px; margin-left: 6px; opacity: 0.7; cursor: pointer;" title="Editar nombre de proveedor">edit</span>
+            <span class="material-symbols-outlined chip-delete-btn" style="font-size: 14px; margin-left: 4px; opacity: 0.7; cursor: pointer;" title="Eliminar proveedor">close</span>
+        `;
+        
         chip.onclick = (e) => {
-            if (e.target && (e.target.classList.contains('chip-delete-btn') || e.target.classList.contains('chip-edit-btn'))) return;
+            if (e.target && (e.target.closest('.chip-edit-btn') || e.target.closest('.chip-delete-btn'))) return;
+            e.stopPropagation();
+            e.preventDefault();
             filterByProveedor(name);
         };
+
+        const editBtn = chip.querySelector('.chip-edit-btn');
+        if (editBtn) {
+            editBtn.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                editProveedorName(name, e);
+            };
+        }
+
+        const delBtn = chip.querySelector('.chip-delete-btn');
+        if (delBtn) {
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                deleteProveedorName(name, e);
+            };
+        }
+
         container.appendChild(chip);
     });
 
@@ -1804,12 +3249,14 @@ async function fetchProveedoresCatalogFromCloud() {
 let _syncProveedoresTimer = null;
 function syncProveedoresToCloud(forceImmediate = false) {
     window.syncProveedoresToCloud = syncProveedoresToCloud;
+    window._lastLocalProveedoresSyncTime = Date.now();
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
     const doSync = async () => {
         try {
+            window._lastLocalProveedoresSyncTime = Date.now();
             const list = appState.proveedores || [];
             await client.from('messages').insert({
                 chat_id: '__cloud_sync_proveedores_data__',
@@ -1817,6 +3264,7 @@ function syncProveedoresToCloud(forceImmediate = false) {
                 emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
                 emisor_role: 'sistema'
             });
+            window._lastLocalProveedoresSyncTime = Date.now();
         } catch (e) {
             console.warn("⚠️ Error persisting proveedores data to Supabase:", e);
         }
@@ -1833,6 +3281,7 @@ window.syncProveedoresToCloud = syncProveedoresToCloud;
 
 function broadcastProveedoresUpdate() {
     window.broadcastProveedoresUpdate = broadcastProveedoresUpdate;
+    window._lastLocalProveedoresSyncTime = Date.now();
     if (window.chatRealtimeChannel) {
         try {
             window.chatRealtimeChannel.send({
@@ -1855,6 +3304,8 @@ window.broadcastProveedoresUpdate = broadcastProveedoresUpdate;
 async function fetchProveedoresDataFromCloud() {
     window.fetchProveedoresDataFromCloud = fetchProveedoresDataFromCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    if (appState.isEditingProveedores) return;
+    if (Date.now() - (window._lastLocalProveedoresSyncTime || 0) < 5000) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
@@ -1865,37 +3316,71 @@ async function fetchProveedoresDataFromCloud() {
             .order('created_at', { ascending: false })
             .limit(1);
 
+        if (appState.isEditingProveedores || Date.now() - (window._lastLocalProveedoresSyncTime || 0) < 5000) return;
+
         if (msgs && msgs.length > 0 && msgs[0].contenido) {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    const statusMap = new Map();
+                    const rowMap = new Map();
                     parsed.forEach(r => {
                         if (!r) return;
-                        const st = r.p || r.estatus;
-                        if (!st) return;
-                        if (r.opRefId) statusMap.set(r.opRefId, st);
-                        if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
-                        if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
-                        if (r.op && r.proveedor) statusMap.set(`${String(r.op).trim().toLowerCase()}_${String(r.proveedor).trim().toLowerCase()}`, st);
+                        if (r.opRefId) rowMap.set(r.opRefId, r);
+                        if (r.projectId && r.opRowIndex !== undefined) rowMap.set(`${r.projectId}_${r.opRowIndex}`, r);
+                        if (r.op && r.opRowIndex !== undefined) rowMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, r);
+                        if (r.op && r.proveedor) rowMap.set(`${String(r.op).trim().toLowerCase()}_${String(r.proveedor).trim().toLowerCase()}`, r);
                     });
 
+                    let anyChanged = false;
                     (appState.proveedores || []).forEach(localR => {
                         const key = localR.opRefId || (localR.projectId && localR.opRowIndex !== undefined ? `${localR.projectId}_${localR.opRowIndex}` : null) || (localR.op ? `${String(localR.op).trim().toLowerCase()}_${localR.opRowIndex}` : null);
                         const provKey = (localR.op && localR.proveedor) ? `${String(localR.op).trim().toLowerCase()}_${String(localR.proveedor).trim().toLowerCase()}` : null;
-                        if (key && statusMap.has(key)) {
-                            localR.p = statusMap.get(key);
-                            localR.estatus = statusMap.get(key);
-                        } else if (provKey && statusMap.has(provKey)) {
-                            localR.p = statusMap.get(provKey);
-                            localR.estatus = statusMap.get(provKey);
+                        const match = (key && rowMap.has(key)) ? rowMap.get(key) : (provKey && rowMap.has(provKey) ? rowMap.get(provKey) : null);
+                        if (match) {
+                            if (match.p !== undefined || match.estatus !== undefined) {
+                                const st = match.p || match.estatus;
+                                if (localR.p !== st) { localR.p = st; localR.estatus = st; anyChanged = true; }
+                            }
+                            const isPagado = String(localR.p || localR.estatus || '').trim().toLowerCase() === 'pagado';
+                            const targetFecha = isPagado ? (match.fechaPago !== undefined ? match.fechaPago : localR.fechaPago) : '';
+                            if (targetFecha !== localR.fechaPago) {
+                                localR.fechaPago = targetFecha;
+                                anyChanged = true;
+                            }
+                            if (match.facturaProveedor !== undefined && match.facturaProveedor !== localR.facturaProveedor) {
+                                localR.facturaProveedor = match.facturaProveedor;
+                                localR.folioFF = match.facturaProveedor;
+                                localR.facturaNum = match.facturaProveedor;
+                                anyChanged = true;
+                            }
+                            if (match.servicio !== undefined && match.servicio !== localR.servicio) {
+                                localR.servicio = match.servicio;
+                                anyChanged = true;
+                            }
+                            if (match.subtotal !== undefined && match.subtotal !== localR.subtotal) {
+                                localR.subtotal = match.subtotal;
+                                localR.iva = match.iva;
+                                localR.ret4 = match.ret4;
+                                localR.retIsr = match.retIsr;
+                                localR.total = match.total;
+                                anyChanged = true;
+                            }
+                            if (match.proveedor && match.proveedor !== localR.proveedor) {
+                                localR.proveedor = match.proveedor;
+                                anyChanged = true;
+                            }
                         }
                     });
 
-                    saveToStorage();
-                    if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
-                        updateProveedorStatusCounts();
-                        renderProveedores();
+                    if (anyChanged) {
+                        saveToStorage();
+                        if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
+                            updateProveedorStatusCounts();
+                            renderProveedores();
+                        }
+                        if (typeof window.recalculateProveedoresTableTotals === 'function') {
+                            window.recalculateProveedoresTableTotals();
+                        }
                     }
                 }
             } catch (e) {}
@@ -1934,6 +3419,7 @@ window.getProveedorOptionsHTML = getProveedorOptionsHTML;
 // Manejo centralizado del select de proveedor
 function handleProveedorSelectChange(tableType, index, val) {
     window.handleProveedorSelectChange = handleProveedorSelectChange;
+    if (tableType === 'operaciones' && !appState.isEditingOperacionesDetail) return;
     if (val === '__NEW_PROVEEDOR__') {
         const newName = prompt("Ingresa el nombre del nuevo proveedor:");
         if (newName && newName.trim()) {
@@ -1969,7 +3455,7 @@ function handleProveedorSelectChange(tableType, index, val) {
 }
 window.handleProveedorSelectChange = handleProveedorSelectChange;
 
-// Filtros de Estatus en Control de Proveedores: P = Por pagar, C = Por cobrar (Imagen 5)
+// Filtros de Estatus en Control de Proveedores: P = Por pagar, Programar a pago, Pagado, Cancelado (Imágenes 1 y 3)
 function filterProveedoresByStatus(status, btnEl) {
     window.filterProveedoresByStatus = filterProveedoresByStatus;
     appState.proveedorStatusFilter = status || 'all';
@@ -1981,7 +3467,10 @@ function filterProveedoresByStatus(status, btnEl) {
     if (btnEl) {
         btnEl.classList.add("active");
     } else {
-        const targetBtn = document.getElementById(`btn-status-filter-${String(status).toLowerCase()}`);
+        const sLow = String(status).toLowerCase();
+        let targetId = `btn-status-filter-${sLow}`;
+        if (sLow === 'prog' || sLow === 'c') targetId = 'btn-status-filter-prog';
+        const targetBtn = document.getElementById(targetId) || document.getElementById(`btn-status-filter-${sLow}`);
         if (targetBtn) targetBtn.classList.add("active");
     }
 
@@ -2004,27 +3493,23 @@ function updateProveedorStatusCounts() {
         list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
     }
     const countAll = list.length;
-    const countP = list.filter(p => {
-        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-        return st === 'p' || (!st.includes('cancel') && st !== 'c');
+    const countProg = list.filter(p => {
+        const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
+        return st !== 'pagado';
     }).length;
-    const countC = list.filter(p => {
-        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-        return st === 'c';
-    }).length;
-    const countCancel = list.filter(p => {
-        const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-        return st.includes('cancel');
+    const countPagado = list.filter(p => {
+        const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
+        return st === 'pagado';
     }).length;
 
     const elAll = document.getElementById("count-status-all");
-    const elP = document.getElementById("count-status-p");
+    const elProg = document.getElementById("count-status-prog");
     const elC = document.getElementById("count-status-c");
-    const elCancel = document.getElementById("count-status-cancelado");
+    const elPagado = document.getElementById("count-status-pagado");
     if (elAll) elAll.textContent = countAll;
-    if (elP) elP.textContent = countP;
-    if (elC) elC.textContent = countC;
-    if (elCancel) elCancel.textContent = countCancel;
+    if (elProg) elProg.textContent = countProg;
+    if (elC) elC.textContent = countProg;
+    if (elPagado) elPagado.textContent = countPagado;
 }
 window.updateProveedorStatusCounts = updateProveedorStatusCounts;
 
@@ -2054,6 +3539,8 @@ window.syncProjectToProveedores = syncProjectToProveedores;
 
 function syncAllOperacionesToProveedores() {
     window.syncAllOperacionesToProveedores = syncAllOperacionesToProveedores;
+    if (appState.isEditingProveedores) return;
+
     if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos) || appState.operacionesProyectos.length === 0) {
         const stored = localStorage.getItem('rp_operaciones_proyectos');
         if (stored) {
@@ -2070,16 +3557,20 @@ function syncAllOperacionesToProveedores() {
         appState.proveedores = [];
     }
 
-    // Preservar estatus (P / C / Cancelado) asignados por el usuario en Control de Proveedores
+    // Preservar estatus (Programar a pago / Pagado) y Fecha de Pago
     const statusMap = new Map();
+    const fechaPagoMap = new Map();
     appState.proveedores.forEach(r => {
         if (!r) return;
-        const st = r.p || r.estatus;
-        if (st) {
-            if (r.opRefId) statusMap.set(r.opRefId, st);
-            if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
-            if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
-        }
+        const rawSt = r.p || r.estatus;
+        const st = (String(rawSt || '').trim().toLowerCase() === 'pagado') ? 'PAGADO' : 'PROG';
+        if (r.opRefId) statusMap.set(r.opRefId, st);
+        if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
+        if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
+        const fp = (st === 'PAGADO') ? (r.fechaPago || '') : '';
+        if (r.opRefId) fechaPagoMap.set(r.opRefId, fp);
+        if (r.projectId && r.opRowIndex !== undefined) fechaPagoMap.set(`${r.projectId}_${r.opRowIndex}`, fp);
+        if (r.op && r.opRowIndex !== undefined) fechaPagoMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, fp);
     });
 
     const newProveedoresList = [];
@@ -2109,7 +3600,11 @@ function syncAllOperacionesToProveedores() {
                 const iva = sub > 0 ? (sub * 0.16) : 0;
                 const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
 
-                const provName = (item.proveedor && !item.proveedor.includes('-- Seleccionar')) ? item.proveedor.trim() : '';
+                let provName = (item.proveedor && !item.proveedor.includes('-- Seleccionar')) ? item.proveedor.trim() : '';
+                if (provName.toLowerCase() === 'trasnportes ramires' || provName.toLowerCase() === 'transportes ramires') {
+                    provName = 'TRANSPORTES RAMIREZ';
+                    item.proveedor = 'TRANSPORTES RAMIREZ';
+                }
                 const concepto = (item.concepto && !item.concepto.includes('-- Seleccionar')) ? item.concepto.trim() : '';
 
                 // Factura Proveedor: Proviene de la columna 'Factura #' de la fila en Operaciones (Imagen 2)
@@ -2146,10 +3641,18 @@ function syncAllOperacionesToProveedores() {
                 if (!hasData) return;
 
                 const opRefId = `${p.id}_${idx}`;
-                const savedStatus = statusMap.get(opRefId) || 
-                                    statusMap.get(`${p.id}_${idx}`) || 
-                                    statusMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
-                                    item.p || item.estatus || 'P';
+                // Por defecto todos los expedientes de proveedores entran en "Programar a pago" ('PROG')
+                const rawSaved = statusMap.get(opRefId) || 
+                                 statusMap.get(`${p.id}_${idx}`) || 
+                                 statusMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
+                                 item.p || item.estatus || 'PROG';
+                const isPagado = String(rawSaved || '').trim().toLowerCase() === 'pagado';
+                const savedStatus = isPagado ? 'PAGADO' : 'PROG';
+                const rawFp = fechaPagoMap.has(opRefId) ? fechaPagoMap.get(opRefId) :
+                              (fechaPagoMap.has(`${p.id}_${idx}`) ? fechaPagoMap.get(`${p.id}_${idx}`) :
+                              (fechaPagoMap.has(`${String(projOp).trim().toLowerCase()}_${idx}`) ? fechaPagoMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) :
+                              (item.fechaPago || '')));
+                const savedFechaPago = isPagado ? (rawFp || '') : '';
 
                 // Mantener sincronizado el objeto del proyecto en memoria
                 item.subtotal = sub;
@@ -2157,6 +3660,7 @@ function syncAllOperacionesToProveedores() {
                 item.total = tot;
                 item.p = savedStatus;
                 item.estatus = savedStatus;
+                item.fechaPago = savedFechaPago;
 
                 newProveedoresList.push({
                     folioFF: facturaProveedor,
@@ -2164,6 +3668,8 @@ function syncAllOperacionesToProveedores() {
                     facturaNum: facturaProveedor,
                     proveedor: provName || (p.proveedor || '-'),
                     fecha: p.fecha || (p.infoViaje && p.infoViaje.fecha) || new Date().toISOString().split('T')[0],
+                    fechaPago: savedFechaPago,
+                    archivado: Boolean(p.archivado || p.estatus === 'CERRADO'),
                     servicio: concepto || "Logistic",
                     subtotal: sub,
                     iva: iva,
@@ -2189,7 +3695,12 @@ function syncAllOperacionesToProveedores() {
     }
 
     // Preservar filas manuales que hayan sido creadas en Control de Proveedores (sin opRefId de Operaciones)
-    const existingManualRows = (appState.proveedores || []).filter(r => r && !r.opRefId && !r.projectId);
+    const existingManualRows = (appState.proveedores || []).filter(r => r && !r.opRefId && !r.projectId).map(r => {
+        if (String(r.p || r.estatus || '').trim().toLowerCase() !== 'pagado') {
+            r.fechaPago = '';
+        }
+        return r;
+    });
     appState.proveedores = [...newProveedoresList, ...existingManualRows];
     saveToStorage();
     if (typeof updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
@@ -2218,13 +3729,14 @@ function syncProveedorRowBackToOperaciones(row) {
     if (!p.proveedoresClaves) p.proveedoresClaves = [];
     const rIdx = (row.opRowIndex !== undefined && row.opRowIndex !== null) ? row.opRowIndex : 0;
 
-    // Sincronizar estatus y factura de proveedor hacia Operaciones
+    // Sincronizar estatus, fecha de pago y factura de proveedor hacia Operaciones
     if (p.proveedoresClaves[rIdx]) {
         const item = p.proveedoresClaves[rIdx];
         if (row.p) {
             item.p = row.p;
             item.estatus = row.p;
         }
+        item.fechaPago = (String(row.p || row.estatus || '').trim().toLowerCase() === 'pagado') ? (row.fechaPago || '') : '';
         if (row.facturaProveedor !== undefined) {
             item.facturaNum = row.facturaProveedor;
         } else if (row.folioFF !== undefined) {
@@ -2234,7 +3746,337 @@ function syncProveedorRowBackToOperaciones(row) {
 
     saveOperacionesStorage(true);
 }
-window.syncProveedorRowBackToOperaciones = syncProveedorRowBackToOperaciones;
+// ---------------------------------------------------------------------------------
+// CONTROL DE EDICIÓN EXCLUSIVA Y BLOQUEO EN TIEMPO REAL (IMÁGENES 1, 2 Y 3)
+// ---------------------------------------------------------------------------------
+function formatProvTableDate(val) {
+    if (!val) return '-';
+    const s = String(val).trim();
+    if (s.includes('-')) {
+        const parts = s.split('T')[0].split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+    }
+    return s;
+}
+window.formatProvTableDate = formatProvTableDate;
+
+function formatProvTableNumber(val) {
+    if (val === null || val === undefined || val === '') return '0';
+    const num = Number(val);
+    if (isNaN(num)) return String(val);
+    if (Number.isInteger(num)) return String(num);
+    return Number(num.toFixed(2)).toString();
+}
+window.formatProvTableNumber = formatProvTableNumber;
+
+function handleProvEstatusClick(index, event) {
+    window.handleProvEstatusClick = handleProvEstatusClick;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingProveedores) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para modificar el estatus de los proveedores.", "warning");
+        } else {
+            alert("Haz clic en 'Editar' para modificar el estatus de los proveedores.");
+        }
+        return;
+    }
+    toggleProvEstatusDropdown(index, event);
+}
+window.handleProvEstatusClick = handleProvEstatusClick;
+
+function handleProvEstatusDblClick(index, event) {
+    window.handleProvEstatusDblClick = handleProvEstatusDblClick;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingProveedores) {
+        return;
+    }
+    cycleProveedorEstatus(index, event);
+}
+window.handleProvEstatusDblClick = handleProvEstatusDblClick;
+
+let _editProveedoresTimeout = null;
+
+async function startEditingProveedores() {
+    window.startEditingProveedores = startEditingProveedores;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
+    // Verificar si está bloqueado por otro usuario
+    if (appState.proveedoresLockedBy && appState.proveedoresLockedBy.userId !== currentUserId) {
+        const elapsed = Date.now() - (appState.proveedoresLockedBy.timestamp || 0);
+        if (elapsed < 5 * 60 * 1000) {
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    }
+
+    // Respaldar estado previo a la edición para que los cambios solo se guarden al dar clic en 'Guardar'
+    appState._proveedoresSnapshot = JSON.parse(JSON.stringify(appState.proveedores || []));
+    appState._operacionesSnapshotProv = JSON.parse(JSON.stringify(appState.operacionesProyectos || []));
+
+    appState.isEditingProveedores = true;
+    appState.proveedoresLockedBy = {
+        userId: currentUserId,
+        userName: currentUserName,
+        timestamp: Date.now()
+    };
+
+    updateProveedoresEditButtonsUI();
+    renderProveedores();
+
+    // Notificar a otras máquinas por WebSockets
+    broadcastProveedoresLockState(true, currentUserName, currentUserId);
+
+    // Persistir estado de bloqueo en Supabase
+    await syncProveedoresLockToCloud(true, currentUserName, currentUserId);
+
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
+    }
+
+    // Auto-cierre de seguridad a los 5 minutos de inactividad (descarta si no se dio clic en Guardar)
+    if (_editProveedoresTimeout) clearTimeout(_editProveedoresTimeout);
+    _editProveedoresTimeout = setTimeout(() => {
+        if (appState.isEditingProveedores) {
+            if (typeof showCustomNotification === 'function') {
+                showCustomNotification("Tiempo de edición expirado por inactividad. Los cambios no guardados fueron descartados.", "warning");
+            }
+            cancelEditingProveedores();
+        }
+    }, 5 * 60 * 1000);
+}
+window.startEditingProveedores = startEditingProveedores;
+
+async function saveEditingProveedores(isAuto = false) {
+    window.saveEditingProveedores = saveEditingProveedores;
+    if (_editProveedoresTimeout) clearTimeout(_editProveedoresTimeout);
+
+    window._lastLocalProveedoresSyncTime = Date.now();
+    window._lastLocalOperacionesSyncTime = Date.now();
+
+    // Sincronizar hacia Operaciones los cambios confirmados
+    if (typeof window.syncProveedorRowBackToOperaciones === 'function' && Array.isArray(appState.proveedores)) {
+        appState.proveedores.forEach(r => {
+            if (r && String(r.p || r.estatus || '').trim().toLowerCase() !== 'pagado') {
+                r.fechaPago = '';
+            }
+            window.syncProveedorRowBackToOperaciones(r);
+        });
+    }
+
+    appState.isEditingProveedores = false;
+    appState.proveedoresLockedBy = null;
+    appState._proveedoresSnapshot = null;
+    appState._operacionesSnapshotProv = null;
+
+    // Guardar en almacenamiento y nube ANTES de re-renderizar
+    saveToStorage();
+    try {
+        localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
+        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    } catch (e) {}
+
+    updateProveedoresEditButtonsUI();
+    renderProveedores();
+
+    if (typeof syncProveedoresToCloud === 'function') {
+        syncProveedoresToCloud(true);
+    }
+    if (typeof broadcastProveedoresUpdate === 'function') {
+        broadcastProveedoresUpdate();
+    }
+
+    // Notificar desbloqueo a otras máquinas
+    broadcastProveedoresLockState(false, null, null);
+    await syncProveedoresLockToCloud(false, null, null);
+
+    if (!isAuto && typeof showCustomNotification === 'function') {
+        showCustomNotification("Cambios de estatus guardados y tabla liberada con éxito.", "success");
+    }
+}
+window.saveEditingProveedores = saveEditingProveedores;
+
+async function cancelEditingProveedores() {
+    window.cancelEditingProveedores = cancelEditingProveedores;
+    if (_editProveedoresTimeout) clearTimeout(_editProveedoresTimeout);
+
+    appState.isEditingProveedores = false;
+    appState.proveedoresLockedBy = null;
+
+    if (appState._proveedoresSnapshot) {
+        appState.proveedores = JSON.parse(JSON.stringify(appState._proveedoresSnapshot));
+        appState._proveedoresSnapshot = null;
+    }
+    if (appState._operacionesSnapshotProv) {
+        appState.operacionesProyectos = JSON.parse(JSON.stringify(appState._operacionesSnapshotProv));
+        appState._operacionesSnapshotProv = null;
+    }
+
+    updateProveedoresEditButtonsUI();
+    renderProveedores();
+
+    broadcastProveedoresLockState(false, null, null);
+    await syncProveedoresLockToCloud(false, null, null);
+}
+window.cancelEditingProveedores = cancelEditingProveedores;
+
+function updateProveedoresEditButtonsUI() {
+    window.updateProveedoresEditButtonsUI = updateProveedoresEditButtonsUI;
+    const btnEdit = document.getElementById("btn-edit-proveedores");
+    const btnSave = document.getElementById("btn-save-proveedores");
+    const banner = document.getElementById("proveedores-lock-banner");
+    const bannerText = document.getElementById("proveedores-lock-banner-text");
+    const tableContainer = document.getElementById("proveedores-table-container");
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const isLockedByOther = appState.proveedoresLockedBy && appState.proveedoresLockedBy.userId !== currentUserId;
+
+    if (isLockedByOther) {
+        if (tableContainer) tableContainer.classList.add("tabla-bloqueada-editando");
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) bannerText.innerText = `Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName || 'otro usuario'}`;
+        }
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
+            btnEdit.style.cursor = "not-allowed";
+            btnEdit.style.opacity = "0.5";
+            btnEdit.title = `Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName}`;
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.cursor = "not-allowed";
+            btnSave.style.opacity = "0.45";
+        }
+    } else if (appState.isEditingProveedores) {
+        if (tableContainer) tableContainer.classList.remove("tabla-bloqueada-editando");
+        if (banner) banner.style.display = "none";
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.add("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editando...`;
+            btnEdit.style.cursor = "default";
+            btnEdit.style.opacity = "1";
+            btnEdit.title = "Modo de edición activo";
+        }
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.style.cursor = "pointer";
+            btnSave.style.opacity = "1";
+            btnSave.title = "Guardar cambios y permitir edición a otros usuarios";
+        }
+    } else {
+        if (tableContainer) tableContainer.classList.remove("tabla-bloqueada-editando");
+        if (banner) banner.style.display = "none";
+        if (btnEdit) {
+            btnEdit.disabled = false;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar`;
+            btnEdit.style.cursor = "pointer";
+            btnEdit.style.opacity = "1";
+            btnEdit.title = "Habilitar edición de estatus";
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.cursor = "not-allowed";
+            btnSave.style.opacity = "0.45";
+            btnSave.title = "Haz clic en 'Editar' para comenzar";
+        }
+    }
+}
+window.updateProveedoresEditButtonsUI = updateProveedoresEditButtonsUI;
+
+function broadcastProveedoresLockState(isLocked, userName, userId) {
+    window.broadcastProveedoresLockState = broadcastProveedoresLockState;
+    if (!window.chatRealtimeChannel) return;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'proveedores_lock_update',
+            payload: {
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting proveedores lock state:", e);
+    }
+}
+window.broadcastProveedoresLockState = broadcastProveedoresLockState;
+
+async function syncProveedoresLockToCloud(isLocked, userName, userId) {
+    window.syncProveedoresLockToCloud = syncProveedoresLockToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_proveedores_lock__',
+            contenido: JSON.stringify({
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (e) {
+        console.warn("⚠️ Error persisting proveedores lock to cloud:", e);
+    }
+}
+window.syncProveedoresLockToCloud = syncProveedoresLockToCloud;
+
+async function fetchProveedoresLockFromCloud() {
+    window.fetchProveedoresLockFromCloud = fetchProveedoresLockFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs, error } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_proveedores_lock__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                if (parsed.isLocked) {
+                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                    if (elapsed < 5 * 60 * 1000) {
+                        if (parsed.userId !== currentUserId) {
+                            appState.proveedoresLockedBy = parsed;
+                        }
+                    } else {
+                        appState.proveedoresLockedBy = null;
+                    }
+                } else {
+                    if (!appState.isEditingProveedores) {
+                        appState.proveedoresLockedBy = null;
+                    }
+                }
+                updateProveedoresEditButtonsUI();
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching proveedores lock from cloud:", e);
+    }
+}
+window.fetchProveedoresLockFromCloud = fetchProveedoresLockFromCloud;
 
 function toggleProvEstatusDropdown(index, event) {
     window.toggleProvEstatusDropdown = toggleProvEstatusDropdown;
@@ -2248,22 +4090,18 @@ function toggleProvEstatusDropdown(index, event) {
         menu = document.createElement("div");
         menu.id = "global-prov-estatus-menu";
         menu.className = "prov-estatus-global-menu";
-        menu.innerHTML = `
-            <div class="prov-dropdown-option option-p" onclick="selectGlobalProvEstatus('P', event)">
-                <span class="prov-badge-dot badge-dot-p"></span>
-                <span class="option-name">P (Por pagar)</span>
-            </div>
-            <div class="prov-dropdown-option option-c" onclick="selectGlobalProvEstatus('C', event)">
-                <span class="prov-badge-dot badge-dot-c"></span>
-                <span class="option-name">C (Por cobrar)</span>
-            </div>
-            <div class="prov-dropdown-option option-cancelado" onclick="selectGlobalProvEstatus('Cancelado', event)">
-                <span class="prov-badge-dot badge-dot-cancel"></span>
-                <span class="option-name">Cancelado</span>
-            </div>
-        `;
         document.body.appendChild(menu);
     }
+    menu.innerHTML = `
+        <div class="prov-dropdown-option option-prog" onclick="selectGlobalProvEstatus('PROG', event)">
+            <span class="prov-badge-dot badge-dot-prog"></span>
+            <span class="option-name">Programar a pago</span>
+        </div>
+        <div class="prov-dropdown-option option-pagado" onclick="selectGlobalProvEstatus('PAGADO', event)">
+            <span class="prov-badge-dot badge-dot-pagado"></span>
+            <span class="option-name">Pagado</span>
+        </div>
+    `;
     
     if (menu.style.display === "block" && menu.dataset.currentIndex === String(index)) {
         menu.style.display = "none";
@@ -2273,20 +4111,15 @@ function toggleProvEstatusDropdown(index, event) {
     menu.dataset.currentIndex = String(index);
     
     const currentItem = appState.proveedores[index];
-    const currentSt = currentItem ? (currentItem.p || currentItem.estatus || 'P').trim() : 'P';
-    const isCancel = currentSt.toLowerCase().includes('cancel');
-    const isC = currentSt.toUpperCase() === 'C';
+    const currentSt = currentItem ? (currentItem.p || currentItem.estatus || 'PROG').trim().toLowerCase() : 'prog';
     
     menu.querySelectorAll(".prov-dropdown-option").forEach(opt => opt.classList.remove("selected"));
-    if (isCancel) {
-        const oCanc = menu.querySelector(".option-cancelado");
-        if (oCanc) oCanc.classList.add("selected");
-    } else if (isC) {
-        const oC = menu.querySelector(".option-c");
-        if (oC) oC.classList.add("selected");
+    if (currentSt === 'pagado') {
+        const oPag = menu.querySelector(".option-pagado");
+        if (oPag) oPag.classList.add("selected");
     } else {
-        const oP = menu.querySelector(".option-p");
-        if (oP) oP.classList.add("selected");
+        const oProg = menu.querySelector(".option-prog");
+        if (oProg) oProg.classList.add("selected");
     }
     
     const trigger = (event && (event.currentTarget || event.target.closest(".prov-estatus-trigger"))) || document.getElementById(`prov-estatus-trigger-${index}`);
@@ -2315,25 +4148,25 @@ function selectGlobalProvEstatus(newStatus, event) {
     
     if (isNaN(idx) || !appState.proveedores[idx]) return;
 
+    const stLower = String(newStatus).toLowerCase();
+    const normStatus = (stLower === 'pagado') ? 'PAGADO' : 'PROG';
+
     // Actualización visual inmediata en el DOM del badge / trigger
     const trigger = document.getElementById(`prov-estatus-trigger-${idx}`);
     if (trigger) {
-        let estClass = 'estatus-p';
-        let dLabel = 'P';
-        if (String(newStatus).toLowerCase().includes('cancel')) {
-            estClass = 'estatus-cancelado';
-            dLabel = 'Canc';
-        } else if (String(newStatus).toUpperCase() === 'C') {
-            estClass = 'estatus-c';
-            dLabel = 'C';
+        let estClass = 'estatus-prog';
+        let dLabel = 'Prog';
+        if (normStatus === 'PAGADO') {
+            estClass = 'estatus-pagado';
+            dLabel = 'Pagado';
         }
         trigger.className = `prov-estatus-trigger ${estClass}`;
         const spanLabel = trigger.querySelector('span:first-child');
         if (spanLabel) spanLabel.innerText = dLabel;
-        trigger.title = `Estatus: ${newStatus}. Haz clic para cambiar el estatus.`;
+        trigger.title = `Estatus: ${normStatus === 'PAGADO' ? 'Pagado' : 'Programar a pago'}. Haz clic para cambiar el estatus.`;
     }
     
-    updateProveedorCell(idx, 'p', newStatus);
+    updateProveedorCell(idx, 'p', normStatus);
 }
 window.selectGlobalProvEstatus = selectGlobalProvEstatus;
 
@@ -2349,17 +4182,8 @@ function cycleProveedorEstatus(index, event) {
     const item = appState.proveedores[index];
     if (!item) return;
 
-    const currentSt = (item.p || item.estatus || 'P').trim();
-    let nextSt = 'P';
-    if (currentSt.toLowerCase().includes('cancel')) {
-        nextSt = 'P';
-    } else if (currentSt.toUpperCase() === 'P') {
-        nextSt = 'C';
-    } else if (currentSt.toUpperCase() === 'C') {
-        nextSt = 'Cancelado';
-    } else {
-        nextSt = 'C';
-    }
+    const currentSt = (item.p || item.estatus || 'PROG').trim().toLowerCase();
+    const nextSt = (currentSt === 'pagado') ? 'PROG' : 'PAGADO';
 
     updateProveedorCell(index, 'p', nextSt);
 }
@@ -2381,9 +4205,15 @@ function renderProveedores() {
     window.renderProveedores = renderProveedores;
     const tbody = document.getElementById("tbody-proveedores");
     if (!tbody) return;
-    tbody.innerHTML = "";
+
+    const mainContent = document.querySelector(".main-content");
+    const prevMainScroll = mainContent ? mainContent.scrollTop : 0;
+    const tableWrap = tbody.closest(".table-responsive");
+    const prevWrapScroll = tableWrap ? tableWrap.scrollTop : 0;
+
+    const frag = document.createDocumentFragment();
     
-    // Filtrar filas válidas para mostrar en Control de Proveedores (sin borrar ninguna tabla)
+    // Filtrar filas válidas para mostrar en Control de Proveedores
     let list = (appState.proveedores || []).filter(p => p && (
         (p.op && String(p.op).trim() !== '') ||
         (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
@@ -2396,22 +4226,20 @@ function renderProveedores() {
     
     // Filter by active chip
     if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
-        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
+        const selLow = appState.selectedProveedorFilter.trim().toLowerCase();
+        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === selLow);
     }
 
-    // Filter by active status (P = Por pagar, C = Por cobrar, Cancelado)
+    // Filter by active status (Programar a pago, Pagado)
     if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
         const filterVal = appState.proveedorStatusFilter.toLowerCase();
         list = list.filter(p => {
-            const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-            if (filterVal === 'cancelado') {
-                return st.includes('cancel');
+            const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
+            if (filterVal === 'pagado') {
+                return st === 'pagado';
             }
-            if (filterVal === 'c') {
-                return st === 'c';
-            }
-            if (filterVal === 'p') {
-                return st === 'p' || (!st.includes('cancel') && st !== 'c');
+            if (filterVal === 'prog' || filterVal === 'c' || filterVal === 'p') {
+                return st !== 'pagado';
             }
             return st === filterVal;
         });
@@ -2419,84 +4247,177 @@ function renderProveedores() {
     
     list.forEach((item, index) => {
         const realIndex = appState.proveedores.indexOf(item);
-        const rawSt = (item.p || item.estatus || 'P').trim();
-        let currentStatus = 'P';
-        let displayLabel = 'P';
-        let estatusClass = 'estatus-p';
-        if (rawSt.toLowerCase().includes('cancel')) {
-            currentStatus = 'Cancelado';
-            displayLabel = 'Canc';
-            estatusClass = 'estatus-cancelado';
-        } else if (rawSt.toUpperCase() === 'C') {
-            currentStatus = 'C';
-            displayLabel = 'C';
-            estatusClass = 'estatus-c';
+        const rawSt = (item.p || item.estatus || 'PROG').trim().toLowerCase();
+        let currentStatus = 'Programar a pago';
+        let displayLabel = 'Prog';
+        let estatusClass = 'estatus-prog';
+        if (rawSt === 'pagado') {
+            currentStatus = 'Pagado';
+            displayLabel = 'Pagado';
+            estatusClass = 'estatus-pagado';
         } else {
-            currentStatus = 'P';
-            displayLabel = 'P';
-            estatusClass = 'estatus-p';
+            currentStatus = 'Programar a pago';
+            displayLabel = 'Prog';
+            estatusClass = 'estatus-prog';
         }
 
         const factProv = item.facturaProveedor || item.folioFF || item.facturaNum || "";
+        const isArchivado = item.archivado === true;
 
         const tr = document.createElement("tr");
+        tr.id = `prov-row-${realIndex}`;
+        tr.dataset.rowKey = `prov_${realIndex}`;
         tr.innerHTML = `
             <td style="text-align: center;">
-                <input type="text" class="excel-input" value="${factProv}" placeholder="-" oninput="updateProveedorCell(${realIndex}, 'facturaProveedor', this.value)" style="text-align: center; font-weight: 600;">
+                <span class="cell-locked-val" style="font-weight: 600; color: #1E293B;">${factProv || '-'}</span>
             </td>
             <td style="padding-left: 8px;">
-                <span class="prov-name-locked" title="${item.proveedor || ''}">${item.proveedor || '-'}</span>
+                <span class="prov-name-locked" title="${item.proveedor || ''}">
+                    ${item.proveedor || '-'}
+                    ${isArchivado ? '<span class="badge-archivado-tag" style="background:#F1F5F9; color:#64748B; font-size:9px; font-weight:600; padding:1px 5px; border-radius:4px; border:1px solid #CBD5E1; margin-left:6px;" title="Expediente archivado">Archivado</span>' : ''}
+                </span>
             </td>
             <td style="text-align: center;">
-                <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateProveedorCell(${realIndex}, 'fecha', this.value)" style="text-align: center;">
+                <span class="cell-locked-val" style="color: #334155;">${formatProvTableDate(item.fecha)}</span>
             </td>
-            <td>
-                <input type="text" class="excel-input" value="${item.servicio || "Logistic"}" oninput="updateProveedorCell(${realIndex}, 'servicio', this.value)">
+            <td style="padding-left: 8px;">
+                <span class="cell-locked-val" style="color: #334155;">${item.servicio || '-'}</span>
             </td>
-            <td>
-                <input type="number" id="prov-subtotal-input-${realIndex}" class="excel-input number-input" value="${item.subtotal || 0}" step="10" oninput="liveUpdateProveedorTotals(${realIndex})">
+            <td style="text-align: right; padding-right: 6px;">
+                <span class="cell-locked-val font-mono" style="font-weight: 600; color: #1E293B;">${formatProvTableNumber(item.subtotal)}</span>
             </td>
-            <td>
-                <input type="number" id="prov-iva-input-${realIndex}" class="excel-input number-input readonly" value="${item.iva || 0}" readonly>
+            <td style="text-align: right; padding-right: 6px;">
+                <span class="cell-locked-val font-mono" style="color: #334155;">${formatProvTableNumber(item.iva)}</span>
             </td>
-            <td>
-                <input type="number" id="prov-ret4-input-${realIndex}" class="excel-input number-input" value="${item.ret4 || 0}" step="10" oninput="liveUpdateProveedorTotals(${realIndex})">
+            <td style="text-align: right; padding-right: 6px;">
+                <span class="cell-locked-val font-mono" style="color: #334155;">${formatProvTableNumber(item.ret4)}</span>
             </td>
-            <td>
-                <input type="number" id="prov-retisr-input-${realIndex}" class="excel-input number-input" value="${item.retIsr || 0}" step="10" oninput="liveUpdateProveedorTotals(${realIndex})">
+            <td style="text-align: right; padding-right: 6px;">
+                <span class="cell-locked-val font-mono" style="color: #334155;">${formatProvTableNumber(item.retIsr)}</span>
             </td>
-            <td>
-                <input type="number" id="prov-total-input-${realIndex}" class="excel-input number-input readonly" value="${item.total || 0}" readonly style="font-weight: 700;">
+            <td style="text-align: right; padding-right: 6px;">
+                <span class="cell-locked-val font-mono" style="font-weight: 700; color: #0F172A;">${formatProvTableNumber(item.total)}</span>
             </td>
             <td class="td-prov-estatus" style="text-align: center; position: relative;">
-                <div class="prov-estatus-trigger ${estatusClass}" id="prov-estatus-trigger-${realIndex}" onclick="toggleProvEstatusDropdown(${realIndex}, event)" ondblclick="cycleProveedorEstatus(${realIndex}, event)" title="Estatus: ${currentStatus}. Haz clic para cambiar el estatus.">
+                <div class="prov-estatus-trigger ${estatusClass} ${!appState.isEditingProveedores ? 'trigger-locked' : ''}" id="prov-estatus-trigger-${realIndex}" onclick="handleProvEstatusClick(${realIndex}, event)" ondblclick="handleProvEstatusDblClick(${realIndex}, event)" title="${appState.isEditingProveedores ? `Estatus: ${currentStatus}. Haz clic para cambiar.` : 'Haz clic en \'Editar\' arriba para modificar el estatus'}">
                     <span>${displayLabel}</span>
                     <span class="material-symbols-outlined prov-arrow">expand_more</span>
                 </div>
             </td>
             <td style="text-align: center;">
-                <input type="text" class="excel-input readonly" value="${(item.folioFE && item.folioFE !== 'FE-') ? item.folioFE : ''}" placeholder="-" readonly style="text-align: center; font-weight: 700; color: #0F172A; cursor: default;" title="Factura vinculada desde Operaciones">
+                <span class="cell-locked-val" style="color: #64748B;">${item.fechaPago ? formatProvTableDate(item.fechaPago) : 'mm/dd/yyyy'}</span>
             </td>
             <td style="text-align: center;">
-                <input type="text" class="excel-input" value="${item.op || ""}" oninput="updateProveedorCell(${realIndex}, 'op', this.value)" style="text-align: center;">
+                <span class="cell-locked-val" style="font-weight: 700; color: #0F172A;" title="Factura vinculada desde Operaciones">${(item.folioFE && item.folioFE !== 'FE-') ? item.folioFE : (item.facturaProyecto || '-')}</span>
+            </td>
+            <td style="text-align: center;">
+                <span class="cell-locked-val" style="font-weight: 600; color: #1E293B;">${item.op || '-'}</span>
             </td>
         `;
-        tbody.appendChild(tr);
+        frag.appendChild(tr);
     });
     
     // Bottom total summary row colored in Green (Image 4 style)
     const summaryTr = document.createElement("tr");
     summaryTr.className = "excel-green-row";
     summaryTr.id = "excel-proveedores-totals-row";
-    tbody.appendChild(summaryTr);
+    frag.appendChild(summaryTr);
+
+    tbody.replaceChildren(frag);
     
     recalculateProveedoresTableTotals();
     updateProveedorStatusCounts();
+    if (typeof updateProveedoresEditButtonsUI === 'function') {
+        updateProveedoresEditButtonsUI();
+    }
+
+    if (tableWrap) tableWrap.scrollTop = prevWrapScroll;
+    if (mainContent) mainContent.scrollTop = prevMainScroll;
 }
+
+function recalculateProveedoresTableTotals() {
+    window.recalculateProveedoresTableTotals = recalculateProveedoresTableTotals;
+    let sumSubtotal = 0;
+    let sumIva = 0;
+    let sumRet4 = 0;
+    let sumRetIsr = 0;
+    let sumTotal = 0;
+    
+    let list = (appState.proveedores || []).filter(p => p && (
+        (p.op && String(p.op).trim() !== '') ||
+        (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
+        (p.facturaProveedor && String(p.facturaProveedor).trim() !== '') ||
+        (p.folioFF && String(p.folioFF).trim() !== '') ||
+        (p.subtotal && p.subtotal > 0) ||
+        (p.total && p.total > 0) ||
+        (p.servicio && String(p.servicio).trim() !== '')
+    ));
+    if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
+        const selLow = appState.selectedProveedorFilter.trim().toLowerCase();
+        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === selLow);
+    }
+
+    if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
+        const filterVal = appState.proveedorStatusFilter.toLowerCase();
+        list = list.filter(p => {
+            const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
+            if (filterVal === 'pagado') {
+                return st === 'pagado';
+            }
+            if (filterVal === 'prog' || filterVal === 'c' || filterVal === 'p') {
+                return st !== 'pagado';
+            }
+            return st === filterVal;
+        });
+    }
+    
+    list.forEach(item => {
+        sumSubtotal += Number(item.subtotal) || 0;
+        sumIva += Number(item.iva) || 0;
+        sumRet4 += Number(item.ret4) || 0;
+        sumRetIsr += Number(item.retIsr) || 0;
+        sumTotal += Number(item.total) || 0;
+    });
+    
+    const totalsRow = document.getElementById("excel-proveedores-totals-row");
+    if (totalsRow) {
+        totalsRow.innerHTML = `
+            <td style="text-align: center; font-weight: 700;">Total</td>
+            <td style="padding-left: 8px;">Suma Calculada</td>
+            <td></td>
+            <td></td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumSubtotal)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumIva)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumRet4)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumRetIsr)}</td>
+            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumTotal)}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td style="text-align: center;"><span class="material-symbols-outlined" style="font-size: 15px;">lock</span></td>
+        `;
+    }
+}
+
+let _debouncedProveedoresTimer = null;
+function debouncedBroadcastProveedores() {
+    window.debouncedBroadcastProveedores = debouncedBroadcastProveedores;
+    if (_debouncedProveedoresTimer) clearTimeout(_debouncedProveedoresTimer);
+    _debouncedProveedoresTimer = setTimeout(() => {
+        if (typeof window.broadcastProveedoresUpdate === 'function') {
+            window.broadcastProveedoresUpdate();
+        }
+    }, 250);
+}
+window.debouncedBroadcastProveedores = debouncedBroadcastProveedores;
 
 function updateProveedorCell(index, key, val) {
     window.updateProveedorCell = updateProveedorCell;
     if (appState.proveedores && appState.proveedores[index]) {
+        if (key === 'p') {
+            const isPagado = String(val || '').trim().toLowerCase() === 'pagado';
+            val = isPagado ? 'PAGADO' : 'PROG';
+        }
         appState.proveedores[index][key] = val;
         if (key === 'facturaProveedor' || key === 'folioFF' || key === 'facturaNum') {
             appState.proveedores[index].facturaProveedor = val;
@@ -2505,6 +4426,14 @@ function updateProveedorCell(index, key, val) {
         }
         if (key === 'p') {
             appState.proveedores[index].estatus = val;
+            const isPagado = val === 'PAGADO';
+            if (isPagado) {
+                if (!appState.proveedores[index].fechaPago || appState.proveedores[index].fechaPago === '-' || appState.proveedores[index].fechaPago === '') {
+                    appState.proveedores[index].fechaPago = new Date().toISOString().split('T')[0];
+                }
+            } else {
+                appState.proveedores[index].fechaPago = '';
+            }
         }
         
         // If updated provider name, check if in names list
@@ -2515,19 +4444,26 @@ function updateProveedorCell(index, key, val) {
             renderProveedorChips();
         }
 
-        // Two-way sync back to Operaciones
-        const row = appState.proveedores[index];
-        if (typeof window.syncProveedorRowBackToOperaciones === 'function') {
-            window.syncProveedorRowBackToOperaciones(row);
+        // Los cambios no se guardan en almacenamiento ni nube a menos que se dé clic en 'Guardar'
+        if (!appState.isEditingProveedores) {
+            const row = appState.proveedores[index];
+            if (typeof window.syncProveedorRowBackToOperaciones === 'function') {
+                window.syncProveedorRowBackToOperaciones(row);
+            }
+            saveToStorage();
+            if (key === 'p' || key === 'proveedor') {
+                if (typeof window.broadcastProveedoresUpdate === 'function') {
+                    window.broadcastProveedoresUpdate();
+                }
+            } else {
+                debouncedBroadcastProveedores();
+            }
         }
-        
-        saveToStorage();
+
         if (key === 'p' || key === 'proveedor') {
             updateProveedorStatusCounts();
             renderProveedores();
-            if (typeof window.broadcastProveedoresUpdate === 'function') {
-                window.broadcastProveedoresUpdate();
-            }
+            if (typeof renderVisualizacion === 'function') renderVisualizacion();
         }
     }
 }
@@ -2564,71 +4500,7 @@ function liveUpdateProveedorTotals(index) {
         recalculateProveedoresTableTotals();
         saveToStorage();
         renderVisualizacion();
-    }
-}
-
-function recalculateProveedoresTableTotals() {
-    window.recalculateProveedoresTableTotals = recalculateProveedoresTableTotals;
-    let sumSubtotal = 0;
-    let sumIva = 0;
-    let sumRet4 = 0;
-    let sumRetIsr = 0;
-    let sumTotal = 0;
-    
-    let list = (appState.proveedores || []).filter(p => p && (
-        (p.op && String(p.op).trim() !== '') ||
-        (p.proveedor && String(p.proveedor).trim() !== '' && !p.proveedor.includes('-- Seleccionar')) ||
-        (p.facturaProveedor && String(p.facturaProveedor).trim() !== '') ||
-        (p.folioFF && String(p.folioFF).trim() !== '') ||
-        (p.subtotal && p.subtotal > 0) ||
-        (p.total && p.total > 0) ||
-        (p.servicio && String(p.servicio).trim() !== '')
-    ));
-    if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
-        list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
-    }
-
-    if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
-        const filterVal = appState.proveedorStatusFilter.toLowerCase();
-        list = list.filter(p => {
-            const st = (p.p || p.estatus || 'P').trim().toLowerCase();
-            if (filterVal === 'cancelado') {
-                return st.includes('cancel');
-            }
-            if (filterVal === 'c') {
-                return st === 'c';
-            }
-            if (filterVal === 'p') {
-                return st === 'p' || (!st.includes('cancel') && st !== 'c');
-            }
-            return st === filterVal;
-        });
-    }
-    
-    list.forEach(item => {
-        sumSubtotal += Number(item.subtotal) || 0;
-        sumIva += Number(item.iva) || 0;
-        sumRet4 += Number(item.ret4) || 0;
-        sumRetIsr += Number(item.retIsr) || 0;
-        sumTotal += Number(item.total) || 0;
-    });
-    
-    const totalsRow = document.getElementById("excel-proveedores-totals-row");
-    if (totalsRow) {
-        totalsRow.innerHTML = `
-            <td style="text-align: center; font-weight: 700;">Total</td>
-            <td style="padding-left: 8px;">Suma Calculada</td>
-            <td></td>
-            <td></td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumSubtotal)}</td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumIva)}</td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumRet4)}</td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumRetIsr)}</td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumTotal)}</td>
-            <td></td>
-            <td></td>
-            <td style="text-align: center;"><span class="material-symbols-outlined" style="font-size: 15px;">lock</span></td>
-        `;
+        debouncedBroadcastProveedores();
     }
 }
 
@@ -4336,22 +6208,293 @@ function updateGlobalStats() {
 }
 
 // ---------------------------------------------------------------------------------
-// 11. FICHA 4: CONSECUTIVO 2026 LOGIC
+// 11. FICHA 4: CONSECUTIVO 2026 LOGIC & COLLABORATIVE EDITING LOCK
 // ---------------------------------------------------------------------------------
+let _editConsecutivoTimeout = null;
+
+async function startEditingConsecutivo() {
+    window.startEditingConsecutivo = startEditingConsecutivo;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
+    // Verificar si está bloqueado por otro usuario
+    if (appState.consecutivoLockedBy && appState.consecutivoLockedBy.userId !== currentUserId) {
+        const elapsed = Date.now() - (appState.consecutivoLockedBy.timestamp || 0);
+        if (elapsed < 5 * 60 * 1000) {
+            alert(`⚠️ Esta sección está siendo editada por ${appState.consecutivoLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    }
+
+    // Respaldar estado previo a la edición para que los cambios solo se guarden al dar clic en 'Guardar'
+    appState._consecutivoSnapshot = JSON.parse(JSON.stringify(appState.consecutivo || []));
+    appState._operacionesSnapshotConsec = JSON.parse(JSON.stringify(appState.operacionesProyectos || []));
+
+    appState.isEditingConsecutivo = true;
+    appState.consecutivoLockedBy = {
+        userId: currentUserId,
+        userName: currentUserName,
+        timestamp: Date.now()
+    };
+
+    updateConsecutivoEditButtonsUI();
+    renderConsecutivo();
+
+    // Notificar a otras máquinas por WebSockets
+    broadcastConsecutivoLockState(true, currentUserName, currentUserId);
+
+    // Persistir estado de bloqueo en Supabase
+    await syncConsecutivoLockToCloud(true, currentUserName, currentUserId);
+
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
+    }
+
+    // Auto-timeout de 5 minutos por seguridad (descarta si no se dio clic en Guardar)
+    if (_editConsecutivoTimeout) clearTimeout(_editConsecutivoTimeout);
+    _editConsecutivoTimeout = setTimeout(() => {
+        if (appState.isEditingConsecutivo) {
+            if (typeof showCustomNotification === 'function') {
+                showCustomNotification("Tiempo de edición expirado por inactividad. Los cambios no guardados fueron descartados.", "warning");
+            }
+            cancelEditingConsecutivo();
+        }
+    }, 5 * 60 * 1000);
+}
+window.startEditingConsecutivo = startEditingConsecutivo;
+
+async function saveEditingConsecutivo(isAuto = false) {
+    window.saveEditingConsecutivo = saveEditingConsecutivo;
+    if (_editConsecutivoTimeout) clearTimeout(_editConsecutivoTimeout);
+
+    window._lastLocalConsecutivoSyncTime = Date.now();
+    window._lastLocalOperacionesSyncTime = Date.now();
+
+    if (Array.isArray(appState.consecutivo)) {
+        appState.consecutivo.forEach(row => {
+            if (!row) return;
+            if (String(row.st || '').trim().toUpperCase() !== 'P') {
+                row.fechaPago = '';
+            }
+        });
+    }
+
+    appState.isEditingConsecutivo = false;
+    appState.consecutivoLockedBy = null;
+    appState._consecutivoSnapshot = null;
+    appState._operacionesSnapshotConsec = null;
+
+    // Guardar en almacenamiento y nube ANTES de re-renderizar
+    saveToStorage();
+    try {
+        localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
+        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+    } catch (e) {}
+
+    updateConsecutivoEditButtonsUI();
+    renderConsecutivo();
+
+    if (typeof window.syncConsecutivoToCloud === 'function') {
+        window.syncConsecutivoToCloud(true);
+    }
+
+    // Notificar desbloqueo a otras máquinas
+    broadcastConsecutivoLockState(false, null, null);
+    await syncConsecutivoLockToCloud(false, null, null);
+
+    if (!isAuto && typeof showCustomNotification === 'function') {
+        showCustomNotification("Cambios de estatus guardados y tabla liberada con éxito.", "success");
+    }
+}
+window.saveEditingConsecutivo = saveEditingConsecutivo;
+
+async function cancelEditingConsecutivo() {
+    window.cancelEditingConsecutivo = cancelEditingConsecutivo;
+    if (_editConsecutivoTimeout) clearTimeout(_editConsecutivoTimeout);
+
+    appState.isEditingConsecutivo = false;
+    appState.consecutivoLockedBy = null;
+
+    if (appState._consecutivoSnapshot) {
+        appState.consecutivo = JSON.parse(JSON.stringify(appState._consecutivoSnapshot));
+        appState._consecutivoSnapshot = null;
+    }
+    if (appState._operacionesSnapshotConsec) {
+        appState.operacionesProyectos = JSON.parse(JSON.stringify(appState._operacionesSnapshotConsec));
+        appState._operacionesSnapshotConsec = null;
+    }
+
+    updateConsecutivoEditButtonsUI();
+    renderConsecutivo();
+
+    broadcastConsecutivoLockState(false, null, null);
+    await syncConsecutivoLockToCloud(false, null, null);
+}
+window.cancelEditingConsecutivo = cancelEditingConsecutivo;
+
+function updateConsecutivoEditButtonsUI() {
+    window.updateConsecutivoEditButtonsUI = updateConsecutivoEditButtonsUI;
+    const btnEdit = document.getElementById("btn-edit-consecutivo");
+    const btnSave = document.getElementById("btn-save-consecutivo");
+    const banner = document.getElementById("consecutivo-lock-banner");
+    const bannerText = document.getElementById("consecutivo-lock-banner-text");
+    const tableContainer = document.getElementById("consecutivo-table-container");
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const isLockedByOther = appState.consecutivoLockedBy && appState.consecutivoLockedBy.userId !== currentUserId;
+
+    if (isLockedByOther) {
+        if (tableContainer) tableContainer.classList.add("tabla-bloqueada-editando");
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) bannerText.innerText = `Esta sección está siendo editada por ${appState.consecutivoLockedBy.userName || 'otro usuario'}`;
+        }
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
+            btnEdit.style.cursor = "not-allowed";
+            btnEdit.style.opacity = "0.5";
+            btnEdit.title = `Esta sección está siendo editada por ${appState.consecutivoLockedBy.userName}`;
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.cursor = "not-allowed";
+            btnSave.style.opacity = "0.45";
+        }
+    } else if (appState.isEditingConsecutivo) {
+        if (tableContainer) tableContainer.classList.remove("tabla-bloqueada-editando");
+        if (banner) banner.style.display = "none";
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.add("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editando...`;
+            btnEdit.style.cursor = "default";
+            btnEdit.style.opacity = "1";
+            btnEdit.title = "Modo de edición activo";
+        }
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.style.cursor = "pointer";
+            btnSave.style.opacity = "1";
+            btnSave.title = "Guardar cambios y permitir edición a otros usuarios";
+        }
+    } else {
+        if (tableContainer) tableContainer.classList.remove("tabla-bloqueada-editando");
+        if (banner) banner.style.display = "none";
+        if (btnEdit) {
+            btnEdit.disabled = false;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar`;
+            btnEdit.style.cursor = "pointer";
+            btnEdit.style.opacity = "1";
+            btnEdit.title = "Habilitar edición de estatus";
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.cursor = "not-allowed";
+            btnSave.style.opacity = "0.45";
+            btnSave.title = "Haz clic en 'Editar' para comenzar";
+        }
+    }
+}
+window.updateConsecutivoEditButtonsUI = updateConsecutivoEditButtonsUI;
+
+function broadcastConsecutivoLockState(isLocked, userName, userId) {
+    window.broadcastConsecutivoLockState = broadcastConsecutivoLockState;
+    if (!window.chatRealtimeChannel) return;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'consecutivo_lock_update',
+            payload: {
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting consecutivo lock state:", e);
+    }
+}
+window.broadcastConsecutivoLockState = broadcastConsecutivoLockState;
+
+async function syncConsecutivoLockToCloud(isLocked, userName, userId) {
+    window.syncConsecutivoLockToCloud = syncConsecutivoLockToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_consecutivo_lock__',
+            contenido: JSON.stringify({
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: Date.now()
+            }),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (e) {
+        console.warn("⚠️ Error persisting consecutivo lock to cloud:", e);
+    }
+}
+window.syncConsecutivoLockToCloud = syncConsecutivoLockToCloud;
+
+async function fetchConsecutivoLockFromCloud() {
+    window.fetchConsecutivoLockFromCloud = fetchConsecutivoLockFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs, error } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_consecutivo_lock__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                if (parsed.isLocked) {
+                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                    if (elapsed < 5 * 60 * 1000) {
+                        if (parsed.userId !== currentUserId) {
+                            appState.consecutivoLockedBy = parsed;
+                        }
+                    } else {
+                        appState.consecutivoLockedBy = null;
+                    }
+                } else {
+                    if (!appState.isEditingConsecutivo) {
+                        appState.consecutivoLockedBy = null;
+                    }
+                }
+                updateConsecutivoEditButtonsUI();
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching consecutivo lock from cloud:", e);
+    }
+}
+window.fetchConsecutivoLockFromCloud = fetchConsecutivoLockFromCloud;
+
 function getFilteredConsecutivoList() {
     let list = appState.consecutivo || [];
     
-    // 1. ST Filter
-    if (appState.consecutivoStFilter === 'P') {
-        list = list.filter(item => (item.st || '').trim().toUpperCase() === 'P');
+    // 1. ST Filter (P = Pagados / Archivo, C = Por Cobrar, PP = Por programar)
+    if (appState.consecutivoArchivoMode || appState.consecutivoStFilter === 'P') {
+        list = list.filter(item => String(item.st || '').trim().toUpperCase() === 'P');
     } else if (appState.consecutivoStFilter === 'C') {
-        list = list.filter(item => (item.st || '').trim().toUpperCase() === 'C');
-    } else if (appState.consecutivoStFilter === 'Cancelado') {
-        list = list.filter(item => 
-            String(item.st || '').toLowerCase().includes('cancel') ||
-            String(item.fechaEmision || '').toLowerCase().includes('cancel') ||
-            String(item.cliente || '').toLowerCase().includes('cancel')
-        );
+        list = list.filter(item => String(item.st || '').trim().toUpperCase() === 'C');
+    } else if (appState.consecutivoStFilter === 'PP' || appState.consecutivoStFilter === 'PROG' || appState.consecutivoStFilter === 'Cancelado') {
+        list = list.filter(item => {
+            const st = String(item.st || 'PP').trim().toUpperCase();
+            return st !== 'P' && st !== 'C';
+        });
     }
     
     // 2. Client Filter
@@ -4382,16 +6525,61 @@ function getFilteredConsecutivoList() {
     return list;
 }
 
+function toggleConsecutivoArchivoView(forceState) {
+    window.toggleConsecutivoArchivoView = toggleConsecutivoArchivoView;
+    const nextState = typeof forceState === 'boolean' ? forceState : !appState.consecutivoArchivoMode;
+    appState.consecutivoArchivoMode = nextState;
+    appState.consecutivoPage = 1;
+
+    document.querySelectorAll(".consecutivo-filter-btn").forEach(b => b.classList.remove("active"));
+    if (nextState) {
+        appState.consecutivoStFilter = 'P';
+        const btnP = document.querySelector(".consecutivo-filter-btn[data-st='P']");
+        if (btnP) btnP.classList.add("active");
+    } else {
+        appState.consecutivoStFilter = 'all';
+        const btnAll = document.querySelector(".consecutivo-filter-btn[data-st='all']");
+        if (btnAll) btnAll.classList.add("active");
+    }
+    renderConsecutivo();
+}
+window.toggleConsecutivoArchivoView = toggleConsecutivoArchivoView;
+
 function renderConsecutivo() {
-    if (typeof window.syncAllOperacionesToConsecutivo === "function") window.syncAllOperacionesToConsecutivo();
+    window.renderConsecutivo = renderConsecutivo;
+    if (!appState.isEditingConsecutivo && typeof window.syncAllOperacionesToConsecutivo === "function") {
+        window.syncAllOperacionesToConsecutivo();
+    }
+    if (typeof window.updateConsecutivoEditButtonsUI === "function") window.updateConsecutivoEditButtonsUI();
     const tbody = document.getElementById("tbody-consecutivo");
     if (!tbody) return;
-    tbody.innerHTML = "";
+    const tableScrollWrap = tbody.closest(".table-responsive");
+    const prevScrollTop = tableScrollWrap ? tableScrollWrap.scrollTop : 0;
+    const mainScrollEl = document.querySelector(".main-content");
+    const prevMainScroll = mainScrollEl ? mainScrollEl.scrollTop : 0;
+    const frag = document.createDocumentFragment();
     
     const filteredList = getFilteredConsecutivoList();
     const totalFiltered = filteredList.length;
+
+    // Actualizar tarjeta y banner de Sección Archivo (Pagados)
+    const pagadosCount = (appState.consecutivo || []).filter(item => item && String(item.st || '').trim().toUpperCase() === 'P').length;
+    const archivoCountEl = document.getElementById("consecutivo-archivo-count");
+    const archivoBtn = document.getElementById("btn-consecutivo-archivo");
+    const archivoBanner = document.getElementById("consecutivo-archivo-banner");
+    if (archivoCountEl) {
+        archivoCountEl.innerText = appState.consecutivoArchivoMode
+            ? `Viendo Archivo (${pagadosCount})`
+            : `Ver Archivo (${pagadosCount})`;
+    }
+    if (archivoBtn) {
+        archivoBtn.classList.toggle("active", Boolean(appState.consecutivoArchivoMode));
+    }
+    if (archivoBanner) {
+        archivoBanner.style.display = appState.consecutivoArchivoMode ? "flex" : "none";
+    }
     
-    // Update KPI summary cards based on filtered list
+    // Update KPI summary cards (reflects Por Cobrar C + Por Programar PP)
     updateConsecutivoKPIs(filteredList);
     
     // Update header count badges
@@ -4422,20 +6610,33 @@ function renderConsecutivo() {
     if (pageItems.length === 0) {
         const emptyTr = document.createElement("tr");
         emptyTr.innerHTML = `<td colspan="12" style="text-align: center; padding: 30px; color: var(--text-muted);">No se encontraron facturas que coincidan con los filtros aplicados.</td>`;
-        tbody.appendChild(emptyTr);
+        frag.appendChild(emptyTr);
     } else {
         pageItems.forEach((item) => {
             const realIndex = appState.consecutivo.indexOf(item);
-            const isCanceled = String(item.fechaEmision || '').toLowerCase().includes('cancel') || String(item.cliente || '').toLowerCase().includes('cancel') || String(item.st || '').toLowerCase().includes('cancel');
+            const stVal = String(item.st || 'PP').trim().toUpperCase();
             
-            const stVal = String(item.st || '').trim().toUpperCase();
-            let stBadgeClass = 'st-badge-empty';
-            if (isCanceled || stVal === 'CANCELADO') stBadgeClass = 'st-badge-cancelado';
-            else if (stVal === 'C') stBadgeClass = 'st-badge-c';
-            else if (stVal === 'P') stBadgeClass = 'st-badge-p';
+            let stBadgeClass = 'st-badge-pp';
+            let stDisplay = 'PP';
+            let isProg = false;
+            if (stVal === 'P') {
+                stBadgeClass = 'st-badge-p';
+                stDisplay = 'P';
+            } else if (stVal === 'C') {
+                stBadgeClass = 'st-badge-c';
+                stDisplay = 'C';
+            } else {
+                stBadgeClass = 'st-badge-pp';
+                stDisplay = 'PP';
+                isProg = true;
+            }
             
             const cleanEmision = String(item.fechaEmision || '').replace(' 00:00:00', '').trim();
             const cleanPago = String(item.fechaPago || '').replace(' 00:00:00', '').trim();
+            
+            const subVal = (item.subtotal !== '' && item.subtotal !== null && item.subtotal !== undefined) ? Number(item.subtotal) : 0;
+            const ivaVal = (item.iva !== '' && item.iva !== null && item.iva !== undefined) ? Number(item.iva) : (subVal > 0 ? Math.round(subVal * 0.16 * 100) / 100 : 0);
+            const totVal = (item.total !== '' && item.total !== null && item.total !== undefined) ? Number(item.total) : (subVal + ivaVal);
             
             const tr = document.createElement("tr");
             tr.id = `consec-row-${realIndex}`;
@@ -4443,67 +6644,65 @@ function renderConsecutivo() {
                 <td style="text-align: center; font-weight: 700; color: var(--text-secondary);" title="Consecutivo #${item.consecutivo || (realIndex + 1)}">
                     ${item.consecutivo || (realIndex + 1)}
                 </td>
-                <td title="${item.factura || ''}">
-                    <input type="text" class="excel-input font-bold" value="${item.factura || ''}" oninput="updateConsecutivoCell(${realIndex}, 'factura', this.value)" style="color: #2563EB;">
+                <td title="${item.factura || '-'}">
+                    <span class="cell-locked-val font-bold" style="color: #2563EB;">${item.factura || '-'}</span>
                 </td>
-                <td title="${cleanEmision}">
-                    <input type="text" class="excel-input" value="${cleanEmision}" oninput="updateConsecutivoCell(${realIndex}, 'fechaEmision', this.value)">
+                <td style="text-align: center;" title="${cleanEmision || '-'}">
+                    <span class="cell-locked-val">${cleanEmision ? formatProvTableDate(cleanEmision) : '-'}</span>
                 </td>
-                <td title="${item.cliente || ''}">
-                    <input type="text" class="excel-input font-bold" value="${item.cliente || ''}" oninput="updateConsecutivoCell(${realIndex}, 'cliente', this.value)">
+                <td title="${item.cliente || '-'}">
+                    <span class="cell-locked-val font-bold">${item.cliente || '-'}</span>
                 </td>
-                <td title="${item.folioCliente || ''}">
-                    <input type="text" class="excel-input" value="${item.folioCliente || ''}" oninput="updateConsecutivoCell(${realIndex}, 'folioCliente', this.value)">
+                <td style="text-align: center;" title="${item.folioCliente || '-'}">
+                    <span class="cell-locked-val">${item.folioCliente || '-'}</span>
                 </td>
-                <td title="Subtotal: ${item.subtotal || ''}">
-                    <input type="number" id="consec-subtotal-${realIndex}" class="excel-input number-input font-bold" value="${(item.subtotal !== '' && item.subtotal !== null && item.subtotal !== undefined) ? item.subtotal : ''}" step="50" oninput="liveUpdateConsecutivoRow(${realIndex})">
+                <td style="text-align: right;" title="Subtotal: ${formatCurrency(subVal)}">
+                    <span class="cell-locked-val font-bold">${formatCurrency(subVal)}</span>
                 </td>
-                <td title="IVA: ${item.iva || ''}">
-                    <input type="number" id="consec-iva-${realIndex}" class="excel-input number-input readonly" value="${(item.iva !== '' && item.iva !== null && item.iva !== undefined) ? item.iva : ''}" readonly>
+                <td style="text-align: right;" title="IVA: ${formatCurrency(ivaVal)}">
+                    <span class="cell-locked-val">${formatCurrency(ivaVal)}</span>
                 </td>
-                <td title="Total: ${item.total || ''}">
-                    <input type="number" id="consec-total-${realIndex}" class="excel-input number-input readonly font-bold" value="${(item.total !== '' && item.total !== null && item.total !== undefined) ? item.total : ''}" readonly style="color: #059669;">
+                <td style="text-align: right;" title="Total: ${formatCurrency(totVal)}">
+                    <span class="cell-locked-val font-bold" style="color: #059669;">${formatCurrency(totVal)}</span>
                 </td>
                 <td style="text-align: center; position: relative;">
                     <div class="st-custom-dropdown-wrap" id="st-wrap-${realIndex}">
-                        <div class="st-badge ${stBadgeClass} st-badge-trigger" onclick="toggleStBadgeDropdown(${realIndex}, event)" title="Cambiar estatus">
-                            <span>${isCanceled || stVal === 'CANCELADO' ? 'Canc' : (stVal || '-')}</span>
+                        <div class="st-badge ${stBadgeClass} st-badge-trigger ${!appState.isEditingConsecutivo ? 'trigger-locked' : ''}" onclick="toggleStBadgeDropdown(${realIndex}, event)" title="${appState.isEditingConsecutivo ? 'Cambiar estatus' : 'Haz clic en \'Editar\' arriba para modificar el estatus'}">
+                            <span>${stDisplay}</span>
                             <span class="material-symbols-outlined st-arrow">expand_more</span>
                         </div>
                         <div class="st-dropdown-menu" id="st-menu-${realIndex}">
-                            <div class="st-dropdown-option ${!stVal ? 'selected' : ''}" onclick="selectStOption(${realIndex}, '', event)">
-                                <span class="st-badge st-badge-empty">-</span>
-                                <span class="option-name">Sin Estatus</span>
-                            </div>
                             <div class="st-dropdown-option ${stVal === 'P' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'P', event)">
                                 <span class="st-badge st-badge-p">P</span>
-                                <span class="option-name">Pagado</span>
+                                <span class="option-name">Pagado (P)</span>
                             </div>
                             <div class="st-dropdown-option ${stVal === 'C' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'C', event)">
                                 <span class="st-badge st-badge-c">C</span>
-                                <span class="option-name">Por Cobrar</span>
+                                <span class="option-name">Por Cobrar (C)</span>
                             </div>
-                            <div class="st-dropdown-option ${isCanceled || stVal === 'CANCELADO' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'Cancelado', event)">
-                                <span class="st-badge st-badge-cancelado">Canc</span>
-                                <span class="option-name">Cancelado</span>
+                            <div class="st-dropdown-option ${isProg ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'PP', event)">
+                                <span class="st-badge st-badge-pp">PP</span>
+                                <span class="option-name">Por programar (PP)</span>
                             </div>
                         </div>
                     </div>
                 </td>
-                <td title="${cleanPago}">
-                    <input type="text" class="excel-input" value="${cleanPago}" oninput="updateConsecutivoCell(${realIndex}, 'fechaPago', this.value)">
+                <td style="text-align: center;" title="Fecha de Pago: ${cleanPago || '-'}">
+                    <span class="cell-locked-val" style="color: #64748B;">${cleanPago ? formatProvTableDate(cleanPago) : '-'}</span>
                 </td>
-                <td title="${item.referenciaOp || ''}">
-                    <input type="text" class="excel-input" value="${item.referenciaOp || ''}" oninput="updateConsecutivoCell(${realIndex}, 'referenciaOp', this.value)">
+                <td style="text-align: center;" title="${item.referenciaOp || '-'}">
+                    <span class="cell-locked-val font-bold" style="color: #0F172A;">${item.referenciaOp || '-'}</span>
                 </td>
-                <td title="${item.servicio || ''}">
-                    <input type="text" class="excel-input" value="${item.servicio || ''}" oninput="updateConsecutivoCell(${realIndex}, 'servicio', this.value)">
+                <td title="${item.servicio || '-'}">
+                    <span class="cell-locked-val">${item.servicio || '-'}</span>
                 </td>
-                
             `;
-            tbody.appendChild(tr);
+            frag.appendChild(tr);
         });
     }
+    tbody.replaceChildren(frag);
+    if (tableScrollWrap && prevScrollTop > 0) tableScrollWrap.scrollTop = prevScrollTop;
+    if (mainScrollEl && prevMainScroll > 0) mainScrollEl.scrollTop = prevMainScroll;
     
     // Render Summary row at the bottom
     renderConsecutivoFooterTotals(filteredList);
@@ -4516,11 +6715,16 @@ function updateConsecutivoKPIs(list) {
     let sumSubtotal = 0;
     let sumIva = 0;
     
-    list.forEach(item => {
-        const stVal = String(item.st || '').trim().toUpperCase();
-        if (stVal === 'C' || stVal === 'POR COBRAR') {
+    // El resultado del total de todos los proyectos que estén en "Por cobrar" ('C') y "Por programar" ('PP')
+    const sourceList = appState.consecutivo || [];
+    sourceList.forEach(item => {
+        if (!item) return;
+        const stVal = String(item.st || 'PP').trim().toUpperCase();
+        if (stVal !== 'P') {
             const sub = Number(item.subtotal) || 0;
-            const iv = Number(item.iva) || 0;
+            const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined) 
+                ? Number(item.iva) 
+                : (sub > 0 ? Math.round(sub * 0.16 * 100) / 100 : 0);
             
             sumSubtotal += sub;
             sumIva += iv;
@@ -4536,6 +6740,10 @@ function updateConsecutivoKPIs(list) {
     if (subEl) subEl.innerText = formatCurrency(sumSubtotal);
     if (ivaEl) ivaEl.innerText = formatCurrency(sumIva);
     if (totEl) totEl.innerText = formatCurrency(sumTotalFacturado);
+
+    if (typeof renderVisualizacion === 'function') {
+        renderVisualizacion();
+    }
 }
 
 function renderConsecutivoFooterTotals(list) {
@@ -4619,9 +6827,12 @@ function updateConsecutivoCell(index, key, val) {
     window.updateConsecutivoCell = updateConsecutivoCell;
     if (appState.consecutivo && appState.consecutivo[index]) {
         appState.consecutivo[index][key] = val;
-        saveToStorage();
-        if (typeof window.syncConsecutivoToCloud === 'function') {
-            window.syncConsecutivoToCloud();
+        // Los cambios no se guardan en almacenamiento ni nube a menos que se dé clic en 'Guardar'
+        if (!appState.isEditingConsecutivo) {
+            saveToStorage();
+            if (typeof window.syncConsecutivoToCloud === 'function') {
+                window.syncConsecutivoToCloud();
+            }
         }
     }
 };
@@ -4708,8 +6919,8 @@ function addNewConsecutivoRow() {
         subtotal: 0,
         iva: 0,
         total: 0,
-        st: "",
-        fechaPago: today,
+        st: "PP",
+        fechaPago: "",
         referenciaOp: "",
         servicio: "Flete",
         detalle: "",
@@ -4780,10 +6991,20 @@ function handleConsecutivoSearch(val) {
 
 function filterConsecutivoByST(st, btn) {
     window.filterConsecutivoByST = filterConsecutivoByST;
-    appState.consecutivoStFilter = st;
+    const normSt = (st === 'PROG' || st === 'Por programar') ? 'PP' : st;
+    appState.consecutivoStFilter = normSt;
+    if (normSt !== 'P') {
+        appState.consecutivoArchivoMode = false;
+    }
     appState.consecutivoPage = 1;
     document.querySelectorAll(".consecutivo-filter-btn").forEach(b => b.classList.remove("active"));
-    if (btn) btn.classList.add("active");
+    if (btn && typeof btn.classList?.add === 'function') {
+        btn.classList.add("active");
+    } else {
+        const activeBtn = document.querySelector(`.consecutivo-filter-btn[data-st='${normSt}']`) ||
+                          document.querySelector(`.consecutivo-filter-btn[data-st='${st}']`);
+        if (activeBtn) activeBtn.classList.add("active");
+    }
     renderConsecutivo();
 };
 
@@ -4926,13 +7147,19 @@ document.addEventListener("click", function(event) {
     if (!event.target.closest(".custom-select-wrapper")) {
         document.querySelectorAll(".custom-select-wrapper").forEach(w => w.classList.remove("open"));
     }
-    if (!event.target.closest(".st-custom-dropdown-wrap")) {
+    if (!event.target.closest(".st-custom-dropdown-wrap") && !event.target.closest(".st-dropdown-menu")) {
         document.querySelectorAll(".st-custom-dropdown-wrap.open").forEach(w => w.classList.remove("open"));
     }
     const globalProvMenu = document.getElementById("global-prov-estatus-menu");
     if (globalProvMenu && globalProvMenu.style.display === "block") {
         if (!event.target.closest("#global-prov-estatus-menu") && !event.target.closest(".prov-estatus-trigger")) {
             globalProvMenu.style.display = "none";
+        }
+    }
+    const globalGiCatMenu = document.getElementById("global-gi-categoria-menu");
+    if (globalGiCatMenu && globalGiCatMenu.style.display === "block") {
+        if (!event.target.closest("#global-gi-categoria-menu") && !event.target.closest(".gi-cat-trigger")) {
+            globalGiCatMenu.style.display = "none";
         }
     }
     if (!event.target.closest(".assignee-autocomplete-wrapper")) {
@@ -4944,13 +7171,18 @@ document.addEventListener("click", function(event) {
 });
 
 // Close dropdowns on scroll
-window.addEventListener("scroll", function() {
+window.addEventListener("scroll", function(e) {
+    if (e && e.target && e.target.closest && (e.target.closest(".st-dropdown-menu") || e.target.closest(".st-custom-dropdown-wrap") || e.target.closest(".gi-cat-global-menu"))) return;
     document.querySelectorAll(".st-custom-dropdown-wrap.open").forEach(w => w.classList.remove("open"));
     const globalProvMenu = document.getElementById("global-prov-estatus-menu");
     if (globalProvMenu && globalProvMenu.style.display === "block") {
         globalProvMenu.style.display = "none";
     }
-}, true);
+    const globalGiCatMenu = document.getElementById("global-gi-categoria-menu");
+    if (globalGiCatMenu && globalGiCatMenu.style.display === "block") {
+        globalGiCatMenu.style.display = "none";
+    }
+}, false);
 
 // Custom Dropdown Handlers for Consecutivo Cliente Filter & ST Badges
 function toggleConsecutivoClientDropdown(event) {
@@ -4993,7 +7225,18 @@ function selectConsecutivoClientOption(value, label, event) {
 
 function toggleStBadgeDropdown(index, event) {
     window.toggleStBadgeDropdown = toggleStBadgeDropdown;
-    if (event) event.stopPropagation();
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingConsecutivo) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' arriba para modificar el estatus.", "warning");
+        } else {
+            alert("Haz clic en 'Editar' arriba para modificar el estatus.");
+        }
+        return;
+    }
     const wrap = document.getElementById(`st-wrap-${index}`);
     const menu = document.getElementById(`st-menu-${index}`);
     if (!wrap || !menu) return;
@@ -5014,37 +7257,97 @@ function toggleStBadgeDropdown(index, event) {
         
         wrap.classList.add("open");
     }
-};
+}
 
 function selectStOption(index, value, event) {
     window.selectStOption = selectStOption;
-    if (event) event.stopPropagation();
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingConsecutivo) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' arriba para modificar el estatus.", "warning");
+        }
+        return;
+    }
     const wrap = document.getElementById(`st-wrap-${index}`);
     if (wrap) wrap.classList.remove("open");
-    updateConsecutivoCell(index, 'st', value);
 
-    // Sincronizar cancelación o cambio de estatus al expediente en Operaciones
     const row = appState.consecutivo ? appState.consecutivo[index] : null;
-    if (row && row.referenciaOp && Array.isArray(appState.operacionesProyectos)) {
+    if (!row) return;
+
+    let finalVal = value;
+    if (value === 'PROG' || value === 'Por programar' || String(value).toLowerCase().includes('cancel') || value === 'PP') {
+        finalVal = 'PP';
+    }
+
+    // 1 Pagados: se añade automáticamente la fecha de pago para que proceda a archivarse
+    // Si se cambia a otro estatus ('C', 'PP', ''), se quita la fecha de pago
+    if (finalVal === 'P') {
+        if (!row.fechaPago || row.fechaPago === '-' || row.fechaPago === '') {
+            row.fechaPago = new Date().toISOString().split('T')[0];
+        }
+    } else {
+        row.fechaPago = '';
+    }
+
+    row.st = finalVal;
+    updateConsecutivoCell(index, 'st', finalVal);
+    updateConsecutivoCell(index, 'fechaPago', row.fechaPago);
+
+    // Sincronizar en memoria el cambio de estatus al expediente en Operaciones (se guardará al dar clic en 'Guardar')
+    if (row.referenciaOp && Array.isArray(appState.operacionesProyectos)) {
         const refId = String(row.referenciaOp).trim().toLowerCase();
         const proj = appState.operacionesProyectos.find(p => 
             String(p.numProyecto || p.consecutivo || p.numConsecutivo || p.id).trim().toLowerCase() === refId
         );
         if (proj) {
-            const isCancel = String(value || '').toLowerCase().includes('cancel');
-            if (isCancel) {
-                proj.estatus = 'CANCELADO';
-                proj.cancelado = true;
+            if (finalVal === 'PP' || finalVal === 'PROG') {
+                proj.estatus = 'POR PROGRAMAR';
+                proj.cancelado = false;
+                proj.fechaPago = '';
+                proj.listoParaArchivar = false;
+            } else if (finalVal === 'P') {
+                proj.fechaPago = row.fechaPago;
+                proj.listoParaArchivar = true;
+                proj.cancelado = false;
+                proj.estatus = 'PAGADO';
+            } else if (finalVal === 'C') {
+                proj.cancelado = false;
+                proj.fechaPago = '';
+                proj.listoParaArchivar = false;
+                if (proj.estatus === 'CANCELADO' || proj.estatus === 'POR PROGRAMAR' || proj.estatus === 'PAGADO') {
+                    proj.estatus = 'PENDIENTE';
+                }
             } else {
                 proj.cancelado = false;
+                proj.fechaPago = '';
+                proj.listoParaArchivar = false;
                 proj.estatus = computeProjectStatus(proj);
             }
-            try {
-                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
-            } catch (e) {}
+            if (!appState.isEditingConsecutivo) {
+                try {
+                    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+                } catch (e) {}
+            }
             if (typeof window.renderOperaciones === 'function' && appState.currentAdminFicha === 'operaciones') {
                 window.renderOperaciones();
             }
+        }
+    }
+
+    if (finalVal === 'P') {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Pagada con fecha ${formatProvTableDate(row.fechaPago)}. Haz clic en 'Guardar' para confirmar.`, "info");
+        }
+    } else if (finalVal === 'C') {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Por Cobrar (C) y fecha de pago retirada. Haz clic en 'Guardar' para confirmar.`, "info");
+        }
+    } else if (finalVal === 'PP') {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Por programar (PP). Haz clic en 'Guardar' para confirmar.`, "info");
         }
     }
 
@@ -5700,12 +8003,14 @@ function setupRealtimeSubscriptions() {
         if (!data || !Array.isArray(data.proyectos)) return;
         // Evitar procesar el eco de nuestra propia emisión en esta misma pestaña
         if (data.senderId && window._myClientId && data.senderId === window._myClientId) return;
+        if (Date.now() - (window._lastLocalOperacionesSyncTime || 0) < 5000) return;
+        if (appState.isEditingOperacionesDetail) return;
         if (typeof window.mergeOperacionesProjects === 'function') {
             window.mergeOperacionesProjects(data.proyectos, true);
             try {
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             } catch (e) {}
-            if (typeof window.syncAllOperacionesToProveedores === 'function') {
+            if (!appState.isEditingProveedores && typeof window.syncAllOperacionesToProveedores === 'function') {
                 window.syncAllOperacionesToProveedores();
             }
             if (appState.currentAdminFicha === 'operaciones') {
@@ -5713,7 +8018,7 @@ function setupRealtimeSubscriptions() {
                 if (!detailPane || detailPane.style.display === "none") {
                     if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
                 }
-                if (appState.activeOperacionesProjectId) {
+                if (appState.activeOperacionesProjectId && !appState.isEditingOperacionesDetail) {
                     const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId || x.consecutivo === appState.activeOperacionesProjectId || x.numProyecto === appState.activeOperacionesProjectId);
                     if (activeP) {
                         if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
@@ -5724,13 +8029,27 @@ function setupRealtimeSubscriptions() {
                         if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
                     }
                 }
-            } else if (appState.currentAdminFicha === 'proveedores') {
+            } else if (appState.currentAdminFicha === 'proveedores' && !appState.isEditingProveedores) {
                 if (typeof window.updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
                 if (typeof window.renderProveedoresTable === 'function') renderProveedoresTable();
                 if (typeof window.renderProveedores === 'function') renderProveedores();
-            } else if (appState.currentAdminFicha === 'consecutivo') {
+            } else if (appState.currentAdminFicha === 'consecutivo' && !appState.isEditingConsecutivo) {
                 if (typeof window.renderConsecutivoTable === 'function') renderConsecutivoTable();
             }
+        }
+    });
+
+    // 4a2. Bloqueo exclusivo por proyecto en Operaciones (con resolución determinista de carrera por timestamp)
+    window.chatRealtimeChannel.on('broadcast', { event: 'operaciones_project_lock_update' }, payload => {
+        if (typeof window.handleIncomingOperacionesProjectLock === 'function') {
+            window.handleIncomingOperacionesProjectLock(payload.payload);
+        }
+    });
+
+    // 4a3. Actualización del sistema en línea ("suelta los globos"): saca a los usuarios de los proyectos abiertos y actualiza
+    window.chatRealtimeChannel.on('broadcast', { event: 'system_release_update' }, payload => {
+        if (typeof window.handleIncomingSystemReleaseUpdate === 'function') {
+            window.handleIncomingSystemReleaseUpdate(payload.payload);
         }
     });
 
@@ -5738,14 +8057,73 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_update' }, payload => {
         const data = payload.payload;
         if (!data || !Array.isArray(data.proveedores)) return;
-        if (data.proveedores.length > 0) {
-            appState.proveedores = data.proveedores;
+        if (appState.isEditingProveedores) return;
+        if (Date.now() - (window._lastLocalProveedoresSyncTime || 0) < 5000) return;
+        const purgedIds = window.purgedProjectIds || new Set();
+        const validProv = data.proveedores.filter(r => {
+            if (!r) return false;
+            const opVal = r.op ? String(r.op).trim() : '';
+            const pId = r.projectId ? String(r.projectId).trim() : '';
+            if (purgedIds.has(opVal) || purgedIds.has(pId)) return false;
+            return true;
+        }).map(r => {
+            if (String(r.p || r.estatus || '').trim().toLowerCase() !== 'pagado') {
+                r.fechaPago = '';
+            }
+            return r;
+        });
+        if (validProv.length > 0) {
+            appState.proveedores = validProv;
             saveToStorage();
             if (appState.currentAdminFicha === 'proveedores') {
                 if (typeof window.updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
                 if (typeof window.renderProveedoresTable === 'function') renderProveedoresTable();
                 if (typeof window.renderProveedores === 'function') renderProveedores();
             }
+        }
+    });
+
+    // 4b2. Bloqueo exclusivo de edición en tabla de proveedores (Imágenes 1 y 2)
+    window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_lock_update' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        if (data.isLocked) {
+            if (data.userId !== currentUserId) {
+                appState.proveedoresLockedBy = data;
+            }
+        } else {
+            if (!appState.isEditingProveedores) {
+                appState.proveedoresLockedBy = null;
+            }
+        }
+        if (typeof window.updateProveedoresEditButtonsUI === 'function') {
+            window.updateProveedoresEditButtonsUI();
+        }
+        if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
+            window.renderProveedores();
+        }
+    });
+
+    // 4b3. Bloqueo exclusivo de edición en tabla de Consecutivo
+    window.chatRealtimeChannel.on('broadcast', { event: 'consecutivo_lock_update' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        if (data.isLocked) {
+            if (data.userId !== currentUserId) {
+                appState.consecutivoLockedBy = data;
+            }
+        } else {
+            if (!appState.isEditingConsecutivo) {
+                appState.consecutivoLockedBy = null;
+            }
+        }
+        if (typeof window.updateConsecutivoEditButtonsUI === 'function') {
+            window.updateConsecutivoEditButtonsUI();
+        }
+        if (appState.currentAdminFicha === 'consecutivo' && typeof window.renderConsecutivo === 'function') {
+            window.renderConsecutivo();
         }
     });
 
@@ -5769,6 +8147,9 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'consecutivo_update' }, payload => {
         const data = payload.payload;
         if (!data || !Array.isArray(data.consecutivo)) return;
+        if (data.sender && appState.currentUser?.email && data.sender === appState.currentUser.email) return;
+        if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
+        if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
         if (typeof window.mergeConsecutivoFromCloud === 'function') {
             window.mergeConsecutivoFromCloud(data.consecutivo);
         }
@@ -5816,6 +8197,7 @@ function setupRealtimeSubscriptions() {
 
     // 4g. Actualización en tiempo real de nóminas quincenales por broadcast
     window.chatRealtimeChannel.on('broadcast', { event: 'nominas_update' }, payload => {
+        if (appState.isEditingNominas) return;
         const data = payload.payload;
         if (!data) return;
         if (Array.isArray(data.nominas)) {
@@ -5824,10 +8206,78 @@ function setupRealtimeSubscriptions() {
                 appState.archivosQuincenales = data.archivosQuincenales;
             }
             saveToStorage();
-            if (appState.currentTab === 'admin') {
+            if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
                 renderNominas();
                 renderVisualizacion();
             }
+        }
+    });
+
+    // 4g-lock. Bloqueo de Edición Exclusiva de Nóminas en tiempo real
+    window.chatRealtimeChannel.on('broadcast', { event: 'nominas_lock_update' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        if (data.isLocked) {
+            if (data.userId !== currentUserId) {
+                appState.nominasLockedBy = data;
+            }
+        } else {
+            if (!appState.isEditingNominas) {
+                appState.nominasLockedBy = null;
+            }
+        }
+        if (typeof window.updateNominasEditButtonsUI === 'function') {
+            window.updateNominasEditButtonsUI();
+        }
+        if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderNominas === 'function') {
+            window.renderNominas();
+        }
+    });
+
+    // 4h. Actualización en tiempo real de gastos indirectos por broadcast
+    window.chatRealtimeChannel.on('broadcast', { event: 'gastos_indirectos_update' }, payload => {
+        if (appState.isEditingGastosIndirectos) return;
+        const data = payload.payload;
+        if (!data || !Array.isArray(data.gastosIndirectos)) return;
+        appState.gastosIndirectos = data.gastosIndirectos.filter(item => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(item));
+        saveToStorage();
+        if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
+            if (typeof window.renderGastosIndirectos === 'function') {
+                window.renderGastosIndirectos();
+            }
+        }
+        if (typeof window.recalculateGastosIndirectosTotals === 'function') {
+            window.recalculateGastosIndirectosTotals();
+        }
+    });
+
+    // 4h-lock. Bloqueo de Edición Exclusiva de Gastos Indirectos en tiempo real
+    window.chatRealtimeChannel.on('broadcast', { event: 'gastos_indirectos_lock_update' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        if (data.isLocked) {
+            if (data.userId !== currentUserId) {
+                appState.gastosIndirectosLockedBy = data;
+            }
+        } else {
+            if (!appState.isEditingGastosIndirectos) {
+                appState.gastosIndirectosLockedBy = null;
+            }
+        }
+        if (typeof window.updateGastosIndirectosEditButtonsUI === 'function') {
+            window.updateGastosIndirectosEditButtonsUI();
+        }
+        if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderGastosIndirectos === 'function') {
+            window.renderGastosIndirectos();
+        }
+    });
+
+    // 4i. Bloqueo visual gris colaborativo en tiempo real (Imagen 3)
+    window.chatRealtimeChannel.on('broadcast', { event: 'collaborative_editing' }, payload => {
+        if (typeof handleIncomingEditingState === 'function') {
+            handleIncomingEditingState(payload.payload);
         }
     });
 
@@ -5873,11 +8323,17 @@ function setupRealtimeSubscriptions() {
                 window.handleIncomingCloudDoc(channelKey, row.contenido);
             }
             if (channelKey === '__cloud_sync_operaciones__' && typeof window.fetchOperacionesFromCloud === 'function') {
-                if (Date.now() - (window._lastLocalOperacionesSyncTime || 0) < 3000) {
-                    // Omitir recarga: acabamos de sincronizar nosotros mismos hace un instante
+                if (Date.now() - (window._lastLocalOperacionesSyncTime || 0) < 3000 || appState.isEditingOperacionesDetail) {
+                    // Omitir recarga: acabamos de sincronizar nosotros mismos o estamos editando en detalle
                 } else {
                     window.fetchOperacionesFromCloud();
                 }
+            }
+            if (channelKey === '__cloud_sync_operaciones_locks__' && typeof window.fetchOperacionesProjectLocksFromCloud === 'function') {
+                window.fetchOperacionesProjectLocksFromCloud();
+            }
+            if (channelKey === '__cloud_sync_system_release__' && typeof window.checkSystemReleaseFromCloud === 'function') {
+                window.checkSystemReleaseFromCloud();
             }
             if (channelKey === '__cloud_sync_consecutivo__' && typeof window.fetchConsecutivoFromCloud === 'function') {
                 window.fetchConsecutivoFromCloud();
@@ -5890,6 +8346,21 @@ function setupRealtimeSubscriptions() {
             }
             if (channelKey === '__cloud_sync_nominas__' && typeof window.fetchNominasFromCloud === 'function') {
                 window.fetchNominasFromCloud();
+            }
+            if (channelKey === '__cloud_sync_nominas_lock__' && typeof window.fetchNominasLockFromCloud === 'function') {
+                window.fetchNominasLockFromCloud();
+            }
+            if (channelKey === '__cloud_sync_gastos_indirectos__' && typeof window.fetchGastosIndirectosFromCloud === 'function') {
+                window.fetchGastosIndirectosFromCloud();
+            }
+            if (channelKey === '__cloud_sync_gastos_indirectos_lock__' && typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
+                window.fetchGastosIndirectosLockFromCloud();
+            }
+            if (channelKey === '__cloud_sync_proveedores_lock__' && typeof window.fetchProveedoresLockFromCloud === 'function') {
+                window.fetchProveedoresLockFromCloud();
+            }
+            if (channelKey === '__cloud_sync_consecutivo_lock__' && typeof window.fetchConsecutivoLockFromCloud === 'function') {
+                window.fetchConsecutivoLockFromCloud();
             }
             return;
         }
@@ -5944,7 +8415,7 @@ function setupRealtimeSubscriptions() {
 
     // 7. Cambios de base de datos PostgreSQL en operaciones
     window.chatRealtimeChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'operaciones' }, async () => {
-        if (typeof window.fetchOperacionesFromCloud === 'function') {
+        if (!appState.isEditingOperacionesDetail && typeof window.fetchOperacionesFromCloud === 'function') {
             await window.fetchOperacionesFromCloud();
         }
     });
@@ -5991,17 +8462,176 @@ function setupRealtimeSubscriptions() {
         });
     }
 
-    if (!window._operacionesHeartbeatInterval) {
-        window._operacionesHeartbeatInterval = setInterval(() => {
+    if (!window._realtimeHeartbeatInterval) {
+        window._realtimeHeartbeatInterval = setInterval(async () => {
             try {
-                if (window.isSupabaseActive && window.isSupabaseActive() && appState.currentAdminFicha === 'operaciones') {
-                    if (typeof window.fetchOperacionesFromCloud === 'function') {
-                        window.fetchOperacionesFromCloud();
+                if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+
+                // Si el canal websocket se desconectó o quedó en error, re-suscribir automáticamente
+                if (window.chatRealtimeChannel && (window.chatRealtimeChannel.state === 'closed' || window.chatRealtimeChannel.state === 'errored')) {
+                    console.log("🔄 Realtime Hub inactivo, reconectando...");
+                    if (typeof setupRealtimeSubscriptions === 'function') {
+                        setupRealtimeSubscriptions();
+                    }
+                }
+
+                // Sincronización continua de la ficha activa para garantizar actualización instantánea entre computadoras sin refresh
+                if (appState.currentTab === 'admin' || appState.currentTab === 'administracion') {
+                    if (appState.currentAdminFicha === 'operaciones') {
+                        if (!appState.isEditingOperacionesDetail && typeof window.fetchOperacionesFromCloud === 'function') {
+                            await window.fetchOperacionesFromCloud();
+                        }
+                        if (typeof window.fetchOperacionesProjectLocksFromCloud === 'function') {
+                            await window.fetchOperacionesProjectLocksFromCloud();
+                        }
+                    } else if (appState.currentAdminFicha === 'proveedores') {
+                        if (!appState.isEditingProveedores) {
+                            if (typeof window.fetchProveedoresDataFromCloud === 'function') {
+                                await window.fetchProveedoresDataFromCloud();
+                            }
+                        }
+                        if (typeof window.fetchProveedoresLockFromCloud === 'function') {
+                            await window.fetchProveedoresLockFromCloud();
+                        }
+                    } else if (appState.currentAdminFicha === 'quincenal') {
+                        if (!appState.isEditingNominas && typeof window.fetchNominasFromCloud === 'function') {
+                            await window.fetchNominasFromCloud();
+                        }
+                        if (typeof window.fetchNominasLockFromCloud === 'function') {
+                            await window.fetchNominasLockFromCloud();
+                        }
+                        if (!appState.isEditingGastosIndirectos && typeof window.fetchGastosIndirectosFromCloud === 'function') {
+                            await window.fetchGastosIndirectosFromCloud();
+                        }
+                        if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
+                            await window.fetchGastosIndirectosLockFromCloud();
+                        }
+                    } else if (appState.currentAdminFicha === 'consecutivo') {
+                        if (!appState.isEditingConsecutivo && !document.querySelector(".st-custom-dropdown-wrap.open")) {
+                            if (typeof window.fetchConsecutivoFromCloud === 'function') {
+                                await window.fetchConsecutivoFromCloud();
+                            }
+                        }
+                        if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
+                            await window.fetchConsecutivoLockFromCloud();
+                        }
                     }
                 }
             } catch (e) {}
-        }, 4000);
+        }, 3000);
+        window._operacionesHeartbeatInterval = window._realtimeHeartbeatInterval; // compatibilidad
     }
+}
+
+// =================================================================================
+// INDICADOR COLABORATIVO EN TIEMPO REAL (IMAGEN 3)
+// Cuando un usuario edita un campo/fila, aparece en gris para los demás hasta terminar
+// =================================================================================
+const _activeCollabLocks = new Map();
+let _currentFocusedCollabKey = null;
+
+function broadcastEditingState(action, rowKey) {
+    if (!window.chatRealtimeChannel) return;
+    const userName = appState.currentUser?.nombre || appState.currentUser?.email || 'Usuario';
+    const userId = appState.currentUser?.id || appState.currentUser?.email || userName;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'collaborative_editing',
+            payload: {
+                action: action, // 'start' o 'stop'
+                key: rowKey,
+                user: userName,
+                userId: userId,
+                timestamp: Date.now()
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting editing state:", e);
+    }
+}
+window.broadcastEditingState = broadcastEditingState;
+
+function handleIncomingEditingState(payload) {
+    if (!payload || !payload.key) return;
+    const myId = appState.currentUser?.id || appState.currentUser?.email || appState.currentUser?.nombre;
+    if (payload.userId && myId && payload.userId === myId) return; // No bloquear al propio usuario
+
+    const elements = document.querySelectorAll(`[data-row-key="${payload.key}"]`);
+    if (payload.action === 'start') {
+        elements.forEach(el => {
+            el.classList.add('user-editing-grey');
+            el.setAttribute('data-editing-user', `Editando: ${payload.user || 'Colaborador'}`);
+        });
+
+        if (_activeCollabLocks.has(payload.key)) {
+            clearTimeout(_activeCollabLocks.get(payload.key).timer);
+        }
+        // Auto-limpieza de seguridad (30s) en caso de caída o desconexión
+        const timer = setTimeout(() => {
+            const targets = document.querySelectorAll(`[data-row-key="${payload.key}"]`);
+            targets.forEach(el => {
+                el.classList.remove('user-editing-grey');
+                el.removeAttribute('data-editing-user');
+            });
+            _activeCollabLocks.delete(payload.key);
+        }, 30000);
+        _activeCollabLocks.set(payload.key, { user: payload.user, timer });
+    } else if (payload.action === 'stop') {
+        elements.forEach(el => {
+            el.classList.remove('user-editing-grey');
+            el.removeAttribute('data-editing-user');
+        });
+        if (_activeCollabLocks.has(payload.key)) {
+            clearTimeout(_activeCollabLocks.get(payload.key).timer);
+            _activeCollabLocks.delete(payload.key);
+        }
+    }
+}
+window.handleIncomingEditingState = handleIncomingEditingState;
+
+if (!window._collabEditingEventsBound) {
+    window._collabEditingEventsBound = true;
+    document.addEventListener('focusin', (e) => {
+        const inputOrSelect = e.target.closest('input, select, textarea');
+        if (!inputOrSelect) return;
+        const rowEl = inputOrSelect.closest('[data-row-key]');
+        if (rowEl) {
+            const rowKey = rowEl.getAttribute('data-row-key');
+            if (rowKey && rowKey !== _currentFocusedCollabKey) {
+                if (_currentFocusedCollabKey) {
+                    broadcastEditingState('stop', _currentFocusedCollabKey);
+                }
+                _currentFocusedCollabKey = rowKey;
+                broadcastEditingState('start', rowKey);
+            }
+        }
+    });
+
+    document.addEventListener('focusout', (e) => {
+        const inputOrSelect = e.target.closest('input, select, textarea');
+        if (!inputOrSelect) return;
+        const rowEl = inputOrSelect.closest('[data-row-key]');
+        if (rowEl) {
+            const rowKey = rowEl.getAttribute('data-row-key');
+            setTimeout(() => {
+                if (_currentFocusedCollabKey === rowKey) {
+                    const activeNow = document.activeElement;
+                    if (!activeNow || !activeNow.closest(`[data-row-key="${rowKey}"]`)) {
+                        broadcastEditingState('stop', rowKey);
+                        _currentFocusedCollabKey = null;
+                    }
+                }
+            }, 150);
+        }
+    });
+
+    window.addEventListener('beforeunload', () => {
+        if (_currentFocusedCollabKey) {
+            broadcastEditingState('stop', _currentFocusedCollabKey);
+            _currentFocusedCollabKey = null;
+        }
+    });
 }
 
 async function fetchCloudData() {
@@ -6021,13 +8651,24 @@ async function fetchCloudData() {
         await fetchTasksFromCloud();
 
         // Sincronizar proyectos de Operaciones (nube <-> local)
-        if (typeof window.fetchOperacionesFromCloud === 'function') {
+        if (!appState.isEditingOperacionesDetail && typeof window.fetchOperacionesFromCloud === 'function') {
             await window.fetchOperacionesFromCloud();
+        }
+        if (typeof window.fetchOperacionesProjectLocksFromCloud === 'function') {
+            await window.fetchOperacionesProjectLocksFromCloud();
+        }
+        if (typeof window.checkSystemReleaseFromCloud === 'function') {
+            await window.checkSystemReleaseFromCloud();
         }
 
         // Sincronizar registros de Consecutivo (nube <-> local para todos los usuarios)
-        if (typeof window.fetchConsecutivoFromCloud === 'function') {
-            await window.fetchConsecutivoFromCloud();
+        if (!appState.isEditingConsecutivo && !document.querySelector(".st-custom-dropdown-wrap.open")) {
+            if (typeof window.fetchConsecutivoFromCloud === 'function') {
+                await window.fetchConsecutivoFromCloud();
+            }
+        }
+        if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
+            await window.fetchConsecutivoLockFromCloud();
         }
 
         // Sincronizar catálogo y datos de Proveedores (nube <-> local para todos los usuarios)
@@ -6037,10 +8678,24 @@ async function fetchCloudData() {
         if (typeof window.fetchProveedoresDataFromCloud === 'function') {
             await window.fetchProveedoresDataFromCloud();
         }
+        if (typeof window.fetchProveedoresLockFromCloud === 'function') {
+            await window.fetchProveedoresLockFromCloud();
+        }
 
         // Sincronizar registros de Nóminas Quincenales (nube <-> local para todos los dispositivos)
-        if (typeof window.fetchNominasFromCloud === 'function') {
+        if (!appState.isEditingNominas && typeof window.fetchNominasFromCloud === 'function') {
             await window.fetchNominasFromCloud();
+        }
+        if (typeof window.fetchNominasLockFromCloud === 'function') {
+            await window.fetchNominasLockFromCloud();
+        }
+
+        // Sincronizar registros de Gastos Indirectos (nube <-> local)
+        if (!appState.isEditingGastosIndirectos && typeof window.fetchGastosIndirectosFromCloud === 'function') {
+            await window.fetchGastosIndirectosFromCloud();
+        }
+        if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
+            await window.fetchGastosIndirectosLockFromCloud();
         }
         
         // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)
@@ -6527,8 +9182,10 @@ async function loadProfilesList() {
     }
 };
 
-async function handleSupabaseLogin(event) {
-    window.handleSupabaseLogin = handleSupabaseLogin;
+async function handleFirebaseLogin(event) {
+    window.handleFirebaseLogin = handleFirebaseLogin;
+    window.handleSupabaseLogin = handleFirebaseLogin;
+    const handleSupabaseLogin = handleFirebaseLogin;
     event.preventDefault();
     const email = document.getElementById("login-email").value.trim();
     const password = document.getElementById("login-password").value;
@@ -6655,8 +9312,10 @@ async function handleSupabaseLogin(event) {
     }
 };
 
-async function handleSupabaseRegister(event) {
-    window.handleSupabaseRegister = handleSupabaseRegister;
+async function handleFirebaseRegister(event) {
+    window.handleFirebaseRegister = handleFirebaseRegister;
+    window.handleSupabaseRegister = handleFirebaseRegister;
+    const handleSupabaseRegister = handleFirebaseRegister;
     event.preventDefault();
     const nombre = document.getElementById("reg-nombre").value.trim();
     const email = document.getElementById("reg-email").value.trim();
@@ -7139,8 +9798,9 @@ async function handleGlobalLoginSubmit(event) {
     }
 };
 
-async function handleSupabaseLogout() {
-    window.handleSupabaseLogout = handleSupabaseLogout;
+async function handleFirebaseLogout() {
+    window.handleFirebaseLogout = handleFirebaseLogout;
+    window.handleSupabaseLogout = handleFirebaseLogout;
     try {
         if (window.isSupabaseActive()) {
             await window.SUPABASE_CONFIG.client.auth.signOut();
@@ -8984,11 +11644,14 @@ const defaultOperacionesProyectos = [];
 
 function syncAllOperacionesToConsecutivo() {
     window.syncAllOperacionesToConsecutivo = syncAllOperacionesToConsecutivo;
+    if (appState.isEditingConsecutivo) return;
+
     const purgedIds = window.purgedProjectIds || new Set([
         'RDP2609110F', 'RDP2609111F', 'RDP2609113F', 'RDP2609114L', 'RDP2609115F', 'RDP2608101F',
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
         'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
-        'RDP261074-', 'RDP261075-'
+        'RDP261074-', 'RDP261075-',
+        'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
     ]);
 
     if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos) || appState.operacionesProyectos.length === 0) {
@@ -9018,8 +11681,19 @@ function syncAllOperacionesToConsecutivo() {
 
     // Limpiar de Consecutivo filas de proyectos purgados o referencias incompletas con guion
     if (Array.isArray(appState.consecutivo)) {
+        appState.consecutivo = appState.consecutivo.filter(row => {
+            if (!row) return false;
+            const ref = row.referenciaOp ? String(row.referenciaOp).trim() : '';
+            if (ref && purgedIds.has(ref)) return false;
+            return true;
+        });
+
         appState.consecutivo.forEach(row => {
-            if (!row || !row.referenciaOp) return;
+            if (!row) return;
+            if (String(row.st || '').trim().toUpperCase() !== 'P') {
+                row.fechaPago = '';
+            }
+            if (!row.referenciaOp) return;
             const ref = String(row.referenciaOp).trim();
             if (purgedIds.has(ref) || ref.endsWith('-')) {
                 row.referenciaOp = '';
@@ -9119,6 +11793,7 @@ function syncAllOperacionesToConsecutivo() {
 function syncProjectToConsecutivo(p, shouldRender = false) {
     window.syncProjectToConsecutivo = syncProjectToConsecutivo;
     if (!p) return;
+    if (appState.isEditingConsecutivo) return;
     if (typeof isProjectGenerado === 'function' && !isProjectGenerado(p)) return;
     if (p.isDraft === true || p.isNewProject === true || p.generado === false) return;
     if (!appState.consecutivo || !Array.isArray(appState.consecutivo)) {
@@ -9127,6 +11802,7 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
 
     const projId = (p.numConsecutivo || p.consecutivo || p.numProyecto || p.id || '').trim();
     if (!projId || projId.endsWith('-')) return;
+    if (window.purgedProjectIds && window.purgedProjectIds.has(projId)) return;
 
     let row = appState.consecutivo.find(c => 
         (c.referenciaOp && String(c.referenciaOp).trim().toLowerCase() === String(projId).trim().toLowerCase()) ||
@@ -9186,12 +11862,12 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
         row.iva = iva;
         row.total = tot;
     }
-    if (p.archivado || p.estatus === 'CERRADO') {
-        row.st = 'C';
-    } else if (p.estatus === 'PRIORIDAD') {
-        row.st = 'P';
-    } else if (!row.st) {
-        row.st = 'P';
+    const curRowSt = String(row.st || '').trim().toUpperCase();
+    if (curRowSt !== 'P' && curRowSt !== 'C') {
+        row.st = 'PP';
+    }
+    if (String(row.st || '').trim().toUpperCase() !== 'P') {
+        row.fechaPago = '';
     }
     row.servicio = p.servicioName || (p.tipoProyecto === 'lavado_contenedores' ? 'Lavado de Contenedores' : (p.tipoProyecto === 'movimientos_foraneos' ? 'Movimientos Foráneos' : 'Servicio Local'));
 
@@ -9199,7 +11875,7 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
         localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo));
     } catch (e) {}
 
-    if (typeof window.syncConsecutivoToCloud === 'function') {
+    if (shouldRender && typeof window.syncConsecutivoToCloud === 'function') {
         window.syncConsecutivoToCloud(false);
     }
 
@@ -9241,10 +11917,10 @@ function saveOperacionesStorage(skipProveedoresSync = false) {
 
     if (Array.isArray(validList)) {
         validList.forEach(p => {
-            if (p && typeof window.syncProjectToConsecutivo === 'function') {
+            if (!appState.isEditingConsecutivo && p && typeof window.syncProjectToConsecutivo === 'function') {
                 window.syncProjectToConsecutivo(p);
             }
-            if (!skipProveedoresSync && p && typeof window.syncProjectToProveedores === 'function') {
+            if (!skipProveedoresSync && !appState.isEditingProveedores && p && typeof window.syncProjectToProveedores === 'function') {
                 window.syncProjectToProveedores(p);
             }
         });
@@ -9378,6 +12054,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
 let _syncConsecutivoTimer = null;
 function syncConsecutivoToCloud(forceImmediate = false) {
     window.syncConsecutivoToCloud = syncConsecutivoToCloud;
+    window._lastLocalConsecutivoSyncTime = Date.now();
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
@@ -9403,6 +12080,7 @@ function syncConsecutivoToCloud(forceImmediate = false) {
 
     const doSync = async () => {
         try {
+            window._lastLocalConsecutivoSyncTime = Date.now();
             const dataToSave = appState.consecutivo || [];
             // Guardar snapshot en tabla messages con chat_id __cloud_sync_consecutivo__
             await client.from('messages').insert({
@@ -9428,6 +12106,8 @@ window.syncConsecutivoToCloud = syncConsecutivoToCloud;
 async function fetchConsecutivoFromCloud() {
     window.fetchConsecutivoFromCloud = fetchConsecutivoFromCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
+    if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
@@ -9454,7 +12134,9 @@ window.fetchConsecutivoFromCloud = fetchConsecutivoFromCloud;
 
 function mergeConsecutivoFromCloud(cloudList) {
     window.mergeConsecutivoFromCloud = mergeConsecutivoFromCloud;
-    if (!Array.isArray(cloudList)) return;
+    if (!Array.isArray(cloudList) || cloudList.length === 0) return;
+    if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
+    if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
     const purgedIds = window.purgedProjectIds || new Set();
 
     const validList = cloudList.filter(row => {
@@ -9462,9 +12144,21 @@ function mergeConsecutivoFromCloud(cloudList) {
         const ref = row.referenciaOp ? String(row.referenciaOp).trim() : '';
         if (purgedIds.has(ref)) return false;
         return true;
+    }).map(row => {
+        if (String(row.st || '').trim().toUpperCase() !== 'P') {
+            row.fechaPago = '';
+        }
+        return row;
     });
 
     if (validList.length > 0) {
+        // Evitar re-renders destructivos si los datos no cambiaron
+        const currentDataStr = JSON.stringify(appState.consecutivo || []);
+        const newDataStr = JSON.stringify(validList);
+        if (currentDataStr === newDataStr) {
+            return;
+        }
+
         appState.consecutivo = validList;
         appState.consecutivo.forEach((row, idx) => {
             row.consecutivo = idx + 1;
@@ -9494,6 +12188,7 @@ window.mergeConsecutivoFromCloud = mergeConsecutivoFromCloud;
 async function fetchOperacionesFromCloud() {
     window.fetchOperacionesFromCloud = fetchOperacionesFromCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    if (appState.isEditingOperacionesDetail) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
@@ -9537,15 +12232,17 @@ async function fetchOperacionesFromCloud() {
 
         if (cloudProjects && Array.isArray(cloudProjects)) {
             window.mergeOperacionesProjects(cloudProjects);
-            try {
-                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
-            } catch (e) {}
+            if (!appState.isEditingOperacionesDetail) {
+                try {
+                    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+                } catch (e) {}
+            }
             if (appState.currentAdminFicha === 'operaciones') {
                 const detailPane = document.getElementById("operaciones-view-detail");
                 if (!detailPane || detailPane.style.display === "none") {
                     if (typeof window.renderOperaciones === 'function') window.renderOperaciones();
                 }
-                if (appState.activeOperacionesProjectId) {
+                if (appState.activeOperacionesProjectId && !appState.isEditingOperacionesDetail) {
                     const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
                     if (activeP) {
                         if (typeof window.renderStep1View === 'function') window.renderStep1View(activeP);
@@ -9618,6 +12315,9 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
         } else {
             const local = appState.operacionesProyectos[idx];
             const isCurrentlyActive = (appState.activeOperacionesProjectId === local.id || appState.activeOperacionesProjectId === key || (typeof areProjectsSame === 'function' && areProjectsSame(local, { id: appState.activeOperacionesProjectId, consecutivo: appState.activeOperacionesProjectId })));
+            if (isCurrentlyActive && appState.isEditingOperacionesDetail) {
+                return;
+            }
             
             // Fusión inteligente campo a campo: NO sobreescribir datos válidos locales con vacíos entrantes, ni viceversa
             const merged = Object.assign({}, local, cp);
@@ -10071,8 +12771,9 @@ function cleanOperacionesLegacyData(proyectos) {
         const client = window.SUPABASE_CONFIG?.client;
         if (client) {
             try {
-                client.from('operaciones').delete().in('id', ['RDP261074-', 'RDP261075-']).then(() => {}, () => {});
-                client.from('operaciones').delete().in('consecutivo', ['RDP261074-', 'RDP261075-']).then(() => {}, () => {});
+                const ghostIdsToDelete = ['RDP261074-', 'RDP261075-', 'RDP-PRUEBA', 'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PROV-1'];
+                client.from('operaciones').delete().in('id', ghostIdsToDelete).then(() => {}, () => {});
+                client.from('operaciones').delete().in('consecutivo', ghostIdsToDelete).then(() => {}, () => {});
             } catch (e) {}
         }
     }
@@ -10142,6 +12843,465 @@ function cleanOperacionesLegacyData(proyectos) {
             });
         }
     });
+}
+
+// =================================================================================
+// BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
+// =================================================================================
+const OPERACIONES_LOCK_TTL_MS = 30 * 60 * 1000; // 30 minutos de respaldo ante cierre inesperado
+const SYSTEM_RELEASE_VERSION = 'release_2026_10_12_op_locks_v1';
+window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
+
+function getOperacionesCurrentUserInfo() {
+    if (!window._myClientId) {
+        window._myClientId = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+    }
+    const u = appState.currentUser;
+    const userId = u?.id || u?.email || u?.nombre || window._myClientId;
+    const userName = u?.nombre || u?.email || (appState.currentRole ? (appState.currentRole.charAt(0).toUpperCase() + appState.currentRole.slice(1)) : 'Usuario');
+    return {
+        userId: String(userId).trim(),
+        userName: String(userName).trim(),
+        clientId: String(window._myClientId).trim()
+    };
+}
+window.getOperacionesCurrentUserInfo = getOperacionesCurrentUserInfo;
+
+function normalizeOperacionesProjectKey(projectOrId) {
+    if (!projectOrId) return '';
+    if (typeof projectOrId === 'object') {
+        const raw = projectOrId.consecutivo || projectOrId.numConsecutivo || projectOrId.numProyecto || projectOrId.id || '';
+        return String(raw).trim().toUpperCase();
+    }
+    return String(projectOrId).trim().toUpperCase();
+}
+window.normalizeOperacionesProjectKey = normalizeOperacionesProjectKey;
+
+function ensureOperacionesLocksMap() {
+    if (!appState.operacionesProjectLocks || typeof appState.operacionesProjectLocks !== 'object') {
+        try {
+            const raw = localStorage.getItem('rp_operaciones_project_locks');
+            appState.operacionesProjectLocks = raw ? JSON.parse(raw) : {};
+        } catch (e) {
+            appState.operacionesProjectLocks = {};
+        }
+    }
+    if (!appState.operacionesProjectLocks || typeof appState.operacionesProjectLocks !== 'object') {
+        appState.operacionesProjectLocks = {};
+    }
+    return appState.operacionesProjectLocks;
+}
+
+function saveOperacionesLocksMapToLocal() {
+    const locks = ensureOperacionesLocksMap();
+    try {
+        localStorage.setItem('rp_operaciones_project_locks', JSON.stringify(locks));
+    } catch (e) {}
+}
+
+function isLockOwnedByMe(lock) {
+    if (!lock || !lock.isLocked) return false;
+    const myInfo = getOperacionesCurrentUserInfo();
+    if (lock.clientId && myInfo.clientId) {
+        return lock.clientId === myInfo.clientId && (!lock.userId || lock.userId === myInfo.userId);
+    }
+    return Boolean(lock.userId && lock.userId === myInfo.userId);
+}
+window.isLockOwnedByMe = isLockOwnedByMe;
+
+function getOperacionesProjectLock(projectOrId) {
+    const locks = ensureOperacionesLocksMap();
+    const key = normalizeOperacionesProjectKey(projectOrId);
+    if (!key) return null;
+
+    let lock = locks[key];
+    if (!lock && typeof projectOrId === 'object' && projectOrId.id) {
+        const altKey = String(projectOrId.id).trim().toUpperCase();
+        lock = locks[altKey];
+    }
+    if (!lock) {
+        const matchKey = Object.keys(locks).find(k => k.toUpperCase() === key);
+        if (matchKey) lock = locks[matchKey];
+    }
+    if (!lock || !lock.isLocked) return null;
+
+    const elapsed = Date.now() - (Number(lock.timestamp) || 0);
+    if (elapsed > OPERACIONES_LOCK_TTL_MS) {
+        delete locks[key];
+        saveOperacionesLocksMapToLocal();
+        return null;
+    }
+    return lock;
+}
+window.getOperacionesProjectLock = getOperacionesProjectLock;
+
+function getProjectLockByOther(projectOrId) {
+    const lock = getOperacionesProjectLock(projectOrId);
+    if (!lock) return null;
+    if (isLockOwnedByMe(lock)) return null;
+    return lock;
+}
+window.getProjectLockByOther = getProjectLockByOther;
+
+function doesIncomingLockWin(incomingLock, myLock) {
+    if (!incomingLock || !incomingLock.isLocked) return false;
+    if (!myLock || !myLock.isLocked) return true;
+    const tIn = Number(incomingLock.timestamp) || Date.now();
+    const tMy = Number(myLock.timestamp) || Date.now();
+    if (tIn !== tMy) {
+        // El usuario que dio clic antes (menor timestamp) tiene prioridad
+        return tIn < tMy;
+    }
+    const idIn = String(incomingLock.clientId || incomingLock.userId || '');
+    const idMy = String(myLock.clientId || myLock.userId || '');
+    return idIn < idMy;
+}
+window.doesIncomingLockWin = doesIncomingLockWin;
+
+function broadcastOperacionesProjectLock(lockPayload) {
+    if (!window.chatRealtimeChannel || !lockPayload) return;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'operaciones_project_lock_update',
+            payload: lockPayload
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting operaciones project lock:", e);
+    }
+}
+window.broadcastOperacionesProjectLock = broadcastOperacionesProjectLock;
+
+async function syncOperacionesProjectLocksToCloud() {
+    window.syncOperacionesProjectLocksToCloud = syncOperacionesProjectLocksToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const locks = ensureOperacionesLocksMap();
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_operaciones_locks__',
+            contenido: JSON.stringify(locks),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (e) {
+        console.warn("⚠️ Error syncing operaciones project locks to cloud:", e);
+    }
+}
+
+async function fetchOperacionesProjectLocksFromCloud() {
+    window.fetchOperacionesProjectLocksFromCloud = fetchOperacionesProjectLocksFromCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_operaciones_locks__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            const cloudLocks = JSON.parse(msgs[0].contenido);
+            if (cloudLocks && typeof cloudLocks === 'object') {
+                Object.keys(cloudLocks).forEach(k => {
+                    const cLock = cloudLocks[k];
+                    if (cLock) {
+                        handleIncomingOperacionesProjectLock(cLock, true);
+                    }
+                });
+            }
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching operaciones project locks from cloud:", e);
+    }
+}
+
+function claimOperacionesProjectLock(projectOrId, customTimestamp = null) {
+    window.claimOperacionesProjectLock = claimOperacionesProjectLock;
+    const key = normalizeOperacionesProjectKey(projectOrId);
+    if (!key) return null;
+
+    const myInfo = getOperacionesCurrentUserInfo();
+    const locks = ensureOperacionesLocksMap();
+    const clickTs = customTimestamp !== null ? Number(customTimestamp) : Date.now();
+
+    const lockEntry = {
+        projectId: key,
+        isLocked: true,
+        userId: myInfo.userId,
+        userName: myInfo.userName,
+        clientId: myInfo.clientId,
+        timestamp: clickTs
+    };
+
+    locks[key] = lockEntry;
+    appState._myActiveProjectLock = lockEntry;
+    saveOperacionesLocksMapToLocal();
+
+    broadcastOperacionesProjectLock(lockEntry);
+    syncOperacionesProjectLocksToCloud();
+    return lockEntry;
+}
+
+function releaseOperacionesProjectLock(projectOrId) {
+    window.releaseOperacionesProjectLock = releaseOperacionesProjectLock;
+    const key = normalizeOperacionesProjectKey(projectOrId || appState.activeOperacionesProjectId || appState._myActiveProjectLock?.projectId);
+    if (!key) return;
+
+    const locks = ensureOperacionesLocksMap();
+    const existing = locks[key];
+    if (existing && !isLockOwnedByMe(existing)) {
+        // No liberar el bloqueo si pertenece a otro usuario que ganó la carrera
+        return;
+    }
+
+    delete locks[key];
+    if (appState._myActiveProjectLock && normalizeOperacionesProjectKey(appState._myActiveProjectLock.projectId) === key) {
+        appState._myActiveProjectLock = null;
+    }
+    saveOperacionesLocksMapToLocal();
+
+    const myInfo = getOperacionesCurrentUserInfo();
+    const unlockPayload = {
+        projectId: key,
+        isLocked: false,
+        userId: myInfo.userId,
+        userName: myInfo.userName,
+        clientId: myInfo.clientId,
+        timestamp: Date.now()
+    };
+    broadcastOperacionesProjectLock(unlockPayload);
+    syncOperacionesProjectLocksToCloud();
+}
+
+function handleIncomingOperacionesProjectLock(payload, isFromCloudPoll = false) {
+    window.handleIncomingOperacionesProjectLock = handleIncomingOperacionesProjectLock;
+    if (!payload || !payload.projectId) return;
+
+    const key = normalizeOperacionesProjectKey(payload.projectId);
+    const locks = ensureOperacionesLocksMap();
+
+    // Ignorar ecos de nuestra propia sesión
+    if (isLockOwnedByMe(payload)) {
+        return;
+    }
+
+    if (!payload.isLocked) {
+        const current = locks[key];
+        if (current && !isLockOwnedByMe(current)) {
+            delete locks[key];
+            saveOperacionesLocksMapToLocal();
+            if (appState.currentAdminFicha === 'operaciones') {
+                const detailPane = document.getElementById("operaciones-view-detail");
+                if (!detailPane || detailPane.style.display === "none") {
+                    renderOperaciones();
+                }
+            }
+        }
+        return;
+    }
+
+    // El otro usuario está reclamando el bloqueo sobre `key`
+    const elapsed = Date.now() - (Number(payload.timestamp) || 0);
+    if (elapsed > OPERACIONES_LOCK_TTL_MS) return;
+
+    const activeKey = normalizeOperacionesProjectKey(appState.activeOperacionesProjectId);
+    const myLock = (appState._myActiveProjectLock && normalizeOperacionesProjectKey(appState._myActiveProjectLock.projectId) === key)
+        ? appState._myActiveProjectLock
+        : (locks[key] && isLockOwnedByMe(locks[key]) ? locks[key] : null);
+
+    // ¿Entraron los dos al mismo tiempo al mismo proyecto? Resolver por quién dio clic antes (timestamp menor)
+    if (activeKey === key && myLock) {
+        if (doesIncomingLockWin(payload, myLock)) {
+            // El otro usuario dio clic antes -> gana el otro usuario y sacamos al usuario actual del expediente
+            locks[key] = payload;
+            appState._myActiveProjectLock = null;
+            saveOperacionesLocksMapToLocal();
+
+            closeOperacionesDetail({ skipRelease: true });
+
+            const msg = `El proyecto está siendo editado por ${payload.userName || 'otro usuario'} (dio clic antes).`;
+            if (typeof showCustomNotification === 'function') {
+                showCustomNotification(msg, "warning");
+            } else {
+                alert(msg);
+            }
+            return;
+        } else {
+            // Nosotros dimos clic antes -> conservamos el proyecto y re-emitimos nuestro bloqueo ganador
+            locks[key] = myLock;
+            saveOperacionesLocksMapToLocal();
+            if (!isFromCloudPoll) {
+                broadcastOperacionesProjectLock(myLock);
+            }
+            return;
+        }
+    }
+
+    locks[key] = payload;
+    saveOperacionesLocksMapToLocal();
+
+    if (appState.currentAdminFicha === 'operaciones') {
+        const detailPane = document.getElementById("operaciones-view-detail");
+        if (!detailPane || detailPane.style.display === "none") {
+            renderOperaciones();
+        }
+    }
+}
+
+// Sincronización entre pestañas del mismo navegador mediante evento storage
+if (typeof window !== 'undefined' && !window._opProjectLocksStorageBound) {
+    window._opProjectLocksStorageBound = true;
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'rp_operaciones_project_locks' && e.newValue) {
+            try {
+                const updatedLocks = JSON.parse(e.newValue);
+                if (updatedLocks && typeof updatedLocks === 'object') {
+                    appState.operacionesProjectLocks = updatedLocks;
+                    const activeKey = normalizeOperacionesProjectKey(appState.activeOperacionesProjectId);
+                    if (activeKey && updatedLocks[activeKey] && !isLockOwnedByMe(updatedLocks[activeKey])) {
+                        handleIncomingOperacionesProjectLock(updatedLocks[activeKey], true);
+                    } else if (appState.currentAdminFicha === 'operaciones') {
+                        renderOperaciones();
+                    }
+                }
+            } catch (err) {}
+        } else if (e.key === 'rp_system_release_eviction' && e.newValue) {
+            try {
+                const relData = JSON.parse(e.newValue);
+                if (relData) handleIncomingSystemReleaseUpdate(relData);
+            } catch (err) {}
+        }
+    });
+
+    window.addEventListener('beforeunload', () => {
+        if (appState.activeOperacionesProjectId) {
+            releaseOperacionesProjectLock(appState.activeOperacionesProjectId);
+        }
+    });
+}
+
+// Mecanismo de expulsión automática para actualización en línea ("suelta los globos")
+function evictUserFromProjectOnSystemUpdate(releaseId, reasonMessage) {
+    window.evictUserFromProjectOnSystemUpdate = evictUserFromProjectOnSystemUpdate;
+    const wasInDetail = Boolean(appState.activeOperacionesProjectId);
+
+    // Limpiar todos los bloqueos activos para que tras la actualización puedan volver a entrar limpiamente
+    appState.operacionesProjectLocks = {};
+    appState._myActiveProjectLock = null;
+    try {
+        localStorage.removeItem('rp_operaciones_project_locks');
+        if (releaseId) {
+            localStorage.setItem('rp_applied_system_release', String(releaseId));
+        }
+    } catch (e) {}
+
+    if (wasInDetail) {
+        closeOperacionesDetail({ skipRelease: true });
+    } else if (appState.currentAdminFicha === 'operaciones') {
+        renderOperaciones();
+    }
+
+    if (wasInDetail || reasonMessage) {
+        const msg = reasonMessage || "🔄 El sistema se ha actualizado en línea. Se cerraron temporalmente los proyectos abiertos para aplicar las mejoras; ya puedes volver a entrar.";
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification(msg, "info");
+        }
+    }
+}
+
+function handleIncomingSystemReleaseUpdate(payload) {
+    window.handleIncomingSystemReleaseUpdate = handleIncomingSystemReleaseUpdate;
+    if (!payload || !payload.releaseId) return;
+    const lastApplied = localStorage.getItem('rp_applied_system_release');
+    if (lastApplied === String(payload.releaseId) && !payload.force) return;
+
+    evictUserFromProjectOnSystemUpdate(payload.releaseId, payload.message);
+    if (typeof window.fetchOperacionesFromCloud === 'function') {
+        window.fetchOperacionesFromCloud();
+    }
+}
+
+async function triggerSystemReleaseEviction(customReleaseId = null) {
+    window.triggerSystemReleaseEviction = triggerSystemReleaseEviction;
+    const releaseId = customReleaseId || `${SYSTEM_RELEASE_VERSION}_${Date.now()}`;
+    const payload = {
+        releaseId: releaseId,
+        version: SYSTEM_RELEASE_VERSION,
+        timestamp: Date.now(),
+        message: "🔄 El sistema se ha actualizado en línea. Se cerró la vista de edición para actualizar correctamente; ya puedes volver a entrar al proyecto."
+    };
+
+    try {
+        localStorage.setItem('rp_system_release_eviction', JSON.stringify(payload));
+    } catch (e) {}
+
+    evictUserFromProjectOnSystemUpdate(releaseId, payload.message);
+
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'system_release_update',
+                payload: payload
+            });
+        } catch (e) {}
+    }
+
+    if (window.isSupabaseActive && window.isSupabaseActive()) {
+        const client = window.SUPABASE_CONFIG?.client;
+        if (client) {
+            try {
+                await client.from('messages').insert({
+                    chat_id: '__cloud_sync_system_release__',
+                    contenido: JSON.stringify(payload),
+                    emisor_nombre: 'Sistema Rodipack',
+                    emisor_role: 'sistema'
+                });
+                await client.from('messages').insert({
+                    chat_id: '__cloud_sync_operaciones_locks__',
+                    contenido: JSON.stringify({}),
+                    emisor_nombre: 'Sistema Rodipack',
+                    emisor_role: 'sistema'
+                });
+            } catch (e) {}
+        }
+    }
+    return payload;
+}
+
+async function checkSystemReleaseFromCloud() {
+    window.checkSystemReleaseFromCloud = checkSystemReleaseFromCloud;
+    // Verificar cambio de versión local al cargar la nueva actualización en línea
+    const savedVersion = localStorage.getItem('rp_system_release_version');
+    if (savedVersion !== SYSTEM_RELEASE_VERSION) {
+        try {
+            localStorage.setItem('rp_system_release_version', SYSTEM_RELEASE_VERSION);
+        } catch (e) {}
+        evictUserFromProjectOnSystemUpdate(SYSTEM_RELEASE_VERSION);
+    }
+
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_system_release__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            const parsed = JSON.parse(msgs[0].contenido);
+            if (parsed && parsed.releaseId) {
+                const ageMs = Date.now() - (Number(parsed.timestamp) || 0);
+                if (ageMs < 10 * 60 * 1000) {
+                    handleIncomingSystemReleaseUpdate(parsed);
+                }
+            }
+        }
+    } catch (e) {}
 }
 
 function clearGhostData() {
@@ -10382,17 +13542,31 @@ function renderOperaciones() {
     const rowsHtml = filtered.map(p => {
         const consecutivoDisplay = p.consecutivo || p.numConsecutivo || p.numProyecto || '-';
         const pId = String(p.id || consecutivoDisplay).trim();
-        const isArchivado = p.archivado === true || p.estatus === 'CERRADO';
+        const lockInfo = getProjectLockByOther(p);
+        const isLockedByOther = Boolean(lockInfo);
+        const lockMsg = isLockedByOther
+            ? `El proyecto está siendo editado por ${lockInfo.userName || 'otro usuario'}`
+            : '';
+
         return `
-        <tr data-op-id="${pId}">
-            <td><strong>${consecutivoDisplay}</strong></td>
+        <tr data-op-id="${pId}" class="${isLockedByOther ? 'op-row-locked' : ''}" ${isLockedByOther ? `title="${lockMsg}"` : ''}>
+            <td>
+                <strong>${consecutivoDisplay}</strong>
+                ${isLockedByOther ? `<div class="op-locked-project-msg" style="margin-top: 4px;"><span class="material-symbols-outlined">lock</span> ${lockMsg}</div>` : ''}
+            </td>
             <td>${p.fechaInicioDisplay || p.fechaInicio || '-'}</td>
             <td>${p.factura || p.numFactura || '-'}</td>
             <td><span class="op-status-badge ${p.estatus}">${p.estatus}</span></td>
             <td style="white-space: nowrap;">
-                <button type="button" class="btn-op-abrir" data-project-id="${pId}" onclick="event.stopPropagation(); openOperacionesDetail('${pId}')" title="Abrir y revisar expediente">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">folder_open</span> ABRIR
-                </button>
+                ${isLockedByOther ? `
+                    <button type="button" class="btn-op-abrir" data-project-id="${pId}" disabled title="${lockMsg}">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">lock</span> BLOQUEADO
+                    </button>
+                ` : `
+                    <button type="button" class="btn-op-abrir" data-project-id="${pId}" onclick="event.stopPropagation(); openOperacionesDetail('${pId}')" title="Abrir y revisar expediente">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">folder_open</span> ABRIR
+                    </button>
+                `}
             </td>
         </tr>
     `;
@@ -10409,6 +13583,7 @@ function renderOperaciones() {
         tbody.addEventListener("click", function(e) {
             const btn = e.target.closest(".btn-op-abrir");
             if (btn) {
+                if (btn.disabled) return;
                 e.preventDefault();
                 e.stopPropagation();
                 const pid = btn.dataset.projectId || btn.getAttribute("data-project-id");
@@ -10456,6 +13631,10 @@ function eliminarProyectoOperaciones(projectId, event) {
 
 function archivarExpedienteActivo() {
     window.archivarExpedienteActivo = archivarExpedienteActivo;
+    if (!appState.isEditingOperacionesDetail) {
+        alert("Haz clic en 'Editar' en la parte superior para poder archivar o modificar este expediente.");
+        return;
+    }
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) {
         alert("No se encontró ningún expediente activo para archivar.");
@@ -10527,6 +13706,8 @@ function archivarExpedienteActivo() {
     p.fechaArchivado = new Date().toISOString();
     p.fechaArchivadoDisplay = new Date().toLocaleDateString('es-MX');
 
+    appState.isEditingOperacionesDetail = false;
+    appState._operacionesDetailSnapshot = null;
     saveOperacionesStorage();
     closeOperacionesDetail();
     alert(`✅ Expediente ${consecutivo} archivado con éxito.\nPuedes revisarlo en cualquier momento desde la sección "EXPEDIENTE".`);
@@ -10634,10 +13815,10 @@ function updateGenerarProyectoButton(p) {
     const btnGen = document.getElementById("op-btn-generar-proyecto");
     if (!btnGen) return;
     if (p && p.generado === true) {
-        btnGen.innerHTML = 'REGRESAR A OPERACIONES <span class="material-symbols-outlined">arrow_forward</span>';
-        btnGen.className = "btn btn-primary btn-next-step op-btn-nav";
-        btnGen.onclick = () => closeOperacionesDetail();
+        // El botón superior "Regresar a operaciones" está siempre visible arriba; ocultamos el botón inferior redundante
+        btnGen.style.display = "none";
     } else {
+        btnGen.style.display = "inline-flex";
         btnGen.innerHTML = 'GENERAR PROYECTO <span class="material-symbols-outlined">check_circle</span>';
         btnGen.className = "btn btn-primary btn-next-step op-btn-nav";
         btnGen.onclick = () => generarProyectoOperaciones();
@@ -10645,7 +13826,185 @@ function updateGenerarProyectoButton(p) {
 }
 window.updateGenerarProyectoButton = updateGenerarProyectoButton;
 
-function openOperacionesDetail(projectId) {
+function syncOperacionesDetailReadonlyDOM(isReadonly) {
+    window.syncOperacionesDetailReadonlyDOM = syncOperacionesDetailReadonlyDOM;
+    const detailPane = document.getElementById("operaciones-view-detail");
+    if (!detailPane) return;
+
+    if (isReadonly) {
+        detailPane.classList.add("op-detail-readonly");
+    } else {
+        detailPane.classList.remove("op-detail-readonly");
+    }
+
+    const controls = detailPane.querySelectorAll(".op-step-pane input, .op-step-pane select, .op-step-pane textarea");
+    controls.forEach(el => {
+        if (el.id === "op-step1-lavado-total" || el.id === "op-step1-consecutivo-num") {
+            el.readOnly = true;
+            return;
+        }
+        el.disabled = Boolean(isReadonly);
+    });
+}
+
+function updateOperacionesDetailEditUI() {
+    window.updateOperacionesDetailEditUI = updateOperacionesDetailEditUI;
+    const isEditing = Boolean(appState.isEditingOperacionesDetail);
+    const btnEdit = document.getElementById("btn-edit-op-detail");
+    const btnSave = document.getElementById("btn-save-op-detail");
+    const btnBack = document.getElementById("btn-back-op-detail");
+    const indicator = document.getElementById("op-detail-mode-indicator");
+    const iconEl = document.getElementById("op-detail-mode-icon");
+    const textEl = document.getElementById("op-detail-mode-text");
+
+    syncOperacionesDetailReadonlyDOM(!isEditing);
+
+    if (isEditing) {
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.add("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined">edit</span> Editando...`;
+        }
+        if (btnSave) {
+            btnSave.disabled = false;
+        }
+        if (btnBack) {
+            btnBack.disabled = false;
+        }
+        if (indicator) {
+            indicator.classList.remove("mode-readonly");
+            indicator.classList.add("mode-editing");
+        }
+        if (iconEl) iconEl.innerText = "edit_note";
+        if (textEl) textEl.innerHTML = `Modo edición activo · Haz clic en <strong>"Guardar"</strong> para conservar los cambios`;
+    } else {
+        if (btnEdit) {
+            btnEdit.disabled = false;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined">edit</span> Editar`;
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+        }
+        if (btnBack) {
+            btnBack.disabled = false;
+        }
+        if (indicator) {
+            indicator.classList.remove("mode-editing");
+            indicator.classList.add("mode-readonly");
+        }
+        if (iconEl) iconEl.innerText = "lock";
+        if (textEl) textEl.innerHTML = `Modo lectura · Haz clic en <strong>"Editar"</strong> para modificar este proyecto`;
+    }
+}
+window.updateOperacionesDetailEditUI = updateOperacionesDetailEditUI;
+
+function startEditingOperacionesProject() {
+    window.startEditingOperacionesProject = startEditingOperacionesProject;
+    const p = (typeof getActiveOperacionesProject === 'function')
+        ? getActiveOperacionesProject()
+        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
+    if (!p) return;
+
+    // Verificar que ningún otro usuario haya ganado el bloqueo antes
+    const lockByOther = getProjectLockByOther(p);
+    if (lockByOther) {
+        alert(`El proyecto está siendo editado por ${lockByOther.userName || 'otro usuario'}`);
+        closeOperacionesDetail({ skipRelease: true });
+        return;
+    }
+
+    appState._operacionesDetailSnapshot = JSON.parse(JSON.stringify(p));
+    appState.isEditingOperacionesDetail = true;
+
+    updateOperacionesDetailEditUI();
+
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification("Modo de edición activado. Realiza tus modificaciones y haz clic en 'Guardar'.", "info");
+    }
+}
+window.startEditingOperacionesProject = startEditingOperacionesProject;
+
+function saveEditingOperacionesProject() {
+    window.saveEditingOperacionesProject = saveEditingOperacionesProject;
+    if (!appState.isEditingOperacionesDetail) return;
+
+    const p = (typeof getActiveOperacionesProject === 'function')
+        ? getActiveOperacionesProject()
+        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
+    if (!p) return;
+
+    // Sincronizar campos de encabezado desde el DOM por seguridad
+    const facturaVal = document.getElementById("op-step1-factura-num")?.value;
+    const ocVal = document.getElementById("op-step1-oc-num")?.value;
+    const consecutivoVal = document.getElementById("op-step1-consecutivo-num")?.value;
+    const clienteVal = document.getElementById("op-cliente-input")?.value;
+
+    if (facturaVal !== undefined) {
+        p.numFactura = facturaVal;
+        p.factura = facturaVal;
+    }
+    if (ocVal !== undefined) {
+        p.numOC = ocVal;
+    }
+    if (consecutivoVal !== undefined && consecutivoVal.trim()) {
+        const cleanCons = consecutivoVal.trim();
+        p.numConsecutivo = cleanCons;
+        p.consecutivo = cleanCons;
+        p.numProyecto = cleanCons;
+        p.id = cleanCons;
+        appState.activeOperacionesProjectId = cleanCons;
+    }
+    if (clienteVal !== undefined) {
+        p.cliente = clienteVal;
+        p.nombreCliente = clienteVal;
+        if (p.infoLavado) p.infoLavado.clienteFacturar = clienteVal;
+    }
+
+    if (typeof recalcPartidasTotals === 'function') {
+        recalcPartidasTotals(p);
+    }
+    if (typeof recalcProveedorClavesTotals === 'function') {
+        recalcProveedorClavesTotals(p);
+    }
+
+    // Si era un borrador nuevo, marcarlo como generado al guardar
+    if (!isProjectGenerado(p)) {
+        p.generado = true;
+        p.isNewProject = false;
+        p.isDraft = false;
+        appState.draftOperacionesProject = null;
+        if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
+        if (!appState.operacionesProyectos.some(x => x && x.id === p.id)) {
+            appState.operacionesProyectos.unshift(p);
+        }
+    }
+
+    appState.isEditingOperacionesDetail = false;
+    appState._operacionesDetailSnapshot = JSON.parse(JSON.stringify(p));
+
+    window._lastLocalOperacionesSyncTime = Date.now();
+    saveOperacionesStorage();
+    if (typeof window.syncProjectToConsecutivo === 'function') {
+        window.syncProjectToConsecutivo(p, true);
+    }
+    if (typeof window.syncAllOperacionesToProveedores === 'function') {
+        window.syncAllOperacionesToProveedores();
+    }
+    if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(true);
+    }
+
+    updateGenerarProyectoButton(p);
+    updateOperacionesDetailEditUI();
+
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification("Cambios guardados exitosamente en el proyecto.", "success");
+    }
+}
+window.saveEditingOperacionesProject = saveEditingOperacionesProject;
+
+function openOperacionesDetail(projectId, clickTimestamp = null) {
     window.openOperacionesDetail = openOperacionesDetail;
     try {
         if (!projectId) {
@@ -10694,10 +14053,37 @@ function openOperacionesDetail(projectId) {
             return;
         }
 
+        // 1. Verificar bloqueo exclusivo por otro usuario
+        const lockByOther = getProjectLockByOther(p);
+        if (lockByOther) {
+            const lockMsg = `El proyecto está siendo editado por ${lockByOther.userName || 'otro usuario'}`;
+            if (typeof showCustomNotification === 'function') {
+                showCustomNotification(lockMsg, "warning");
+            } else {
+                alert(lockMsg);
+            }
+            renderOperaciones();
+            return;
+        }
+
+        // Si teníamos otro proyecto bloqueado previamente, liberarlo antes de abrir el nuevo
+        if (appState.activeOperacionesProjectId && normalizeOperacionesProjectKey(appState.activeOperacionesProjectId) !== normalizeOperacionesProjectKey(p)) {
+            releaseOperacionesProjectLock(appState.activeOperacionesProjectId);
+        }
+
         appState.activeOperacionesProjectId = p.id;
         try {
             localStorage.setItem('rp_active_operaciones_project_id', p.id);
         } catch(e) {}
+
+        // 2. Reclamar bloqueo exclusivo para este proyecto con timestamp exacto del clic
+        claimOperacionesProjectLock(p, clickTimestamp !== null ? clickTimestamp : Date.now());
+
+        // 3. Al abrir un proyecto existente, entra en modo lectura hasta que el usuario dé clic en "Editar".
+        // (Si es un proyecto nuevo en borrador recién creado con "+ Nuevo proyecto", guardamos su snapshot igualmente)
+        appState.isEditingOperacionesDetail = false;
+        appState._operacionesDetailSnapshot = JSON.parse(JSON.stringify(p));
+
         appState.contenedoresPage = 0;
         appState.prefacturaPage = 0;
 
@@ -10713,9 +14099,9 @@ function openOperacionesDetail(projectId) {
             detailPane.style.display = "block";
             detailPane.classList.add("active");
         }
-        if (topbarBack) topbarBack.style.display = "none";
+        if (topbarBack) topbarBack.style.display = "flex";
 
-        // Configuración del botón inferior en Paso 4: GENERAR PROYECTO (si es nuevo) o REGRESAR A OPERACIONES (si ya fue generado)
+        // Configuración del botón inferior en Paso 4: GENERAR PROYECTO (si es nuevo)
         if (typeof updateGenerarProyectoButton === 'function') {
             updateGenerarProyectoButton(p);
         }
@@ -10755,6 +14141,7 @@ function openOperacionesDetail(projectId) {
         if (window.DocStorage && p.id) {
             window.DocStorage.restoreProjectDocs(p).then(changed => {
                 if (changed && typeof renderDocumentosStatus === 'function') renderDocumentosStatus(p);
+                updateOperacionesDetailEditUI();
             }).catch(e => console.warn("Error restoring project docs:", e));
         }
 
@@ -10762,6 +14149,8 @@ function openOperacionesDetail(projectId) {
         if (typeof goToOperacionesStep === 'function') {
             goToOperacionesStep(targetStep);
         }
+
+        updateOperacionesDetailEditUI();
     } catch (err) {
         console.error("Error opening operaciones detail:", err);
     }
@@ -10769,7 +14158,8 @@ function openOperacionesDetail(projectId) {
 
 function selectProjectTipo(tipo) {
     window.selectProjectTipo = selectProjectTipo;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    if (!appState.isEditingOperacionesDetail) return;
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     p.tipoProyecto = tipo;
     if (tipo === 'servicio_local') p.servicioName = 'Servicio local';
@@ -10800,7 +14190,8 @@ function selectProjectTipo(tipo) {
 
     appState.contenedoresPage = 0;
     renderStep1View(p);
-    saveOperacionesStorage();
+    updateOperacionesDetailEditUI();
+    // NO auto-guardar: los cambios solo se guardan al dar clic en "Guardar"
 };
 
 function toggleStep1GeneralInfo(section) {
@@ -10819,24 +14210,17 @@ function toggleStep1GeneralInfo(section) {
 
 function updateProjectInfoViajeField(key, val) {
     window.updateProjectInfoViajeField = updateProjectInfoViajeField;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     if (!p.infoViaje) p.infoViaje = {};
     p.infoViaje[key] = val;
-    if (!isProjectGenerado(p)) return;
-    saveOperacionesStorage();
-    if (typeof window.syncProjectToConsecutivo === 'function') {
-        window.syncProjectToConsecutivo(p);
-    }
-    if (typeof window.debouncedRealtimeSync === 'function') {
-        window.debouncedRealtimeSync(false);
-    } else if (typeof window.syncOperacionesToCloud === 'function') {
-        window.syncOperacionesToCloud(false);
-    }
+    // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 };
 
 function updateProjectInfoLavadoField(key, val) {
     window.updateProjectInfoLavadoField = updateProjectInfoLavadoField;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     if (!p.infoLavado) p.infoLavado = {};
@@ -10845,16 +14229,7 @@ function updateProjectInfoLavadoField(key, val) {
         p.cliente = val;
         p.clienteFacturar = val;
     }
-    if (!isProjectGenerado(p)) return;
-    saveOperacionesStorage();
-    if (typeof window.syncProjectToConsecutivo === 'function') {
-        window.syncProjectToConsecutivo(p);
-    }
-    if (typeof window.debouncedRealtimeSync === 'function') {
-        window.debouncedRealtimeSync(false);
-    } else if (typeof window.syncOperacionesToCloud === 'function') {
-        window.syncOperacionesToCloud(false);
-    }
+    // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 };
 
 function renderStep1View(p) {
@@ -10943,8 +14318,29 @@ function renderStep1View(p) {
     renderContenedoresCards(p);
 };
 
-function closeOperacionesDetail() {
+function closeOperacionesDetail(options = {}) {
     window.closeOperacionesDetail = closeOperacionesDetail;
+    const prevActiveId = appState.activeOperacionesProjectId || appState._myActiveProjectLock?.projectId;
+
+    // Si estaba en modo "Editar" y NO dio clic en "Guardar", descartar cambios restaurando el snapshot original
+    if (appState.isEditingOperacionesDetail && appState._operacionesDetailSnapshot) {
+        const snap = JSON.parse(JSON.stringify(appState._operacionesDetailSnapshot));
+        if (Array.isArray(appState.operacionesProyectos)) {
+            const idx = appState.operacionesProyectos.findIndex(x =>
+                x && (
+                    x.id === snap.id ||
+                    x.id === prevActiveId ||
+                    (snap.consecutivo && x.consecutivo === snap.consecutivo)
+                )
+            );
+            if (idx !== -1) {
+                appState.operacionesProyectos[idx] = snap;
+            }
+        }
+    }
+
+    appState.isEditingOperacionesDetail = false;
+    appState._operacionesDetailSnapshot = null;
 
     // Si había un borrador activo no generado, retirarlo de operacionesProyectos
     if (appState.draftOperacionesProject && !isProjectGenerado(appState.draftOperacionesProject)) {
@@ -10963,12 +14359,26 @@ function closeOperacionesDetail() {
         } catch (e) {}
     }
 
+    // Liberar el bloqueo exclusivo del proyecto al dar clic en "Regresar a operaciones"
+    if (!options || !options.skipRelease) {
+        if (prevActiveId) {
+            releaseOperacionesProjectLock(prevActiveId);
+        }
+    }
+    appState.activeOperacionesProjectId = null;
+
     const listPane = document.getElementById("operaciones-view-list");
     const detailPane = document.getElementById("operaciones-view-detail");
     const topbarBack = document.getElementById("op-detail-topbar");
 
-    if (listPane) listPane.style.display = "block";
-    if (detailPane) detailPane.style.display = "none";
+    if (listPane) {
+        listPane.style.display = "block";
+        listPane.classList.add("active");
+    }
+    if (detailPane) {
+        detailPane.style.display = "none";
+        detailPane.classList.remove("active");
+    }
     if (topbarBack) topbarBack.style.display = "none";
 
     renderOperaciones();
@@ -11012,12 +14422,9 @@ function goToOperacionesStep(stepNum) {
         if (stepNum === 4 && typeof window.renderDocumentosStatus === 'function') {
             window.renderDocumentosStatus(p);
         }
-        if (isProjectGenerado(p)) {
-            saveOperacionesStorage();
-            if (typeof window.debouncedRealtimeSync === 'function') {
-                window.debouncedRealtimeSync(false);
-            }
-        }
+    }
+    if (typeof updateOperacionesDetailEditUI === 'function') {
+        updateOperacionesDetailEditUI();
     }
 };
 
@@ -11030,20 +14437,26 @@ function changeContenedoresPage(delta) {
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (p) {
         renderContenedoresCards(p);
+        updateOperacionesDetailEditUI();
     }
 };
 
 function updateProjectHeaderField(key, val) {
     window.updateProjectHeaderField = updateProjectHeaderField;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     p[key] = val;
 
     if (key === 'numFactura') {
         p.factura = val;
+        const fInput = document.getElementById("op-step1-factura-num");
+        if (fInput && document.activeElement !== fInput) fInput.value = val || "";
         document.querySelectorAll("#op-step3-num-factura, #op-step4-num-factura, #op-step5-num-factura").forEach(el => el.innerText = val || "-");
     }
     if (key === 'numOC') {
+        const ocInput = document.getElementById("op-step1-oc-num");
+        if (ocInput && document.activeElement !== ocInput) ocInput.value = val || "";
         document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = val || "-");
     }
     if (key === 'numConsecutivo' || key === 'consecutivo') {
@@ -11055,26 +14468,11 @@ function updateProjectHeaderField(key, val) {
             p.id = cleanVal;
             appState.activeOperacionesProjectId = cleanVal;
         }
+        const cInput = document.getElementById("op-step1-consecutivo-num");
+        if (cInput && document.activeElement !== cInput) cInput.value = cleanVal || "";
         document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = cleanVal || "-");
     }
-
-    // SI EL PROYECTO ES UN BORRADOR NO GENERADO, NO SINCRONIZAR A NUBE NI A CONSECUTIVO
-    if (!isProjectGenerado(p)) {
-        return;
-    }
-
-    saveOperacionesStorage();
-    if (typeof window.syncProjectToConsecutivo === 'function') {
-        window.syncProjectToConsecutivo(p);
-    }
-    if (typeof window.syncProjectToProveedores === 'function') {
-        window.syncProjectToProveedores(p);
-    }
-    if (typeof window.debouncedRealtimeSync === 'function') {
-        window.debouncedRealtimeSync(false);
-    } else if (typeof window.syncOperacionesToCloud === 'function') {
-        window.syncOperacionesToCloud(false);
-    }
+    // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 };
 
 function renderContenedoresCards(p) {
@@ -11232,6 +14630,7 @@ function renderContenedoresCards(p) {
 
 function duplicateContenedor(cId) {
     window.duplicateContenedor = duplicateContenedor;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p || !p.contenedores) return;
 
@@ -11266,17 +14665,13 @@ function duplicateContenedor(cId) {
     appState.contenedoresPage = Math.floor((sourceIdx + 1) / itemsPerPage);
 
     renderContenedoresCards(p);
-    if (isProjectGenerado(p)) {
-        saveOperacionesStorage();
-        if (typeof window.syncOperacionesToCloud === 'function') {
-            window.syncOperacionesToCloud(true);
-        }
-    }
+    updateOperacionesDetailEditUI();
 }
 window.duplicateContenedor = duplicateContenedor;
 
 function deleteContenedor(cId) {
     window.deleteContenedor = deleteContenedor;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p || !p.contenedores) return;
 
@@ -11304,12 +14699,7 @@ function deleteContenedor(cId) {
     }
 
     renderContenedoresCards(p);
-    if (isProjectGenerado(p)) {
-        saveOperacionesStorage();
-        if (typeof window.syncOperacionesToCloud === 'function') {
-            window.syncOperacionesToCloud(true);
-        }
-    }
+    updateOperacionesDetailEditUI();
 };
 
 /* Prefactura Lateral Slider (Step 2 - Imagen 2 y 3) */
@@ -11368,6 +14758,7 @@ function handlePrefacturaFooterPrev() {
 
 function updateContenedorField(cId, key, val) {
     window.updateContenedorField = updateContenedorField;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     if (!p.contenedores) p.contenedores = [];
@@ -11377,17 +14768,12 @@ function updateContenedorField(cId, key, val) {
         p.contenedores.push(item);
     }
     item[key] = val;
-    if (!isProjectGenerado(p)) return;
-    saveOperacionesStorage();
-    if (typeof window.debouncedRealtimeSync === 'function') {
-        window.debouncedRealtimeSync(false);
-    } else if (typeof window.syncOperacionesToCloud === 'function') {
-        window.syncOperacionesToCloud(false);
-    }
+    // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 };
 
 function addContenedorToActiveProject() {
     window.addContenedorToActiveProject = addContenedorToActiveProject;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     if (!p.contenedores) p.contenedores = [];
@@ -11401,12 +14787,7 @@ function addContenedorToActiveProject() {
     const itemsPerPage = 2;
     appState.contenedoresPage = Math.floor((p.contenedores.length - 1) / itemsPerPage);
     renderContenedoresCards(p);
-    if (isProjectGenerado(p)) {
-        saveOperacionesStorage();
-        if (typeof window.syncOperacionesToCloud === 'function') {
-            window.syncOperacionesToCloud(true);
-        }
-    }
+    updateOperacionesDetailEditUI();
 };
 
 function convertirCaratulaPDF() {
@@ -12403,6 +15784,7 @@ const CODIGOS_SERVICIOS_OPERACIONES = {
 
 function handlePartidaServicioInput(idx, inputEl, event) {
     window.handlePartidaServicioInput = handlePartidaServicioInput;
+    if (!appState.isEditingOperacionesDetail) return;
     if (!inputEl) return;
     const prevLen = inputEl._prevLen !== undefined ? inputEl._prevLen : (inputEl.value.length + 1);
     const currLen = inputEl.value.length;
@@ -12468,6 +15850,7 @@ function handlePartidaServicioInput(idx, inputEl, event) {
 
 function handlePartidaServicioSelect(idx, val) {
     window.handlePartidaServicioSelect = handlePartidaServicioSelect;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -12495,11 +15878,11 @@ function handlePartidaServicioSelect(idx, val) {
     }
 
     recalcPartidasTotals(p);
-    saveOperacionesStorage();
 };
 
 function handlePartidaConceptoInput(idx, inputEl, event) {
     window.handlePartidaConceptoInput = handlePartidaConceptoInput;
+    if (!appState.isEditingOperacionesDetail) return;
     if (!inputEl) return;
     const prevLen = inputEl._prevLen !== undefined ? inputEl._prevLen : (inputEl.value.length + 1);
     const currLen = inputEl.value.length;
@@ -12527,6 +15910,7 @@ function handlePartidaConceptoInput(idx, inputEl, event) {
 
 function updatePartidaFieldFast(idx, key, val) {
     window.updatePartidaFieldFast = updatePartidaFieldFast;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -12542,12 +15926,7 @@ function updatePartidaFieldFast(idx, key, val) {
         p.partidasConceptos[idx][key] = val;
     }
     recalcPartidasTotals(p);
-    if (isProjectGenerado(p)) {
-        saveOperacionesStorage();
-        if (typeof window.debouncedRealtimeSync === 'function') {
-            window.debouncedRealtimeSync(false);
-        }
-    }
+    // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 };
 window.updatePartidaField = window.updatePartidaFieldFast;
 
@@ -12624,10 +16003,6 @@ function recalcPartidasTotals(p) {
     if (ivaEl) ivaEl.innerText = `$${totIva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (retEl) retEl.innerText = `$${totRet.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     if (finEl) finEl.innerText = `$${totFinal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-
-    if (typeof window.syncProjectToConsecutivo === 'function') {
-        window.syncProjectToConsecutivo(p);
-    }
 }
 
 function renderPartidasTable(p) {
@@ -12765,6 +16140,7 @@ function renderPartidasTable(p) {
 
 function handleClienteInput(val) {
     window.handleClienteInput = handleClienteInput;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -12772,15 +16148,13 @@ function handleClienteInput(val) {
     p.cliente = val;
     p.nombreCliente = val;
     if (p.infoLavado) p.infoLavado.clienteFacturar = val;
-    saveOperacionesStorage();
-    if (typeof window.syncProjectToConsecutivo === 'function') {
-        window.syncProjectToConsecutivo(p);
-    }
+    // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 }
 window.handleClienteInput = handleClienteInput;
 
 function addPartidaConceptoRow() {
     window.addPartidaConceptoRow = addPartidaConceptoRow;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -12788,7 +16162,7 @@ function addPartidaConceptoRow() {
     if (!p.partidasConceptos) p.partidasConceptos = [];
     p.partidasConceptos.push({ servicio: '', num: p.partidasConceptos.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencion: '', total: 0 });
     renderPartidasTable(p);
-    saveOperacionesStorage();
+    updateOperacionesDetailEditUI();
 };
 
 let _realtimeSyncTimer = null;
@@ -12809,6 +16183,7 @@ window.debouncedRealtimeSync = debouncedRealtimeSync;
 
 function updateProveedorClavesFieldFast(idx, key, val) {
     window.updateProveedorClavesFieldFast = updateProveedorClavesFieldFast;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -12832,15 +16207,7 @@ function updateProveedorClavesFieldFast(idx, key, val) {
         p.proveedoresClaves[idx][key] = val;
     }
     recalcProveedorClavesTotals(p);
-    if (isProjectGenerado(p)) {
-        saveOperacionesStorage();
-        if (typeof window.syncAllOperacionesToProveedores === 'function') {
-            window.syncAllOperacionesToProveedores();
-        }
-        if (typeof window.debouncedRealtimeSync === 'function') {
-            window.debouncedRealtimeSync(false);
-        }
-    }
+    // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 };
 window.updateProveedorClavesField = window.updateProveedorClavesFieldFast;
 
@@ -13118,6 +16485,7 @@ function renderProveedorClavesTable(p) {
 
 function addProveedorClavesRow() {
     window.addProveedorClavesRow = addProveedorClavesRow;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (typeof getActiveOperacionesProject === 'function') 
         ? getActiveOperacionesProject() 
         : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
@@ -13125,10 +16493,7 @@ function addProveedorClavesRow() {
     if (!p.proveedoresClaves) p.proveedoresClaves = [];
     p.proveedoresClaves.push({ proveedor: '', facturaNum: (p.numFactura && p.numFactura !== '-' ? p.numFactura : ''), num: p.proveedoresClaves.length + 1, concepto: '', cantidad: '', unitario: '', subtotal: 0, iva: 0, retencionIva: '', retencionIsr: '', total: 0 });
     renderProveedorClavesTable(p);
-    saveOperacionesStorage();
-    if (typeof window.syncAllOperacionesToProveedores === 'function') {
-        window.syncAllOperacionesToProveedores();
-    }
+    updateOperacionesDetailEditUI();
 };
 
 /* ==============================================================================
@@ -13391,6 +16756,7 @@ function renderDocumentosStatus(p) {
 
 function uploadDocItem(docKey) {
     window.uploadDocItem = uploadDocItem;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p) return;
     if (!p.documentos) p.documentos = {};
@@ -13462,16 +16828,9 @@ function uploadDocItem(docKey) {
                     } catch(eWs) {}
                 }
 
-                // 4. Actualizar interfaz
+                // 4. Actualizar interfaz (se persiste al expediente cuando el usuario da clic en "Guardar")
                 renderDocumentosStatus(p);
-
-                // 5. Guardar en almacenamiento seguro LocalStorage
-                saveOperacionesStorage();
-
-                // 6. Sincronizar inmediatamente a la nube Supabase sin demora
-                if (typeof window.syncOperacionesToCloud === 'function') {
-                    window.syncOperacionesToCloud(true);
-                }
+                updateOperacionesDetailEditUI();
             };
             reader.readAsDataURL(file);
         }
@@ -13608,6 +16967,7 @@ async function viewDocItem(docKey) {
 
 async function deleteDocItem(docKey) {
     window.deleteDocItem = deleteDocItem;
+    if (!appState.isEditingOperacionesDetail) return;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
     if (!p || !p.documentos || !p.documentos[docKey]) return;
     
@@ -13630,11 +16990,7 @@ async function deleteDocItem(docKey) {
     }
 
     renderDocumentosStatus(p);
-    saveOperacionesStorage();
-
-    if (typeof window.syncOperacionesToCloud === 'function') {
-        window.syncOperacionesToCloud(true);
-    }
+    updateOperacionesDetailEditUI();
 }
 
 function finishOperacionesWizard() {
@@ -13647,6 +17003,8 @@ function finishOperacionesWizard() {
             return;
         }
         p.estatus = 'CERRADO';
+        appState.isEditingOperacionesDetail = false;
+        appState._operacionesDetailSnapshot = null;
         saveOperacionesStorage();
     }
     alert("¡Expediente operativo completado y CERRADO con éxito!");
@@ -13680,6 +17038,8 @@ function generarProyectoOperaciones() {
 
         appState.draftOperacionesProject = null;
         appState.activeOperacionesProjectId = p.id;
+        appState.isEditingOperacionesDetail = false;
+        appState._operacionesDetailSnapshot = null;
 
         if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
         // Limpiar cualquier referencia previa por id o consecutivo para asegurar unicidad
@@ -13709,6 +17069,7 @@ function openNuevoProyectoModal() {
     // Si ya existe un borrador no generado en edición, reanudarlo y evitar duplicados por clics múltiples
     if (appState.draftOperacionesProject && !isProjectGenerado(appState.draftOperacionesProject)) {
         openOperacionesDetail(appState.draftOperacionesProject.id);
+        startEditingOperacionesProject();
         goToOperacionesStep(1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
@@ -13773,8 +17134,9 @@ function openNuevoProyectoModal() {
     appState.operacionesProyectos.unshift(newProject);
 
     // NOTA: NO guardamos en LocalStorage y NO sincronizamos a la nube aquí.
-    // Solo cuando el usuario haga clic en GENERAR PROYECTO (Paso 4) se registrará formalmente.
+    // Solo cuando el usuario haga clic en GENERAR PROYECTO o GUARDAR se registrará formalmente.
     openOperacionesDetail(newProject.id);
+    startEditingOperacionesProject();
     goToOperacionesStep(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
@@ -13822,7 +17184,7 @@ function openNuevoProyectoModal() {
         }
 
         // 2. Generar y descargar el acceso directo de escritorio para Windows (.url)
-        var origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'https://admond.rodilaw.com';
+        var origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'https://mirandascorp.com';
         var shortcutContent = '[InternetShortcut]\r\nURL=' + origin + '/\r\nIconIndex=0\r\nHotKey=0\r\nIconFile=' + origin + '/Logo%20interno.png\r\n[{000214A0-0000-0000-C000-000000000046}]\r\nProp3=19,0\r\n[InternetShortcut.A]\r\nURL=' + origin + '/\r\n';
         
         var blob = new Blob([shortcutContent], { type: 'application/octet-stream' });
@@ -13844,7 +17206,7 @@ function openNuevoProyectoModal() {
 
     window.descargarSistemaMac = function() {
         // 1. Generar y descargar el acceso directo nativo para macOS (.webloc)
-        var origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'https://admond.rodilaw.com';
+        var origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'https://mirandascorp.com';
         var weblocXml = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>URL</key>\n\t<string>' + origin + '/</string>\n</dict>\n</plist>';
 
         var blob = new Blob([weblocXml], { type: 'application/x-apple-aspen-config;charset=utf-8' });

@@ -14,12 +14,16 @@ const supabaseUmd = fs.readFileSync(
   path.resolve(__dirname, "..", "node_modules", "@supabase", "supabase-js", "dist", "umd", "supabase.js"),
   "utf8"
 );
+const firebaseMock = fs.readFileSync(
+  path.resolve(__dirname, "firebase-mock.js"),
+  "utf8"
+);
 
 async function mockNetwork(page, requests = []) {
   await page.addInitScript(() => {
     const OrigWS = window.WebSocket;
     window.WebSocket = function (url, protocols) {
-      if (url && String(url).includes("supabase.co")) {
+      if (url && (String(url).includes("supabase.co") || String(url).includes("firebase"))) {
         return {
           readyState: 1,
           send() {},
@@ -45,6 +49,12 @@ async function mockNetwork(page, requests = []) {
       return route.fulfill({
         contentType: "text/javascript",
         body: "window.Chart=function(ctx,cfg){return {canvas:ctx&&ctx.canvas,destroy(){},update(){},data:(cfg&&cfg.data)||{},options:(cfg&&cfg.options)||{}}};window.Chart.register=function(){};",
+      });
+    }
+    if (url.includes("firebasejs")) {
+      return route.fulfill({
+        contentType: "text/javascript",
+        body: firebaseMock,
       });
     }
     if (url.includes(".supabase.co")) {

@@ -79,7 +79,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <link rel="stylesheet" href="styles.css?v=bd896302">
+    <link rel="stylesheet" href="styles.css?v=fedeb6b4">
 
     <script>
 
@@ -1133,7 +1133,7 @@
 
                                 <div class="ficha-text">
 
-                                    <h4>Administración Quincenal</h4>
+                                    <h4>Administración</h4>
 
                                 </div>
 
@@ -1293,9 +1293,9 @@
 
                                                 <tbody>
 
-                                                    <!-- Bancos Row (Light Green) -->
+                                                    <!-- Bancos Row (Verde) -->
 
-                                                    <tr class="excel-row-bancos">
+                                                    <tr class="excel-row-bancos" id="row-vis-bancos">
 
                                                         <td><strong>Bancos</strong></td>
 
@@ -1305,117 +1305,118 @@
 
                                                         </td>
 
-                                                        <td class="cell-note">Capital disponible en cuenta bancaria</td>
+                                                        <td class="cell-note">
+                                                            <span>Capital disponible en cuenta bancaria</span>
+                                                            <span id="concept-bancos-fecha" class="bancos-fecha-badge"></span>
+                                                        </td>
 
                                                     </tr>
 
-                                                    <!-- Ingresos Row (Dark Blue) -->
+                                                    <!-- Ingresos Row (Azul) -->
 
-                                                    <tr class="excel-row-ingresos">
+                                                    <tr class="excel-row-ingresos" id="row-vis-ingresos">
 
                                                         <td><strong>Ingresos</strong></td>
 
-                                                        <td>
-
-                                                            <input type="number" id="concept-ingresos-input" class="excel-input number-input" value="0" step="100" oninput="updateAdminConcept('ingresos', this.value)">
-
+                                                        <td class="text-right font-bold">
+                                                            <span id="concept-ingresos-val">$0.00</span>
+                                                            <input type="hidden" id="concept-ingresos-input" value="0">
                                                         </td>
 
-                                                        <td class="cell-note"><strong>Facturas por recibir pago.</strong></td>
+                                                        <td class="cell-note"><strong>Total Por cobrar (C) + Por programar (PP)</strong></td>
 
                                                     </tr>
 
-                                                    <!-- Subtotal 1 (Blue) -->
+                                                    <!-- 1 Balance parcial (Blanco) -->
 
-                                                    <tr class="excel-blue-balance-row">
+                                                    <tr class="excel-white-balance-row" id="row-vis-balance-1">
 
-                                                        <td>Balance Parcial (Bancos + Ingresos)</td>
+                                                        <td><strong>1 Balance parcial</strong></td>
 
-                                                        <td id="balance-subtotal-1" class="text-right">$10,000.00</td>
+                                                        <td id="balance-subtotal-1" class="text-right font-bold">$10,000.00</td>
 
-                                                        <td></td>
+                                                        <td class="cell-note">Bancos + Ingresos</td>
 
                                                     </tr>
 
-                                                    <!-- Gastos proveedores (Yellow) -->
+                                                    <!-- Gastos proveedores (Rosa) -->
 
-                                                    <tr class="excel-row-gastos">
+                                                    <tr class="excel-row-gastos-prov" id="row-vis-gastos-prov">
 
                                                         <td><strong>Gastos proveedores</strong></td>
 
                                                         <td id="concept-gastos-prov-val" class="text-right font-bold">$0.00</td>
 
-                                                        <td class="cell-note">Calculado automáticamente de Proveedores</td>
+                                                        <td class="cell-note">Total por pagar en Proveedores</td>
 
                                                     </tr>
 
-                                                    <!-- Subtotal 2 (Blue) -->
+                                                    <!-- 2 Balance parcial (Blanco) -->
 
-                                                    <tr class="excel-blue-balance-row">
+                                                    <tr class="excel-white-balance-row" id="row-vis-balance-2">
 
-                                                        <td>Balance Parcial</td>
+                                                        <td><strong>2 Balance parcial</strong></td>
 
-                                                        <td id="balance-subtotal-2" class="text-right">$10,000.00</td>
+                                                        <td id="balance-subtotal-2" class="text-right font-bold">$10,000.00</td>
 
-                                                        <td></td>
+                                                        <td class="cell-note">1 Balance parcial - Gastos proveedores</td>
 
                                                     </tr>
 
-                                                    <!-- Gastos Indirectos (Yellow) -->
+                                                    <!-- Gastos Indirectos (Amarillo) -->
 
-                                                    <tr class="excel-row-gastos">
+                                                    <tr class="excel-row-gastos-ind" id="row-vis-gastos-ind">
 
-                                                        <td><strong>Gastos Ind.</strong></td>
+                                                        <td><strong>Gastos Indirectos</strong></td>
 
-                                                        <td>
-
-                                                            <input type="number" id="concept-gastos-ind-input" class="excel-input number-input" value="670" step="10" oninput="updateAdminConcept('gastosInd', this.value)">
-
+                                                        <td class="text-right font-bold">
+                                                            <span id="concept-gastos-ind-val">$0.00</span>
+                                                            <input type="hidden" id="concept-gastos-ind-input" value="0">
                                                         </td>
 
-                                                        <td class="cell-note">Gastos operativos indirectos</td>
+                                                        <td class="cell-note">Total de Gastos Indirectos en Administración</td>
 
                                                     </tr>
 
-                                                    <!-- Subtotal 3 (Blue) -->
+                                                    <!-- 3 Balance parcial (Blanco) -->
 
-                                                    <tr class="excel-blue-balance-row">
+                                                    <tr class="excel-white-balance-row" id="row-vis-balance-3">
 
-                                                        <td>Balance Parcial</td>
+                                                        <td><strong>3 Balance parcial</strong></td>
 
-                                                        <td id="balance-subtotal-3" class="text-right">$9,330.00</td>
+                                                        <td id="balance-subtotal-3" class="text-right font-bold">$10,000.00</td>
 
-                                                        <td></td>
+                                                        <td class="cell-note">2 Balance parcial - Gastos Indirectos</td>
 
                                                     </tr>
 
-                                                    <!-- Nóminas (Yellow) -->
+                                                    <!-- Nominas (Negro) -->
 
-                                                    <tr class="excel-row-gastos">
+                                                    <tr class="excel-row-nominas" id="row-vis-nominas">
 
                                                         <td><strong>Nominas</strong></td>
 
-                                                        <td id="concept-nominas-val" class="text-right font-bold" style="color: #b71c1c;">$13,780.00</td>
+                                                        <td id="concept-nominas-val" class="text-right font-bold">$13,780.00</td>
 
-                                                        <td class="cell-note">Calculado de Administración Quincenal</td>
+                                                        <td class="cell-note">Total de Nóminas</td>
 
                                                     </tr>
 
-                                                    <!-- Subtotal 4 (Blue) -->
+                                                    <!-- 4 Balance parcial (Blanco) -->
 
-                                                    <tr class="excel-blue-balance-row">
+                                                    <tr class="excel-white-balance-row" id="row-vis-balance-4">
 
-                                                        <td>Balance Parcial</td>
+                                                        <td><strong>4 Balance parcial</strong></td>
 
                                                         <td id="balance-subtotal-4" class="text-right font-bold">-$4,450.00</td>
 
-                                                        <td></td>
+                                                        <td class="cell-note">3 Balance parcial - Nominas</td>
 
                                                     </tr>
 
-                                                    <!-- Impuestos (Yellow) -->
+                                                    <!-- Impuestos (Rojo) -->
 
-                                                    <tr class="excel-row-gastos">
+                                                    <tr class="excel-row-impuestos" id="row-vis-impuestos">
 
                                                         <td><strong>Impuestos</strong></td>
 
@@ -1431,13 +1432,13 @@
 
                                                     <!-- TOTAL ROW (Boxed Summary) -->
 
-                                                    <tr class="excel-final-total-row">
+                                                    <tr class="excel-final-total-row" id="row-vis-total-general">
 
                                                         <td><strong>TOTAL GENERAL</strong></td>
 
                                                         <td id="concept-total-final" class="text-right font-extrabold">-$4,450.00</td>
 
-                                                        <td class="cell-note">Balance neto final del ejercicio</td>
+                                                        <td class="cell-note">4 Balance parcial - Impuestos</td>
 
                                                     </tr>
 
@@ -1491,11 +1492,33 @@
 
 
 
-                        <!-- SUB-FICHA 2: ADMINISTRACIÓN QUINCENAL (Nóminas - Imagen 3) -->
+                        <!-- SUB-FICHA 2: ADMINISTRACIÓN (Nóminas y Gastos Indirectos - Imagen 4) -->
 
                         <div class="admin-subpane" id="admin-subpane-quincenal">
 
-                            <div class="card table-card full-width-card">
+                            <!-- Selector de sub-sección: Cargar Quincenas vs Gastos Indirectos + Botones Editar/Guardar -->
+                            <div class="admin-tabs-segmented" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+                                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                    <button type="button" class="btn-segmented active" id="btn-subtab-quincenas" onclick="switchAdminSubSection('quincenas')" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 14px; border: 1.5px solid #2563EB; background: #2563EB; color: #FFFFFF; cursor: pointer; transition: background 0.2s ease, color 0.2s ease; box-shadow: 0 2px 6px rgba(37,99,235,0.25);">
+                                        <span class="material-symbols-outlined" style="font-size: 20px;">payments</span> Cargar Quincenas (Nóminas)
+                                    </button>
+                                    <button type="button" class="btn-segmented" id="btn-subtab-gastos-ind" onclick="switchAdminSubSection('gastos-indirectos')" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 14px; border: 1.5px solid rgba(15,23,42,0.15); background: #FFFFFF; color: #475569; cursor: pointer; transition: background 0.2s ease, color 0.2s ease;">
+                                        <span class="material-symbols-outlined" style="font-size: 20px;">receipt_long</span> Gastos Indirectos
+                                    </button>
+                                </div>
+                                <div class="admin-quincenal-top-edit-actions" style="display: flex; gap: 10px; align-items: center;">
+                                    <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-admin-top" onclick="handleAdminQuincenalTopEdit()" title="Habilitar edición de la tabla activa">
+                                        <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
+                                    </button>
+                                    <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-admin-top" onclick="handleAdminQuincenalTopSave()" disabled title="Guardar cambios y liberar la tabla para otros usuarios">
+                                        <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- SECCIÓN 1: CARGAR QUINCENAS / NÓMINAS -->
+                            <div id="admin-sec-quincenas" class="admin-section-block">
+                                <div class="card table-card full-width-card">
 
                                 <div class="table-card-header">
 
@@ -1507,7 +1530,15 @@
 
                                     </div>
 
-                                    <div class="table-actions" style="display: flex; gap: 10px; align-items: center;" id="nomina-action-buttons">
+                                    <div class="table-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;" id="nomina-action-buttons">
+
+                                        <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-nominas" onclick="startEditingNominas()" title="Habilitar edición en Nóminas">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
+                                        </button>
+
+                                        <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-nominas" onclick="saveEditingNominas()" disabled title="Guardar cambios en Nóminas y liberar la tabla para otros usuarios">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
+                                        </button>
 
                                         <button class="btn btn-secondary" onclick="openModalArchivoDigital()" id="btn-archivo-digital">
 
@@ -1521,7 +1552,7 @@
 
                                         </button>
 
-                                        <button class="btn btn-primary" onclick="addNewNominaRow()">
+                                        <button class="btn btn-primary" id="btn-add-nomina-row" onclick="addNewNominaRow()">
 
                                             <span class="material-symbols-outlined">person_add</span> Agregar Empleado / Nómina
 
@@ -1537,7 +1568,15 @@
 
                                 </div>
 
-                                <div class="table-responsive">
+                                <!-- Banner de bloqueo / edición en tiempo real para Nóminas -->
+                                <div id="nominas-lock-banner" class="proveedores-lock-banner" style="display: none;">
+                                    <div class="lock-banner-content">
+                                        <span class="material-symbols-outlined lock-icon">lock</span>
+                                        <span id="nominas-lock-banner-text">Esta tabla está siendo editada por otro usuario — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"</span>
+                                    </div>
+                                </div>
+
+                                <div class="table-responsive" id="nominas-table-container">
 
                                     <table class="admond-table excel-style-table" id="table-nominas">
 
@@ -1576,6 +1615,59 @@
                                 </div>
 
                             </div>
+                            </div><!-- Fin admin-sec-quincenas -->
+
+                            <!-- SECCIÓN 2: GASTOS INDIRECTOS (Imagen 4) -->
+                            <div id="admin-sec-gastos-indirectos" class="admin-section-block" style="display: none;">
+                                <div class="card table-card full-width-card">
+                                    <div class="table-card-header">
+                                        <div class="table-title-area">
+                                            <h3>Gastos Indirectos</h3>
+                                            <p>Control, registro y cálculo de gastos indirectos y operativos</p>
+                                        </div>
+                                        <div class="table-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;" id="gastos-ind-action-buttons">
+                                            <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-gastos-ind" onclick="startEditingGastosIndirectos()" title="Habilitar edición en Gastos Indirectos">
+                                                <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
+                                            </button>
+                                            <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-gastos-ind" onclick="saveEditingGastosIndirectos()" disabled title="Guardar cambios en Gastos Indirectos y liberar la tabla para otros usuarios">
+                                                <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
+                                            </button>
+                                            <button type="button" class="btn btn-primary" id="btn-add-gasto-indirecto" onclick="addNewGastoIndirectoRow()">
+                                                <span class="material-symbols-outlined">add_circle</span> + Añadir Gasto Indirecto
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Banner de bloqueo / edición en tiempo real para Gastos Indirectos -->
+                                    <div id="gastos-indirectos-lock-banner" class="proveedores-lock-banner" style="display: none;">
+                                        <div class="lock-banner-content">
+                                            <span class="material-symbols-outlined lock-icon">lock</span>
+                                            <span id="gastos-indirectos-lock-banner-text">Esta tabla está siendo editada por otro usuario — Los cambios no se guardarán hasta que el usuario dé clic en "Guardar"</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="table-responsive" id="gastos-indirectos-table-container">
+                                        <table class="admond-table excel-style-table" id="table-gastos-indirectos">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width: 7%; text-align: center;">Folio</th>
+                                                    <th style="width: 9%; text-align: center;">Fecha</th>
+                                                    <th style="width: 25%; text-align: left; padding-left: 8px;">Concepto / Descripción</th>
+                                                    <th style="width: 15%; text-align: left; padding-left: 8px;">Categoría</th>
+                                                    <th style="width: 9%; text-align: right; padding-right: 6px;">Subtotal</th>
+                                                    <th style="width: 8%; text-align: right; padding-right: 6px;">IVA</th>
+                                                    <th style="width: 10%; text-align: right; padding-right: 6px;">Total</th>
+                                                    <th style="width: 11%; text-align: center;">Factura / Ref</th>
+                                                    <th style="width: 6%; text-align: center;">Acción</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tbody-gastos-indirectos">
+                                                <!-- Dynamic Gastos Indirectos rows -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div><!-- Fin admin-sec-gastos-indirectos -->
 
                         </div>
 
@@ -1663,7 +1755,13 @@
 
                                     </div>
 
-                                    <div class="table-actions" style="display: none;">
+                                    <div class="table-actions" style="display: flex; gap: 10px; align-items: center;" id="proveedores-action-buttons">
+                                        <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-proveedores" onclick="startEditingProveedores()" title="Habilitar edición de estatus en la tabla">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
+                                        </button>
+                                        <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-proveedores" onclick="saveEditingProveedores()" disabled title="Guardar cambios y liberar la tabla para otros usuarios">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
+                                        </button>
                                     </div>
                                 </div>
 
@@ -1689,33 +1787,27 @@
 
 
 
-                                    <!-- Filtros de Estatus: P = Por pagar, C = Por cobrar (Imagen 5) -->
+                                    <!-- Filtros de Estatus: Todos, Programar a pago, Pagado -->
 
                                     <div class="proveedor-status-filter-group" id="proveedor-status-filter-group">
 
                                         <span class="chips-label">Estatus:</span>
 
-                                        <button type="button" class="btn-status-filter active" id="btn-status-filter-all" onclick="filterProveedoresByStatus('all', this)">
+                                        <button type="button" class="btn-status-filter active" id="btn-status-filter-all" onclick="filterProveedoresByStatus('all', this)" title="Visualizar todos los documentos">
 
                                             Todos (<span id="count-status-all">0</span>)
 
                                         </button>
 
-                                        <button type="button" class="btn-status-filter btn-status-p" id="btn-status-filter-p" onclick="filterProveedoresByStatus('P', this)" title="Filtrar Por pagar (P)">
+                                        <button type="button" class="btn-status-filter btn-status-prog" id="btn-status-filter-prog" onclick="filterProveedoresByStatus('PROG', this)" title="Filtrar Programar a pago">
 
-                                            P - Por pagar (<span id="count-status-p">0</span>)
-
-                                        </button>
-
-                                        <button type="button" class="btn-status-filter btn-status-c" id="btn-status-filter-c" onclick="filterProveedoresByStatus('C', this)" title="Filtrar Por cobrar (C)">
-
-                                            C - Por cobrar (<span id="count-status-c">0</span>)
+                                            Programar a pago (<span id="count-status-prog">0</span>)
 
                                         </button>
 
-                                        <button type="button" class="btn-status-filter btn-status-cancelado" id="btn-status-filter-cancelado" onclick="filterProveedoresByStatus('Cancelado', this)" title="Filtrar Cancelado">
+                                        <button type="button" class="btn-status-filter btn-status-pagado" id="btn-status-filter-pagado" onclick="filterProveedoresByStatus('PAGADO', this)" title="Filtrar Pagado">
 
-                                            Cancelado (<span id="count-status-cancelado">0</span>)
+                                            Pagado (<span id="count-status-pagado">0</span>)
 
                                         </button>
 
@@ -1723,9 +1815,15 @@
 
                                 </div>
 
+                                <!-- Banner de bloqueo en tiempo real cuando otro usuario está editando -->
+                                <div id="proveedores-lock-banner" class="proveedores-lock-banner" style="display: none;">
+                                    <div class="lock-banner-content">
+                                        <span class="material-symbols-outlined lock-icon">lock</span>
+                                        <span id="proveedores-lock-banner-text">Esta tabla está siendo editada por otro usuario</span>
+                                    </div>
+                                </div>
 
-
-                                <div class="table-responsive">
+                                <div class="table-responsive" id="proveedores-table-container">
 
                                     <table class="admond-table excel-style-table compact-proveedores-table" id="table-proveedores">
 
@@ -1733,27 +1831,29 @@
 
                                             <tr>
 
-                                                <th style="width: 7.5%; text-align: center;">Factura<br>proveedor</th>
+                                                <th style="width: 7%; text-align: center;">Factura<br>proveedor</th>
 
-                                                <th style="width: 20%; text-align: left; padding-left: 8px;">Proveedor</th>
+                                                <th style="width: 18%; text-align: left; padding-left: 8px;">Proveedor</th>
 
-                                                <th style="width: 8.5%; text-align: center;">Fecha</th>
+                                                <th style="width: 8%; text-align: center;">Fecha</th>
 
-                                                <th style="width: 11%; text-align: left; padding-left: 8px;">Servicio</th>
+                                                <th style="width: 10%; text-align: left; padding-left: 8px;">Servicio</th>
 
                                                 <th style="width: 7%; text-align: right; padding-right: 6px;">Sub total</th>
 
-                                                <th style="width: 6.5%; text-align: right; padding-right: 6px;">IVA</th>
+                                                <th style="width: 6%; text-align: right; padding-right: 6px;">IVA</th>
 
-                                                <th style="width: 7.5%; text-align: right; padding-right: 6px;">Retención<br>4%</th>
+                                                <th style="width: 6.5%; text-align: right; padding-right: 6px;">Retención<br>4%</th>
 
-                                                <th style="width: 7.5%; text-align: right; padding-right: 6px;">Retención<br>ISR</th>
+                                                <th style="width: 6.5%; text-align: right; padding-right: 6px;">Retención<br>ISR</th>
 
-                                                <th style="width: 7.5%; text-align: right; padding-right: 6px;">Total</th>
+                                                <th style="width: 7%; text-align: right; padding-right: 6px;">Total</th>
 
-                                                <th style="width: 5.5%; text-align: center;">Estatus</th>
+                                                <th style="width: 7.5%; text-align: center;">Estatus</th>
 
-                                                <th style="width: 7%; text-align: center;">Factura</th>
+                                                <th style="width: 8.5%; text-align: center;">Fecha de<br>pago</th>
+
+                                                <th style="width: 6.5%; text-align: center;">Factura</th>
 
                                                 <th style="width: 6.5%; text-align: center;">OP</th>
 
@@ -1801,27 +1901,20 @@
 
                                     </div>
 
-                                    <div class="table-actions">
-
-                                        <button class="btn btn-secondary" onclick="exportConsecutivoToCSV()">
-
-                                            <span class="material-symbols-outlined">download</span> Exportar CSV
-
+                                    <div class="table-actions" style="display: flex; gap: 10px; align-items: center;" id="consecutivo-action-buttons">
+                                        <button type="button" class="btn btn-secondary btn-edit-consecutivo" id="btn-edit-consecutivo" onclick="startEditingConsecutivo()" title="Habilitar edición de estatus en la tabla">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
                                         </button>
-
-                                        <button class="btn btn-primary" onclick="addNewConsecutivoRow()">
-
-                                            <span class="material-symbols-outlined">add</span> Agregar Factura
-
+                                        <button type="button" class="btn btn-primary btn-save-consecutivo" id="btn-save-consecutivo" onclick="saveEditingConsecutivo()" disabled title="Guardar cambios y liberar la tabla para otros usuarios">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
                                         </button>
-
                                     </div>
 
                                 </div>
 
 
 
-                                <!-- Summary KPI Cards -->
+                                <!-- Summary KPI Cards + Sección Archivo -->
 
                                 <div class="consecutivo-kpi-grid">
 
@@ -1867,6 +1960,28 @@
 
                                     </div>
 
+                                    <button type="button" class="kpi-mini-card kpi-archivo-card" id="btn-consecutivo-archivo" onclick="toggleConsecutivoArchivoView()" title="Ver sección de Archivo (Todos los proyectos Pagados)">
+                                        <span class="material-symbols-outlined">inventory_2</span>
+                                        <div>
+                                            <span class="kpi-title">Archivo (Pagados)</span>
+                                            <h4 id="consecutivo-archivo-count">Ver Archivo (0)</h4>
+                                        </div>
+                                    </button>
+
+                                 </div>
+
+                                 <!-- Banner activo de Sección Archivo -->
+                                 <div id="consecutivo-archivo-banner" class="consecutivo-archivo-banner" style="display: none;">
+                                     <div class="archivo-banner-info">
+                                         <span class="material-symbols-outlined">folder_managed</span>
+                                         <div>
+                                             <strong>Sección de Archivo — Proyectos Pagados (P)</strong>
+                                             <span>Mostrando únicamente los expedientes y facturas con estatus Pagado (P).</span>
+                                         </div>
+                                     </div>
+                                     <button type="button" class="btn btn-secondary btn-sm" onclick="toggleConsecutivoArchivoView(false)">
+                                         <span class="material-symbols-outlined" style="font-size: 16px;">arrow_back</span> Ver todos los proyectos
+                                     </button>
                                  </div>
 
 
@@ -1895,7 +2010,7 @@
 
                                         <button class="consecutivo-filter-btn" data-st="C" onclick="filterConsecutivoByST('C', this)">Por Cobrar / C</button>
 
-                                        <button class="consecutivo-filter-btn" data-st="Cancelado" onclick="filterConsecutivoByST('Cancelado', this)">Cancelados</button>
+                                        <button class="consecutivo-filter-btn" data-st="PP" onclick="filterConsecutivoByST('PP', this)" title="Por programar (PP)">PP</button>
 
                                     </div>
 
@@ -1971,9 +2086,16 @@
 
 
 
-                                <!-- Table Container with Fixed 100% Width (No Horizontal Scroll) -->
+                                <!-- Banner de bloqueo en tiempo real cuando otro usuario está editando Consecutivo -->
+                                <div id="consecutivo-lock-banner" class="proveedores-lock-banner consecutivo-lock-banner" style="display: none;">
+                                    <div class="lock-banner-content">
+                                        <span class="material-symbols-outlined lock-icon">lock</span>
+                                        <span id="consecutivo-lock-banner-text">Esta sección está siendo editada por otro usuario</span>
+                                    </div>
+                                </div>
 
-                                <div class="table-responsive consecutivo-table-container">
+                                <!-- Table Container with Fixed 100% Width (No Horizontal Scroll) -->
+                                <div class="table-responsive consecutivo-table-container" id="consecutivo-table-container">
 
                                     <table class="admond-table excel-style-table consecutivo-table" id="table-consecutivo">
 
@@ -2469,60 +2591,24 @@
 
                             <div id="operaciones-view-detail" class="operaciones-subview" style="display: none;">
 
-                                <!-- Back Button eliminated as requested (reemplazado por navegación inferior) -->
-                                <div class="operaciones-detail-topbar" id="op-detail-topbar" style="display: none !important;">
-                                    <button type="button" class="btn btn-back-operaciones" onclick="closeOperacionesDetail()" title="Volver a la lista de proyectos">
-                                        <span class="material-symbols-outlined">arrow_back</span> VOLVER A OPERACIONES
-                                    </button>
+                                <!-- Barra Superior de Acciones del Expediente (Imagen 4): Editar, Guardar, Regresar a operaciones -->
+                                <div class="operaciones-detail-actionbar" id="op-detail-topbar">
+                                    <div class="op-detail-mode-indicator" id="op-detail-mode-indicator">
+                                        <span class="material-symbols-outlined" id="op-detail-mode-icon" style="font-size: 18px;">lock</span>
+                                        <span id="op-detail-mode-text">Modo lectura · Haz clic en <strong>"Editar"</strong> para modificar este proyecto</span>
+                                    </div>
+                                    <div class="op-detail-action-buttons">
+                                        <button type="button" id="btn-edit-op-detail" class="btn-op-top-action btn-op-top-edit" onclick="startEditingOperacionesProject()" title="Habilitar edición del expediente">
+                                            <span class="material-symbols-outlined">edit</span> Editar
+                                        </button>
+                                        <button type="button" id="btn-save-op-detail" class="btn-op-top-action btn-op-top-save" onclick="saveEditingOperacionesProject()" disabled title="Guardar cambios realizados en el expediente">
+                                            <span class="material-symbols-outlined">save</span> Guardar
+                                        </button>
+                                        <button type="button" id="btn-back-op-detail" class="btn-op-top-action btn-op-top-back" onclick="closeOperacionesDetail()" title="Liberar proyecto y regresar a la lista de operaciones">
+                                            <span class="material-symbols-outlined">arrow_back</span> Regresar a operaciones
+                                        </button>
+                                    </div>
                                 </div>
-
-
-
-                                <!-- Stepper Wizard Header (5 Steps) -->
-
-                                <div class="operaciones-stepper-container">
-
-                                    <div class="stepper-step active" id="op-step-indicator-1" onclick="goToOperacionesStep(1)">
-
-                                        <div class="step-number">1</div>
-
-                                        <span class="step-title">Tipo de proyecto</span>
-
-                                    </div>
-
-                                    <div class="stepper-line"></div>
-
-                                    <div class="stepper-step" id="op-step-indicator-2" onclick="goToOperacionesStep(2)">
-
-                                        <div class="step-number">2</div>
-
-                                        <span class="step-title">Datos de proyecto</span>
-
-                                    </div>
-
-                                    <div class="stepper-line"></div>
-
-                                    <div class="stepper-step" id="op-step-indicator-3" onclick="goToOperacionesStep(3)">
-
-                                        <div class="step-number">3</div>
-
-                                        <span class="step-title">Prefactura</span>
-
-                                    </div>
-
-                                    <div class="stepper-line"></div>
-
-                                    <div class="stepper-step" id="op-step-indicator-4" onclick="goToOperacionesStep(4)">
-
-                                        <div class="step-number">4</div>
-
-                                        <span class="step-title">Documentos</span>
-
-                                    </div>
-
-                                </div>
-
-
 
                                 <!-- STEP 1: EXCLUSIVAMENTE SELECCIÓN DE TIPO DE PROYECTO -->
 
@@ -2601,22 +2687,6 @@
                                             </div>
 
                                         </div>
-
-                                    </div>
-
-
-
-                                    <div class="op-wizard-footer">
-
-                                        <button type="button" class="btn btn-secondary op-btn-nav" onclick="closeOperacionesDetail()">
-                                            <span class="material-symbols-outlined">arrow_back</span> VOLVER A PROYECTOS
-                                        </button>
-
-                                        <button class="btn btn-primary btn-next-step op-btn-nav" onclick="goToOperacionesStep(2)">
-
-                                            CONTINUAR <span class="material-symbols-outlined">arrow_forward</span>
-
-                                        </button>
 
                                     </div>
 
@@ -2882,25 +2952,13 @@
 
 
 
-                                    <div class="op-wizard-footer">
-
-                                        <button class="btn btn-secondary op-btn-nav" onclick="goToOperacionesStep(1)">
-
-                                            <span class="material-symbols-outlined">arrow_back</span> ANTERIOR
-
-                                        </button>
+                                    <div class="op-subpage-indicator-row">
 
                                         <div class="contenedores-page-indicator" id="op-contenedores-page-indicator">
 
                                             <!-- Page indicator rendered dynamically by JS -->
 
                                         </div>
-
-                                        <button class="btn btn-primary btn-next-step op-btn-nav" onclick="goToOperacionesStep(3)">
-
-                                            CONTINUAR <span class="material-symbols-outlined">arrow_forward</span>
-
-                                        </button>
 
                                     </div>
 
@@ -3210,25 +3268,13 @@
 
 
 
-                                    <div class="op-wizard-footer">
-
-                                        <button class="btn btn-secondary op-btn-nav" onclick="handlePrefacturaFooterPrev()">
-
-                                            <span class="material-symbols-outlined">arrow_back</span> ANTERIOR
-
-                                        </button>
+                                    <div class="op-subpage-indicator-row">
 
                                         <div class="prefactura-page-indicator" id="op-prefactura-page-indicator">
 
                                             <strong>Página 1 de 2</strong> (Partidas y conceptos)
 
                                         </div>
-
-                                        <button class="btn btn-primary btn-next-step op-btn-nav" onclick="handlePrefacturaFooterNext()">
-
-                                            CONTINUAR <span class="material-symbols-outlined">arrow_forward</span>
-
-                                        </button>
 
                                     </div>
 
@@ -3534,27 +3580,36 @@
 
                                     </div>
 
-
-
-                                    <div class="op-wizard-footer">
-
-                                        <button class="btn btn-secondary op-btn-nav" onclick="goToOperacionesStep(3)">
-
-                                            <span class="material-symbols-outlined">arrow_back</span> ANTERIOR
-
-                                        </button>
-
-                                        <button class="btn btn-primary btn-next-step op-btn-nav" id="op-btn-generar-proyecto" onclick="generarProyectoOperaciones()">
-
-                                            GENERAR PROYECTO <span class="material-symbols-outlined">check_circle</span>
-
-                                        </button>
-
-                                    </div>
-
                                 </div>
 
+                                <!-- Pasos 1, 2, 3 y 4 en la parte inferior como botones con margen rectangular (Imágenes 2 y 3) -->
+                                <div class="operaciones-stepper-container operaciones-stepper-bottom" id="op-bottom-stepper">
+                                    <button type="button" class="stepper-step active" id="op-step-indicator-1" onclick="goToOperacionesStep(1)">
+                                        <div class="step-number">1</div>
+                                        <span class="step-title">Tipo de proyecto</span>
+                                    </button>
 
+                                    <div class="stepper-line"></div>
+
+                                    <button type="button" class="stepper-step" id="op-step-indicator-2" onclick="goToOperacionesStep(2)">
+                                        <div class="step-number">2</div>
+                                        <span class="step-title">Datos de proyecto</span>
+                                    </button>
+
+                                    <div class="stepper-line"></div>
+
+                                    <button type="button" class="stepper-step" id="op-step-indicator-3" onclick="goToOperacionesStep(3)">
+                                        <div class="step-number">3</div>
+                                        <span class="step-title">Prefactura</span>
+                                    </button>
+
+                                    <div class="stepper-line"></div>
+
+                                    <button type="button" class="stepper-step" id="op-step-indicator-4" onclick="goToOperacionesStep(4)">
+                                        <div class="step-number">4</div>
+                                        <span class="step-title">Documentos</span>
+                                    </button>
+                                </div>
 
                             </div>
 
@@ -3606,7 +3661,7 @@
 
                             </div>
 
-                            <form id="form-supabase-register" onsubmit="handleSupabaseRegister(event)">
+                            <form id="form-supabase-register" onsubmit="handleFirebaseRegister(event)">
 
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
 
@@ -3732,7 +3787,7 @@
 
                             <div style="text-align: right;">
 
-                                <button type="button" class="btn-logout-pill" onclick="handleSupabaseLogout()" title="Cerrar Sesión del Gerente" style="padding: 10px 20px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border-radius: 10px; background: #FEF2F2; color: #EF4444; border: 1px solid #FCA5A5; cursor: pointer; transition: all 0.2s ease;">
+                                <button type="button" class="btn-logout-pill" onclick="handleFirebaseLogout()" title="Cerrar Sesión del Gerente" style="padding: 10px 20px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border-radius: 10px; background: #FEF2F2; color: #EF4444; border: 1px solid #FCA5A5; cursor: pointer; transition: all 0.2s ease;">
 
                                     <span class="material-symbols-outlined" style="font-size: 18px;">logout</span> Cerrar Sesión
 
@@ -3940,13 +3995,13 @@
 
                             <div class="auth-header" style="margin-bottom: 16px;">
 
-                                <h4 style="font-size: 16px; font-weight: 700; color: #0F172A; margin: 0 0 4px 0;">Iniciar Sesión en la Nube</h4>
+                                <h4 style="font-size: 16px; font-weight: 700; color: #0F172A; margin: 0 0 4px 0;">Iniciar Sesión en la Nube (Firebase)</h4>
 
-                                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Inicia sesión con tus credenciales de Supabase para sincronizar datos en tiempo real.</p>
+                                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Inicia sesión con tus credenciales de Firebase para sincronizar datos en tiempo real.</p>
 
                             </div>
 
-                            <form id="form-supabase-login" onsubmit="handleSupabaseLogin(event)">
+                            <form id="form-supabase-login" onsubmit="handleFirebaseLogin(event)">
 
                                 <div class="form-group" style="margin-bottom: 14px;">
 
@@ -5400,7 +5455,7 @@
                 </div>
                 <div style="margin-top: 18px; padding: 12px 14px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; display: flex; align-items: center; gap: 10px;">
                     <span class="material-symbols-outlined" style="color: #10B981; font-size: 22px; flex-shrink: 0;">verified</span>
-                    <span style="font-size: 12px; color: #475569;">Siempre sincronizado con Supabase Cloud y actualizado automáticamente.</span>
+                    <span style="font-size: 12px; color: #475569;">Siempre sincronizado con Firebase Cloud y actualizado automáticamente.</span>
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
                     <button type="button" onclick="cerrarModalInstalacion()" style="padding: 10px 22px; background: #2563EB; color: #FFFFFF; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
@@ -5412,16 +5467,17 @@
     </div>
 
 
-    <!-- Supabase JS Client & App Scripts -->
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-    <script src="supabase_config.js?v=77dfda8e"></script>
+    <!-- Firebase SDK (Compat) & App Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <script src="firebase_config.js?v=5d8b86fc"></script>
+    <script src="supabase_config.js?v=323c6595"></script>
 
     <script src="consecutivo_data.js?v=285df872"></script>
 
     <script src="schema.js?v=8d95842f"></script>
-    <script src="app.js?v=4aeca0db"></script>
+    <script src="app.js?v=3b428683"></script>
 
 </body>
 

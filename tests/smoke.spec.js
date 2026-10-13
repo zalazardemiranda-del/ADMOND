@@ -7,6 +7,10 @@ const supabaseUmd = fs.readFileSync(
   path.resolve(__dirname, "..", "node_modules", "@supabase", "supabase-js", "dist", "umd", "supabase.js"),
   "utf8"
 );
+const firebaseMock = fs.readFileSync(
+  path.resolve(__dirname, "firebase-mock.js"),
+  "utf8"
+);
 
 async function mockNetwork(page, requests) {
   await page.addInitScript(() => {
@@ -38,6 +42,12 @@ async function mockNetwork(page, requests) {
       return route.fulfill({
         contentType: "text/javascript",
         body: "window.Chart=function(){return {destroy(){},update(){},data:{},options:{}}};window.Chart.register=function(){};",
+      });
+    }
+    if (url.includes("firebasejs")) {
+      return route.fulfill({
+        contentType: "text/javascript",
+        body: firebaseMock,
       });
     }
     if (url.includes(".supabase.co")) {
@@ -104,7 +114,7 @@ test("syncOperacionesToCloud no lanza ReferenceError y guarda el snapshot en la 
 test("el chat se carga excluyendo filas internas y pidiendo las mas recientes (limite 1000)", async ({ page }) => {
   const requests = [];
   await openApp(page, requests);
-  const msgReq = requests.find((r) => r.method === "GET" && r.url.includes("/rest/v1/messages?select=*"));
+  const msgReq = requests.find((r) => r.method === "GET" && r.url.includes("/rest/v1/messages?select=*") && r.url.includes("limit=1000"));
   expect(msgReq, "no se consulto messages").toBeTruthy();
   expect(decodeURIComponent(msgReq.url)).toContain("chat_id=not.like.\\_\\_%");
   expect(msgReq.url).toContain("order=created_at.desc");

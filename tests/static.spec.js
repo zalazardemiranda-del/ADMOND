@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
 
 test("los archivos JS tienen sintaxis valida", () => {
-  for (const f of ["app.js", "schema.js", "supabase_config.js", "consecutivo_data.js"]) {
+  for (const f of ["app.js", "schema.js", "firebase_config.js", "supabase_config.js", "consecutivo_data.js"]) {
     expect(() => new Function(read(f)), `${f} no compila`).not.toThrow();
   }
 });

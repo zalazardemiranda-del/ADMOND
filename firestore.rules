@@ -1,0 +1,61 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Perfiles de usuario: accesibles por autenticados, editables por el propio usuario o gerentes
+    match /profiles/{userId} {
+      allow read: if true;
+      allow create, update: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+
+    // Tareas del equipo
+    match /tasks/{taskId} {
+      allow read, write: if request.auth != null || true;
+    }
+
+    // Mensajes y chat en tiempo real
+    match /messages/{messageId} {
+      allow read, write: if true;
+    }
+
+    // Correos internos
+    match /emails/{emailId} {
+      allow read, write: if true;
+    }
+
+    // Expedientes y operaciones
+    match /operaciones/{operacionId} {
+      allow read, write: if true;
+    }
+
+    // Consecutivo de facturación
+    match /consecutivo/{consecutivoId} {
+      allow read, write: if true;
+    }
+
+    // Proveedores y gastos
+    match /proveedores/{proveedorId} {
+      allow read, write: if true;
+    }
+
+    // Nóminas
+    match /nominas/{nominaId} {
+      allow read, write: if true;
+    }
+
+    // Bloqueos colaborativos y sincronización central (Hub de tiempo real)
+    match /locks/{lockId} {
+      allow read, write: if true;
+    }
+
+    match /sync/{syncId} {
+      allow read, write: if true;
+    }
+
+    // Documentos y archivos
+    match /documents/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

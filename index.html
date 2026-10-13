@@ -79,7 +79,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <link rel="stylesheet" href="styles.css?v=bd896302">
+    <link rel="stylesheet" href="styles.css?v=fedeb6b4">
 
     <script>
 
@@ -3661,7 +3661,7 @@
 
                             </div>
 
-                            <form id="form-supabase-register" onsubmit="handleSupabaseRegister(event)">
+                            <form id="form-supabase-register" onsubmit="handleFirebaseRegister(event)">
 
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
 
@@ -3787,7 +3787,7 @@
 
                             <div style="text-align: right;">
 
-                                <button type="button" class="btn-logout-pill" onclick="handleSupabaseLogout()" title="Cerrar Sesión del Gerente" style="padding: 10px 20px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border-radius: 10px; background: #FEF2F2; color: #EF4444; border: 1px solid #FCA5A5; cursor: pointer; transition: all 0.2s ease;">
+                                <button type="button" class="btn-logout-pill" onclick="handleFirebaseLogout()" title="Cerrar Sesión del Gerente" style="padding: 10px 20px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border-radius: 10px; background: #FEF2F2; color: #EF4444; border: 1px solid #FCA5A5; cursor: pointer; transition: all 0.2s ease;">
 
                                     <span class="material-symbols-outlined" style="font-size: 18px;">logout</span> Cerrar Sesión
 
@@ -3995,13 +3995,13 @@
 
                             <div class="auth-header" style="margin-bottom: 16px;">
 
-                                <h4 style="font-size: 16px; font-weight: 700; color: #0F172A; margin: 0 0 4px 0;">Iniciar Sesión en la Nube</h4>
+                                <h4 style="font-size: 16px; font-weight: 700; color: #0F172A; margin: 0 0 4px 0;">Iniciar Sesión en la Nube (Firebase)</h4>
 
-                                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Inicia sesión con tus credenciales de Supabase para sincronizar datos en tiempo real.</p>
+                                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Inicia sesión con tus credenciales de Firebase para sincronizar datos en tiempo real.</p>
 
                             </div>
 
-                            <form id="form-supabase-login" onsubmit="handleSupabaseLogin(event)">
+                            <form id="form-supabase-login" onsubmit="handleFirebaseLogin(event)">
 
                                 <div class="form-group" style="margin-bottom: 14px;">
 
@@ -5455,7 +5455,7 @@
                 </div>
                 <div style="margin-top: 18px; padding: 12px 14px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; display: flex; align-items: center; gap: 10px;">
                     <span class="material-symbols-outlined" style="color: #10B981; font-size: 22px; flex-shrink: 0;">verified</span>
-                    <span style="font-size: 12px; color: #475569;">Siempre sincronizado con Supabase Cloud y actualizado automáticamente.</span>
+                    <span style="font-size: 12px; color: #475569;">Siempre sincronizado con Firebase Cloud y actualizado automáticamente.</span>
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
                     <button type="button" onclick="cerrarModalInstalacion()" style="padding: 10px 22px; background: #2563EB; color: #FFFFFF; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
@@ -5467,16 +5467,17 @@
     </div>
 
 
-    <!-- Supabase JS Client & App Scripts -->
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-    <script src="supabase_config.js?v=77dfda8e"></script>
+    <!-- Firebase SDK (Compat) & App Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <script src="firebase_config.js?v=5d8b86fc"></script>
+    <script src="supabase_config.js?v=323c6595"></script>
 
     <script src="consecutivo_data.js?v=285df872"></script>
 
     <script src="schema.js?v=8d95842f"></script>
-    <script src="app.js?v=4aeca0db"></script>
+    <script src="app.js?v=3b428683"></script>
 
 </body>
 
