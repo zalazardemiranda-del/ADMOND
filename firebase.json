@@ -10,7 +10,13 @@
       "**/node_modules/**",
       "tests/**",
       "fastlane/**",
-      "ios/**"
+      "ios/**",
+      "tools/**",
+      "docs/**",
+      "package.json",
+      "package-lock.json",
+      "playwright.config.js",
+      "eslint.config.js"
     ]
   }
 }

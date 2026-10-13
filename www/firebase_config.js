@@ -7,19 +7,19 @@
 
     // Configuración base de Firebase (leída de localStorage o valores predeterminados)
     window.FIREBASE_CONFIG = {
-        apiKey: localStorage.getItem('rp_firebase_api_key') || 'AIzaSyA_mockKeyRodipackCentral2026',
-        authDomain: localStorage.getItem('rp_firebase_auth_domain') || 'rodipack-central.firebaseapp.com',
-        projectId: localStorage.getItem('rp_firebase_project_id') || 'rodipack-central',
-        storageBucket: localStorage.getItem('rp_firebase_storage_bucket') || 'rodipack-central.appspot.com',
-        messagingSenderId: localStorage.getItem('rp_firebase_messaging_sender_id') || '1029384756',
-        appId: localStorage.getItem('rp_firebase_app_id') || '1:1029384756:web:abcd1234efgh5678',
+        apiKey: localStorage.getItem('rp_firebase_api_key') || 'AIzaSyDm8GJWyIBGbwOmZzSD3dLW9l80darjGG0',
+        authDomain: localStorage.getItem('rp_firebase_auth_domain') || 'mirandascorp-177a5.firebaseapp.com',
+        projectId: localStorage.getItem('rp_firebase_project_id') || 'mirandascorp-177a5',
+        storageBucket: localStorage.getItem('rp_firebase_storage_bucket') || 'mirandascorp-177a5.firebasestorage.app',
+        messagingSenderId: localStorage.getItem('rp_firebase_messaging_sender_id') || '1064229385018',
+        appId: localStorage.getItem('rp_firebase_app_id') || '1:1064229385018:web:b957ecfe6eef5e5bca1603',
         app: null,
         auth: null,
         db: null,
         client: null,
         // Compatibilidad con vistas previas
-        URL: localStorage.getItem('rp_firebase_project_id') || 'rodipack-central',
-        ANON_KEY: localStorage.getItem('rp_firebase_api_key') || 'AIzaSyA_mockKeyRodipackCentral2026'
+        URL: localStorage.getItem('rp_firebase_project_id') || 'mirandascorp-177a5',
+        ANON_KEY: localStorage.getItem('rp_firebase_api_key') || 'AIzaSyDm8GJWyIBGbwOmZzSD3dLW9l80darjGG0'
     };
 
     // Almacén en memoria/local para sincronización transparente y soporte offline/pruebas
