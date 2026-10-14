@@ -7127,8 +7127,6 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 #operaciones-view-detail.op-detail-readonly .btn-delete-contenedor,
 #operaciones-view-detail.op-detail-readonly button[onclick*="addPartidaConceptoRow"],
 #operaciones-view-detail.op-detail-readonly button[onclick*="addProveedorClavesRow"],
-#operaciones-view-detail.op-detail-readonly button[onclick*="uploadDocItem"],
-#operaciones-view-detail.op-detail-readonly .doc-btn-delete,
 #operaciones-view-detail.op-detail-readonly .btn-archivar-expediente {
     pointer-events: none !important;
     opacity: 0.68 !important;
