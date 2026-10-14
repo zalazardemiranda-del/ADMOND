@@ -2293,9 +2293,9 @@ function updateGastosIndirectosEditButtonsUI() {
     }
 
     if (btnAddRow) {
-        btnAddRow.disabled = !appState.isEditingGastosIndirectos || isLockedByOther;
-        btnAddRow.style.opacity = (!appState.isEditingGastosIndirectos || isLockedByOther) ? "0.55" : "1";
-        btnAddRow.style.cursor = (!appState.isEditingGastosIndirectos || isLockedByOther) ? "not-allowed" : "pointer";
+        btnAddRow.disabled = Boolean(isLockedByOther);
+        btnAddRow.style.opacity = isLockedByOther ? "0.55" : "1";
+        btnAddRow.style.cursor = isLockedByOther ? "not-allowed" : "pointer";
     }
 
     if (isLockedByOther) {
@@ -2674,6 +2674,23 @@ function selectGastoIndCategoria(newCat, event) {
 }
 window.selectGastoIndCategoria = selectGastoIndCategoria;
 
+function handleGastoIndCellClick(index, inputId) {
+    window.handleGastoIndCellClick = handleGastoIndCellClick;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const isLockedByOther = Boolean(appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId);
+    if (!appState.isEditingGastosIndirectos && !isLockedByOther) {
+        startEditingGastosIndirectos().then(() => {
+            if (inputId) {
+                setTimeout(() => {
+                    const el = document.getElementById(inputId);
+                    if (el) el.focus();
+                }, 30);
+            }
+        });
+    }
+}
+window.handleGastoIndCellClick = handleGastoIndCellClick;
+
 function renderGastosIndirectos() {
     window.renderGastosIndirectos = renderGastosIndirectos;
     const tbody = document.getElementById('tbody-gastos-indirectos');
@@ -2690,55 +2707,50 @@ function renderGastosIndirectos() {
         appState.gastosIndirectos = appState.gastosIndirectos.filter(g => !window.isFictitiousGastoIndirecto(g));
     }
 
+    if (appState.gastosIndirectos.length === 0) {
+        appState.gastosIndirectos.push({
+            id: `gi_${Date.now()}`,
+            folio: 'GI-001',
+            fecha: new Date().toISOString().split('T')[0],
+            concepto: '',
+            categoria: '',
+            subtotal: 0,
+            iva: 0,
+            total: 0,
+            factura: ''
+        });
+    }
+
     const isEditable = Boolean(appState.isEditingGastosIndirectos);
     const disabledAttr = isEditable ? "" : "disabled";
 
     const frag = document.createDocumentFragment();
 
     appState.gastosIndirectos.forEach((item, index) => {
-        const catCfg = getGastoIndCatConfig(item.categoria);
         const tr = document.createElement('tr');
         tr.id = `gi-row-${index}`;
         tr.setAttribute('data-row-key', `gasto_ind_${index}`);
         tr.innerHTML = `
-            <td style="text-align: center;">
-                <input type="text" class="excel-input" value="${item.folio || ('GI-' + String(index + 1).padStart(3, '0'))}" oninput="updateGastoIndirectoCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
+            <td style="text-align: center;" onclick="handleGastoIndCellClick(${index}, 'gi-folio-input-${index}')">
+                <input type="text" id="gi-folio-input-${index}" class="excel-input" value="${item.folio || ('GI-' + String(index + 1).padStart(3, '0'))}" oninput="updateGastoIndirectoCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
             </td>
-            <td style="text-align: center;">
-                <input type="date" class="excel-input" value="${item.fecha || ''}" oninput="updateGastoIndirectoCell(${index}, 'fecha', this.value)" ${disabledAttr} style="text-align: center;">
+            <td style="text-align: center;" onclick="handleGastoIndCellClick(${index}, 'gi-fecha-input-${index}')">
+                <input type="date" id="gi-fecha-input-${index}" class="excel-input" value="${item.fecha || ''}" oninput="updateGastoIndirectoCell(${index}, 'fecha', this.value)" ${disabledAttr} style="text-align: center;">
             </td>
-            <td>
-                <input type="text" class="excel-input" value="${item.concepto || ''}" oninput="updateGastoIndirectoCell(${index}, 'concepto', this.value)" placeholder="Descripción del gasto..." ${disabledAttr} style="font-weight: 600;">
+            <td onclick="handleGastoIndCellClick(${index}, 'gi-concepto-input-${index}')">
+                <input type="text" id="gi-concepto-input-${index}" class="excel-input" value="${item.concepto || ''}" oninput="updateGastoIndirectoCell(${index}, 'concepto', this.value)" placeholder="Descripción del gasto..." ${disabledAttr} style="font-weight: 600;">
             </td>
-            <td>
-                <button type="button" id="gi-cat-trigger-${index}" class="gi-cat-trigger gi-cat-${catCfg.slug} ${!isEditable ? 'trigger-locked' : ''}" onclick="toggleGastoIndCategoriaDropdown(${index}, event)" title="${isEditable ? 'Seleccionar categoría' : 'Haz clic en \'Editar\' para cambiar categoría'}">
-                    <span class="gi-cat-trigger-left">
-                        <span class="gi-cat-dot gi-cat-dot-${catCfg.slug}"></span>
-                        <span class="gi-cat-label">${catCfg.label}</span>
-                    </span>
-                    <span class="material-symbols-outlined" style="font-size: 16px;">expand_more</span>
-                </button>
+            <td onclick="handleGastoIndCellClick(${index}, 'gi-categoria-input-${index}')">
+                <input type="text" id="gi-categoria-input-${index}" list="gi-categorias-datalist" class="excel-input" value="${item.categoria || ''}" oninput="updateGastoIndirectoCell(${index}, 'categoria', this.value)" placeholder="Categoría..." ${disabledAttr} style="font-weight: 600;">
             </td>
-            <td>
-                <div class="excel-currency-wrap">
-                    <span class="currency-symbol">$</span>
-                    <input type="number" id="gi-subtotal-input-${index}" class="excel-input number-input" value="${item.subtotal || 0}" step="any" oninput="liveUpdateGastoIndirectoTotals(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 700;">
-                </div>
-            </td>
-            <td>
-                <div class="excel-currency-wrap">
-                    <span class="currency-symbol">$</span>
-                    <input type="number" id="gi-iva-input-${index}" class="excel-input number-input" value="${item.iva || 0}" step="any" oninput="liveUpdateGastoIndirectoTotals(${index})" placeholder="0.00" ${disabledAttr}>
-                </div>
-            </td>
-            <td>
+            <td onclick="handleGastoIndCellClick(${index}, 'gi-total-input-${index}')">
                 <div class="excel-currency-wrap">
                     <span class="currency-symbol">$</span>
                     <input type="number" id="gi-total-input-${index}" class="excel-input number-input" value="${item.total || 0}" step="any" oninput="liveUpdateGastoIndirectoFromTotal(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 800; color: #1E293B;">
                 </div>
             </td>
-            <td>
-                <input type="text" class="excel-input" value="${item.factura || ''}" oninput="updateGastoIndirectoCell(${index}, 'factura', this.value)" placeholder="Folio/Factura" ${disabledAttr} style="text-align: center;">
+            <td onclick="handleGastoIndCellClick(${index}, 'gi-factura-input-${index}')">
+                <input type="text" id="gi-factura-input-${index}" class="excel-input" value="${item.factura || ''}" oninput="updateGastoIndirectoCell(${index}, 'factura', this.value)" placeholder="Folio/Factura" ${disabledAttr} style="text-align: center;">
             </td>
             <td style="text-align: center;">
                 <button type="button" class="btn-icon text-danger" onclick="deleteGastoIndirectoRow(${index})" ${disabledAttr} title="${isEditable ? 'Eliminar este gasto indirecto' : 'Haz clic en Editar para eliminar'}" style="background: none; border: none; cursor: ${isEditable ? 'pointer' : 'not-allowed'}; color: #EF4444; opacity: ${isEditable ? '1' : '0.45'};">
@@ -2766,13 +2778,18 @@ function renderGastosIndirectos() {
 }
 window.renderGastosIndirectos = renderGastosIndirectos;
 
-function addNewGastoIndirectoRow() {
+async function addNewGastoIndirectoRow() {
     window.addNewGastoIndirectoRow = addNewGastoIndirectoRow;
-    if (!appState.isEditingGastosIndirectos) {
-        if (typeof showCustomNotification === 'function') {
-            showCustomNotification("Haz clic en 'Editar' para agregar un Gasto Indirecto.", "info");
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    if (appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId) {
+        const elapsed = Date.now() - (appState.gastosIndirectosLockedBy.timestamp || 0);
+        if (elapsed < 5 * 60 * 1000) {
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.gastosIndirectosLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            return;
         }
-        return;
+    }
+    if (!appState.isEditingGastosIndirectos) {
+        await startEditingGastosIndirectos();
     }
     if (!appState.gastosIndirectos) appState.gastosIndirectos = [];
     const nextFolioNum = appState.gastosIndirectos.length + 1;
@@ -2781,7 +2798,7 @@ function addNewGastoIndirectoRow() {
         folio: `GI-${String(nextFolioNum).padStart(3, '0')}`,
         fecha: new Date().toISOString().split('T')[0],
         concepto: '',
-        categoria: 'Servicios',
+        categoria: '',
         subtotal: 0,
         iva: 0,
         total: 0,
@@ -2789,6 +2806,11 @@ function addNewGastoIndirectoRow() {
     };
     appState.gastosIndirectos.push(newRow);
     renderGastosIndirectos();
+    setTimeout(() => {
+        const newIdx = appState.gastosIndirectos.length - 1;
+        const input = document.getElementById(`gi-concepto-input-${newIdx}`);
+        if (input) input.focus();
+    }, 50);
 }
 window.addNewGastoIndirectoRow = addNewGastoIndirectoRow;
 
@@ -2802,6 +2824,19 @@ function deleteGastoIndirectoRow(index) {
     }
     if (confirm("¿Estás seguro de que deseas eliminar este gasto indirecto?")) {
         appState.gastosIndirectos.splice(index, 1);
+        if (appState.gastosIndirectos.length === 0) {
+            appState.gastosIndirectos.push({
+                id: `gi_${Date.now()}`,
+                folio: 'GI-001',
+                fecha: new Date().toISOString().split('T')[0],
+                concepto: '',
+                categoria: '',
+                subtotal: 0,
+                iva: 0,
+                total: 0,
+                factura: ''
+            });
+        }
         renderGastosIndirectos();
     }
 }
@@ -2819,50 +2854,20 @@ window.updateGastoIndirectoCell = updateGastoIndirectoCell;
 function liveUpdateGastoIndirectoTotals(index) {
     window.liveUpdateGastoIndirectoTotals = liveUpdateGastoIndirectoTotals;
     if (!appState.isEditingGastosIndirectos) return;
-    const subtotalEl = document.getElementById(`gi-subtotal-input-${index}`);
-    const ivaEl = document.getElementById(`gi-iva-input-${index}`);
-    const totalEl = document.getElementById(`gi-total-input-${index}`);
-
-    if (subtotalEl && totalEl && appState.gastosIndirectos && appState.gastosIndirectos[index]) {
-        const subtotal = Number(subtotalEl.value) || 0;
-        let iva = 0;
-        if (ivaEl) {
-            if (document.activeElement === ivaEl) {
-                iva = Number(ivaEl.value) || 0;
-            } else {
-                iva = Number((subtotal * 0.16).toFixed(2));
-                ivaEl.value = iva;
-            }
-        }
-        const total = Number((subtotal + iva).toFixed(2));
-        totalEl.value = total;
-
-        appState.gastosIndirectos[index].subtotal = subtotal;
-        appState.gastosIndirectos[index].iva = iva;
-        appState.gastosIndirectos[index].total = total;
-
-        recalculateGastosIndirectosTotals();
-    }
+    liveUpdateGastoIndirectoFromTotal(index);
 }
 window.liveUpdateGastoIndirectoTotals = liveUpdateGastoIndirectoTotals;
 
 function liveUpdateGastoIndirectoFromTotal(index) {
     window.liveUpdateGastoIndirectoFromTotal = liveUpdateGastoIndirectoFromTotal;
     if (!appState.isEditingGastosIndirectos) return;
-    const subtotalEl = document.getElementById(`gi-subtotal-input-${index}`);
-    const ivaEl = document.getElementById(`gi-iva-input-${index}`);
     const totalEl = document.getElementById(`gi-total-input-${index}`);
 
     if (totalEl && appState.gastosIndirectos && appState.gastosIndirectos[index]) {
         const total = Number(totalEl.value) || 0;
-        const subtotal = Number((total / 1.16).toFixed(2));
-        const iva = Number((total - subtotal).toFixed(2));
-        if (subtotalEl && document.activeElement !== subtotalEl) subtotalEl.value = subtotal;
-        if (ivaEl && document.activeElement !== ivaEl) ivaEl.value = iva;
-
-        appState.gastosIndirectos[index].subtotal = subtotal;
-        appState.gastosIndirectos[index].iva = iva;
         appState.gastosIndirectos[index].total = total;
+        appState.gastosIndirectos[index].subtotal = Number((total / 1.16).toFixed(2));
+        appState.gastosIndirectos[index].iva = Number((total - appState.gastosIndirectos[index].subtotal).toFixed(2));
 
         recalculateGastosIndirectosTotals();
     }
@@ -2871,14 +2876,10 @@ window.liveUpdateGastoIndirectoFromTotal = liveUpdateGastoIndirectoFromTotal;
 
 function recalculateGastosIndirectosTotals() {
     window.recalculateGastosIndirectosTotals = recalculateGastosIndirectosTotals;
-    let sumSubtotal = 0;
-    let sumIva = 0;
     let sumTotal = 0;
 
     (appState.gastosIndirectos || []).forEach(item => {
         if (!item) return;
-        sumSubtotal += Number(item.subtotal) || 0;
-        sumIva += Number(item.iva) || 0;
         sumTotal += Number(item.total) || 0;
     });
 
@@ -2889,8 +2890,6 @@ function recalculateGastosIndirectosTotals() {
             <td style="text-align: center; font-weight: 600;">Suma Calculada</td>
             <td></td>
             <td></td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumSubtotal)}</td>
-            <td style="font-weight: 800; text-align: right; padding-right: 6px;">${formatCurrency(sumIva)}</td>
             <td style="font-weight: 800; text-align: right; padding-right: 6px; color: #B91C1C;">${formatCurrency(sumTotal)}</td>
             <td></td>
             <td style="text-align: center;"><span class="material-symbols-outlined" style="font-size: 15px;">lock</span></td>

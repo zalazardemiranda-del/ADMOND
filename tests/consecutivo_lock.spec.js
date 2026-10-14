@@ -940,49 +940,59 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
 
   await expect(page.locator("#tbody-gastos-indirectos")).not.toContainText("FAC-8821");
   await expect(page.locator("#tbody-gastos-indirectos")).not.toContainText("Papelería e insumos operativos");
-  await expect(page.locator("#btn-edit-gastos-ind")).toBeVisible();
-  await expect(page.locator("#btn-save-gastos-ind")).toBeDisabled();
+  
+  // Verificar que los botones duplicados en la tarjeta fueron eliminados (Imagen 1)
+  await expect(page.locator("#btn-edit-gastos-ind")).toHaveCount(0);
+  await expect(page.locator("#btn-save-gastos-ind")).toHaveCount(0);
 
-  // Dar clic en Editar en Gastos Indirectos
-  await page.locator("#btn-edit-gastos-ind").click();
+  // Verificar que las columnas Subtotal e IVA fueron eliminadas (Imagen 2)
+  await expect(page.locator("#table-gastos-indirectos thead")).not.toContainText("Subtotal");
+  await expect(page.locator("#table-gastos-indirectos thead")).not.toContainText("IVA");
+
+  // Botones principales en la barra superior
+  await expect(page.locator("#btn-edit-admin-top")).toBeVisible();
+  await expect(page.locator("#btn-save-admin-top")).toBeDisabled();
+
+  // Dar clic en Editar en Gastos Indirectos (barra superior)
+  await page.locator("#btn-edit-admin-top").click();
   await page.waitForTimeout(200);
 
-  await expect(page.locator("#btn-save-gastos-ind")).toBeEnabled();
+  await expect(page.locator("#btn-save-admin-top")).toBeEnabled();
   await expect(page.locator("#gastos-indirectos-lock-banner")).toBeVisible();
   await expect(page.locator("#gastos-indirectos-lock-banner")).toContainText("Esta tabla está siendo editada por");
   await expect(page.locator("#gastos-indirectos-table-container")).toHaveClass(/tabla-filtro-gris-edicion/);
 
-  // Agregar un gasto indirecto y abrir el menú desplegable armonizado de Categoría
-  await page.locator("#btn-add-gasto-indirecto").click();
-  await page.waitForTimeout(200);
+  // Verificar que las secciones de Concepto y Categoría están habilitadas para escribir (Imagen 3)
+  const conceptoInput = page.locator("#gi-concepto-input-0");
+  await expect(conceptoInput).toBeVisible();
+  await expect(conceptoInput).toBeEnabled();
+  await conceptoInput.fill("Carga diésel unidades");
+  await page.evaluate(() => window.updateGastoIndirectoCell(0, 'concepto', 'Carga diésel unidades'));
 
-  const catTrigger = page.locator("#tbody-gastos-indirectos .gi-cat-trigger").first();
-  await expect(catTrigger).toBeVisible();
-  await catTrigger.click();
-  await page.waitForTimeout(150);
+  const catInput = page.locator("#gi-categoria-input-0");
+  await expect(catInput).toBeVisible();
+  await expect(catInput).toBeEnabled();
+  await catInput.fill("Combustible");
+  await page.evaluate(() => window.updateGastoIndirectoCell(0, 'categoria', 'Combustible'));
 
-  const globalCatMenu = page.locator("#global-gi-categoria-menu");
-  await expect(globalCatMenu).toBeVisible();
-  await globalCatMenu.locator(".gi-cat-option", { hasText: "Combustible" }).click();
-  await page.waitForTimeout(150);
-
-  await expect(catTrigger).toContainText("Combustible");
-
-  // Editar concepto y subtotal: verificar que no se guarda en localStorage hasta dar clic en Guardar
+  const totalInput = page.locator("#gi-total-input-0");
+  await expect(totalInput).toBeVisible();
+  await expect(totalInput).toBeEnabled();
+  await totalInput.fill("1160");
   await page.evaluate(() => {
-    window.updateGastoIndirectoCell(0, 'concepto', 'Carga diésel unidades');
-    const subInput = document.getElementById('gi-subtotal-input-0');
-    if (subInput) subInput.value = '1000';
-    window.liveUpdateGastoIndirectoTotals(0);
+    const el = document.getElementById('gi-total-input-0');
+    if (el) el.value = '1160';
+    window.liveUpdateGastoIndirectoFromTotal(0);
   });
+
   const giStoredBeforeSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_gastos_indirectos') || '[]'));
   expect(giStoredBeforeSave.length).toBe(0);
 
-  // Dar clic en Guardar en Gastos Indirectos
-  await page.locator("#btn-save-gastos-ind").click();
+  // Dar clic en Guardar en Gastos Indirectos (barra superior)
+  await page.locator("#btn-save-admin-top").click();
   await page.waitForTimeout(200);
 
-  await expect(page.locator("#btn-save-gastos-ind")).toBeDisabled();
+  await expect(page.locator("#btn-save-admin-top")).toBeDisabled();
   await expect(page.locator("#gastos-indirectos-lock-banner")).toBeHidden();
 
   const giStoredAfterSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_gastos_indirectos') || '[]'));

@@ -1626,12 +1626,6 @@
                                             <p>Control, registro y cálculo de gastos indirectos y operativos</p>
                                         </div>
                                         <div class="table-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;" id="gastos-ind-action-buttons">
-                                            <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-gastos-ind" onclick="startEditingGastosIndirectos()" title="Habilitar edición en Gastos Indirectos">
-                                                <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
-                                            </button>
-                                            <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-gastos-ind" onclick="saveEditingGastosIndirectos()" disabled title="Guardar cambios en Gastos Indirectos y liberar la tabla para otros usuarios">
-                                                <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
-                                            </button>
                                             <button type="button" class="btn btn-primary" id="btn-add-gasto-indirecto" onclick="addNewGastoIndirectoRow()">
                                                 <span class="material-symbols-outlined">add_circle</span> + Añadir Gasto Indirecto
                                             </button>
@@ -1650,13 +1644,11 @@
                                         <table class="admond-table excel-style-table" id="table-gastos-indirectos">
                                             <thead>
                                                 <tr>
-                                                    <th style="width: 7%; text-align: center;">Folio</th>
-                                                    <th style="width: 9%; text-align: center;">Fecha</th>
-                                                    <th style="width: 25%; text-align: left; padding-left: 8px;">Concepto / Descripción</th>
-                                                    <th style="width: 15%; text-align: left; padding-left: 8px;">Categoría</th>
-                                                    <th style="width: 9%; text-align: right; padding-right: 6px;">Subtotal</th>
-                                                    <th style="width: 8%; text-align: right; padding-right: 6px;">IVA</th>
-                                                    <th style="width: 10%; text-align: right; padding-right: 6px;">Total</th>
+                                                    <th style="width: 8%; text-align: center;">Folio</th>
+                                                    <th style="width: 11%; text-align: center;">Fecha</th>
+                                                    <th style="width: 33%; text-align: left; padding-left: 8px;">Concepto / Descripción</th>
+                                                    <th style="width: 18%; text-align: left; padding-left: 8px;">Categoría</th>
+                                                    <th style="width: 13%; text-align: right; padding-right: 6px;">Total</th>
                                                     <th style="width: 11%; text-align: center;">Factura / Ref</th>
                                                     <th style="width: 6%; text-align: center;">Acción</th>
                                                 </tr>
@@ -1665,6 +1657,15 @@
                                                 <!-- Dynamic Gastos Indirectos rows -->
                                             </tbody>
                                         </table>
+                                        <datalist id="gi-categorias-datalist">
+                                            <option value="Servicios"></option>
+                                            <option value="Papelería"></option>
+                                            <option value="Combustible"></option>
+                                            <option value="Mantenimiento"></option>
+                                            <option value="Renta"></option>
+                                            <option value="Sistemas"></option>
+                                            <option value="Otros"></option>
+                                        </datalist>
                                     </div>
                                 </div>
                             </div><!-- Fin admin-sec-gastos-indirectos -->
