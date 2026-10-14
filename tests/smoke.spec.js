@@ -81,6 +81,12 @@ test("la app arranca sin errores JavaScript no controlados", async ({ page }) =>
 });
 
 test("sin sesion se muestra la pantalla de login", async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch(e) {}
+  });
   await openApp(page);
   await expect(page.locator("#login-global-email")).toBeVisible();
 });
