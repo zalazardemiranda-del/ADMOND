@@ -7846,27 +7846,70 @@ async function initAuthAndRealtime() {
 async function handleUserSession(user) {
     if (!window.isSupabaseActive() || !user) return;
     const client = window.SUPABASE_CONFIG.client;
+    const userEmail = (user.email || '').toLowerCase();
     
     try {
-        let { data: profile, error } = await client
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
-            
+        let profile = null;
+        try {
+            const { data: profById } = await client
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .maybeSingle();
+            if (profById) profile = profById;
+        } catch (e) {}
+
+        if (!profile && userEmail) {
+            try {
+                const { data: profByEmail } = await client
+                    .from('profiles')
+                    .select('*')
+                    .eq('email', userEmail)
+                    .maybeSingle();
+                if (profByEmail) profile = profByEmail;
+            } catch (e) {}
+        }
+
+        // Cargar datos personalizados locales
+        const savedCustomName = localStorage.getItem('rp_custom_user_nombre') ||
+            (userEmail ? localStorage.getItem('rp_user_profile_name_' + userEmail) : null);
+        const savedCustomPhone = userEmail ? localStorage.getItem('rp_user_profile_phone_' + userEmail) : null;
+        let localLoggedUser = null;
+        try {
+            const rawStored = localStorage.getItem('rp_logged_user');
+            if (rawStored) localLoggedUser = JSON.parse(rawStored);
+        } catch (e) {}
+
+        const emailPrefix = userEmail ? userEmail.split('@')[0] : '';
+        const fallbackDefaultName = (userEmail === 'diego@rodipack.com') ? 'Diego Miranda' : 'Gerente Principal';
+
         if (!profile) {
             // Profile fallback
             profile = {
                 id: user.id,
                 email: user.email,
-                nombre: user.user_metadata?.nombre || user.email.split('@')[0],
-                rol: user.user_metadata?.rol || 'gerente',
-                departamento: user.user_metadata?.departamento || 'Administración'
+                nombre: savedCustomName || localLoggedUser?.nombre || user.displayName || user.user_metadata?.nombre || fallbackDefaultName,
+                telefono: savedCustomPhone || localLoggedUser?.telefono || '',
+                rol: user.user_metadata?.rol || localLoggedUser?.rol || (userEmail === 'diego@rodipack.com' ? 'administrativo' : 'gerente'),
+                departamento: user.user_metadata?.departamento || localLoggedUser?.departamento || 'Administración'
             };
+        } else {
+            // Si el perfil remoto tiene el nombre vacío o coincide exactamente con el prefijo plano del email ("zalazardemiranda")
+            // y el usuario guardó un nombre personalizado, preservar siempre el personalizado
+            if (savedCustomName) {
+                profile.nombre = savedCustomName;
+            } else if (localLoggedUser?.nombre && (!profile.nombre || profile.nombre.toLowerCase() === emailPrefix.toLowerCase())) {
+                profile.nombre = localLoggedUser.nombre;
+            }
+            if (savedCustomPhone && !profile.telefono) {
+                profile.telefono = savedCustomPhone;
+            } else if (localLoggedUser?.telefono && !profile.telefono) {
+                profile.telefono = localLoggedUser.telefono;
+            }
         }
         
         // Garantizar rol de Gerente para el administrador y administrativo para Diego
-        if (profile.email === 'zalazardemiranda@gmail.com') {
+        if (profile.email && profile.email.toLowerCase() === 'zalazardemiranda@gmail.com') {
             profile.rol = 'gerente';
         } else if (profile.email && profile.email.toLowerCase() === 'diego@rodipack.com') {
             profile.rol = 'administrativo';
@@ -7875,8 +7918,10 @@ async function handleUserSession(user) {
         }
         
         appState.currentUser = profile;
+        localStorage.setItem("rp_logged_user", JSON.stringify(profile));
         setRole(profile.rol || 'gerente');
         updateUserSessionUI();
+        if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
         updateCloudStatusUI(true, profile);
     } catch (err) {
         console.error("Error loading user profile:", err);
@@ -10049,29 +10094,82 @@ async function handleSaveMyProfile(event) {
     const phone = document.getElementById("myprofile-edit-phone").value.trim();
     const msgEl = document.getElementById("myprofile-update-msg");
     
+    const email = (appState.currentUser?.email || (window.firebase?.auth && firebase.auth().currentUser ? firebase.auth().currentUser.email : '') || 'zalazardemiranda@gmail.com').toLowerCase();
+    const uid = (window.firebase?.auth && firebase.auth().currentUser ? firebase.auth().currentUser.uid : '') || (appState.currentUser?.id) || 'usr_zalazardemiranda';
+
     if (!appState.currentUser) {
-        appState.currentUser = { email: "zalazardemiranda@gmail.com", nombre: name, rol: appState.currentRole };
+        appState.currentUser = { email: email, nombre: name, rol: appState.currentRole || 'gerente', departamento: 'Administración' };
     }
     
+    appState.currentUser.id = uid;
+    appState.currentUser.email = email;
     appState.currentUser.nombre = name;
     appState.currentUser.telefono = phone;
     
-    if (window.isSupabaseActive()) {
+    // 1. Guardar de inmediato en almacenamiento local persistente
+    localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
+    localStorage.setItem("rp_custom_user_nombre", name);
+    localStorage.setItem("rp_user_profile_name_" + email, name);
+    if (phone) localStorage.setItem("rp_user_profile_phone_" + email, phone);
+
+    // 2. Actualizar en lista de perfiles locales
+    try {
+        let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
+        const pIdx = localProfiles.findIndex(p => p && p.email && p.email.toLowerCase() === email);
+        if (pIdx >= 0) {
+            localProfiles[pIdx] = Object.assign({}, localProfiles[pIdx], { nombre: name, telefono: phone, id: uid });
+        } else {
+            localProfiles.push(Object.assign({}, appState.currentUser));
+        }
+        localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
+    } catch (e) {}
+
+    // 3. Guardar en Supabase / Firestore wrapper
+    if (window.isSupabaseActive && window.isSupabaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG.client;
-            await client.from('profiles').upsert({
-                id: appState.currentUser.id,
-                nombre: name,
-                telefono: phone,
-                updated_at: new Date().toISOString()
-            });
+            const client = window.SUPABASE_CONFIG?.client;
+            if (client) {
+                await client.from('profiles').upsert({
+                    id: uid,
+                    email: email,
+                    nombre: name,
+                    telefono: phone,
+                    rol: appState.currentUser.rol || 'gerente',
+                    departamento: appState.currentUser.departamento || 'Administración',
+                    updated_at: new Date().toISOString()
+                });
+            }
         } catch (err) {
             console.warn("Profile update error:", err);
         }
     }
+
+    // 4. Guardar directamente en Firebase Auth y Firestore si están disponibles
+    if (window.firebase) {
+        try {
+            if (firebase.auth && firebase.auth().currentUser) {
+                await firebase.auth().currentUser.updateProfile({ displayName: name });
+            }
+        } catch(e) {}
+        try {
+            if (firebase.firestore) {
+                const db = firebase.firestore();
+                const fUid = (firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.uid) || uid;
+                await db.collection('profiles').doc(fUid).set({
+                    id: fUid,
+                    email: email,
+                    nombre: name,
+                    telefono: phone,
+                    rol: appState.currentUser.rol || 'gerente',
+                    departamento: appState.currentUser.departamento || 'Administración',
+                    updated_at: new Date().toISOString()
+                }, { merge: true });
+            }
+        } catch(e) {}
+    }
     
-    localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
     updateUserSessionUI();
+    if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
     
     if (msgEl) {
         msgEl.className = "auth-success-badge";
@@ -12958,10 +13056,17 @@ function isLockOwnedByMe(lock) {
         return true;
     }
 
+    // Si uno es Diego y el otro no es Diego, son usuarios distintos: NUNCA coinciden
+    const isDiegoMe = myEmail.includes('diego') || (myInfo.userName || '').toLowerCase().includes('diego') || String(myInfo.userId || '').toLowerCase().includes('diego');
+    const isDiegoLock = lockEmail.includes('diego') || (lock.userName || '').toLowerCase().includes('diego') || String(lock.userId || '').toLowerCase().includes('diego');
+    if (isDiegoMe !== isDiegoLock) {
+        return false;
+    }
+
     // 4. Coincidencia por userName exacto o inclusión
     const myName = (myInfo.userName || '').trim().toLowerCase();
     const lockName = (lock.userName || '').trim().toLowerCase();
-    if (myName && lockName && (myName === lockName || myName.includes(lockName) || lockName.includes(myName))) {
+    if (myName && lockName && (myName === lockName || (myName.length > 5 && lockName.length > 5 && (myName.includes(lockName) || lockName.includes(myName))))) {
         return true;
     }
 
@@ -12979,8 +13084,8 @@ function isLockOwnedByMe(lock) {
     }
 
     // 6. Cuenta de administración principal Roberto Miranda / zalazardemiranda
-    const isMainAdmin = myEmail === 'zalazardemiranda@gmail.com' || myName.includes('miranda') || myPrefix === 'zalazardemiranda';
-    const isLockMainAdmin = lockEmail === 'zalazardemiranda@gmail.com' || lockName.includes('miranda') || lockName === 'zalazardemiranda' || String(lock.userId || '').toLowerCase().includes('zalazardemiranda');
+    const isMainAdmin = myEmail === 'zalazardemiranda@gmail.com' || myName.includes('zalazar') || myPrefix === 'zalazardemiranda';
+    const isLockMainAdmin = lockEmail === 'zalazardemiranda@gmail.com' || lockName.includes('zalazar') || lockName === 'zalazardemiranda' || String(lock.userId || '').toLowerCase().includes('zalazardemiranda');
     if (isMainAdmin && isLockMainAdmin) {
         return true;
     }
@@ -13515,6 +13620,14 @@ function renderOperaciones() {
             setTimeout(() => {
                 if (typeof openOperacionesDetail === 'function') {
                     openOperacionesDetail(activeStoredProjId);
+                    const wasEditing = sessionStorage.getItem('rp_active_operaciones_editing') === 'true';
+                    if (wasEditing && typeof startEditingOperacionesProject === 'function') {
+                        startEditingOperacionesProject();
+                    }
+                    const storedStep = sessionStorage.getItem('rp_active_operaciones_step');
+                    if (storedStep && typeof goToOperacionesStep === 'function') {
+                        goToOperacionesStep(parseInt(storedStep, 10));
+                    }
                 }
             }, 60);
             return;
@@ -14049,13 +14162,24 @@ function startEditingOperacionesProject() {
     // Verificar que ningún otro usuario haya ganado el bloqueo antes
     const lockByOther = getProjectLockByOther(p);
     if (lockByOther) {
-        alert(`El proyecto está siendo editado por ${lockByOther.userName || 'otro usuario'}`);
-        closeOperacionesDetail({ skipRelease: true });
-        return;
+        const isActuallyOwnedByMe = isLockOwnedByMe(lockByOther) ||
+            (sessionStorage.getItem('rp_active_operaciones_project_id') === p.id) ||
+            (lockByOther.userEmail && appState.currentUser?.email && lockByOther.userEmail.toLowerCase() === appState.currentUser.email.toLowerCase()) ||
+            (String(lockByOther.userName || '').toLowerCase().includes('zalazar') && (appState.currentUser?.email || '').toLowerCase().includes('zalazar')) ||
+            (String(lockByOther.userName || '').toLowerCase() === String(appState.currentUser?.nombre || '').toLowerCase());
+
+        if (!isActuallyOwnedByMe) {
+            alert(`El proyecto está siendo editado por ${lockByOther.userName || 'otro usuario'}`);
+            closeOperacionesDetail({ skipRelease: true });
+            return;
+        } else {
+            claimOperacionesProjectLock(p, Date.now());
+        }
     }
 
     appState._operacionesDetailSnapshot = JSON.parse(JSON.stringify(p));
     appState.isEditingOperacionesDetail = true;
+    try { sessionStorage.setItem('rp_active_operaciones_editing', 'true'); } catch(e) {}
 
     updateOperacionesDetailEditUI();
 
@@ -14122,6 +14246,7 @@ function saveEditingOperacionesProject() {
 
     appState.isEditingOperacionesDetail = false;
     appState._operacionesDetailSnapshot = JSON.parse(JSON.stringify(p));
+    try { sessionStorage.removeItem('rp_active_operaciones_editing'); } catch(e) {}
 
     window._lastLocalOperacionesSyncTime = Date.now();
     saveOperacionesStorage();
@@ -14196,15 +14321,26 @@ function openOperacionesDetail(projectId, clickTimestamp = null) {
         // 1. Verificar bloqueo exclusivo por otro usuario
         const lockByOther = getProjectLockByOther(p);
         if (lockByOther) {
-            const lockMsg = `El proyecto está siendo editado por ${lockByOther.userName || 'otro usuario'}`;
-            if (confirm(`${lockMsg}.\n\n¿Deseas desbloquear el proyecto y tomar el control para editarlo?`)) {
-                releaseOperacionesProjectLock(p, true);
-            } else {
-                if (typeof showCustomNotification === 'function') {
-                    showCustomNotification(lockMsg, "warning");
+            const isActuallyOwnedByMe = isLockOwnedByMe(lockByOther) ||
+                (sessionStorage.getItem('rp_active_operaciones_project_id') === p.id) ||
+                (lockByOther.userEmail && appState.currentUser?.email && lockByOther.userEmail.toLowerCase() === appState.currentUser.email.toLowerCase()) ||
+                (String(lockByOther.userName || '').toLowerCase().includes('zalazar') && (appState.currentUser?.email || '').toLowerCase().includes('zalazar')) ||
+                (String(lockByOther.userName || '').toLowerCase() === String(appState.currentUser?.nombre || '').toLowerCase());
+
+            if (!isActuallyOwnedByMe) {
+                const lockMsg = `El proyecto está siendo editado por ${lockByOther.userName || 'otro usuario'}`;
+                if (confirm(`${lockMsg}.\n\n¿Deseas desbloquear el proyecto y tomar el control para editarlo?`)) {
+                    releaseOperacionesProjectLock(p, true);
+                } else {
+                    if (typeof showCustomNotification === 'function') {
+                        showCustomNotification(lockMsg, "warning");
+                    }
+                    renderOperaciones();
+                    return;
                 }
-                renderOperaciones();
-                return;
+            } else {
+                // Es mi propio bloqueo de antes del refresh; renovar silenciosamente
+                claimOperacionesProjectLock(p, clickTimestamp !== null ? clickTimestamp : Date.now());
             }
         }
 
@@ -14509,8 +14645,11 @@ function closeOperacionesDetail(options = {}) {
         }
     }
     appState.activeOperacionesProjectId = null;
+    appState.isEditingOperacionesDetail = false;
     try {
         sessionStorage.removeItem('rp_active_operaciones_project_id');
+        sessionStorage.removeItem('rp_active_operaciones_editing');
+        sessionStorage.removeItem('rp_active_operaciones_step');
         localStorage.removeItem('rp_active_operaciones_project_id');
     } catch(e) {}
 
@@ -14537,6 +14676,7 @@ function goToOperacionesStep(stepNum) {
 
     if (stepNum > 4) stepNum = 4;
     if (stepNum < 1) stepNum = 1;
+    try { sessionStorage.setItem('rp_active_operaciones_step', String(stepNum)); } catch(e) {}
 
     document.querySelectorAll(".stepper-step").forEach((el, idx) => {
         const sNum = idx + 1;

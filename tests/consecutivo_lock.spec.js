@@ -1095,4 +1095,89 @@ test("11. Reconocimiento de propio bloqueo zalazardemiranda y carga/descarga de 
   await page.waitForTimeout(200);
 });
 
+test("13. Persistencia de nombre de perfil y restauración sin bloqueo al refrescar expediente en edición", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  // 1. Probar guardado de Mi Perfil y persistencia ante sesión
+  await page.evaluate(async () => {
+    const editNameInput = document.getElementById("myprofile-edit-name");
+    const editPhoneInput = document.getElementById("myprofile-edit-phone");
+    if (editNameInput) editNameInput.value = "Roberto Miranda Salazar";
+    if (editPhoneInput) editPhoneInput.value = "3141234567";
+
+    const fakeEvent = { preventDefault: () => {} };
+    await window.handleSaveMyProfile(fakeEvent);
+  });
+  await page.waitForTimeout(200);
+
+  // Comprobar que appState y localStorage guardaron el nuevo nombre
+  const savedName = await page.evaluate(() => window.appState.currentUser?.nombre);
+  expect(savedName).toBe("Roberto Miranda Salazar");
+  const storedLocalName = await page.evaluate(() => localStorage.getItem("rp_custom_user_nombre"));
+  expect(storedLocalName).toBe("Roberto Miranda Salazar");
+
+  // Simular inicio de sesión / recarga de sesión remota
+  await page.evaluate(async () => {
+    await window.handleUserSession({
+      id: 'fb_user_zalazar_123',
+      email: 'zalazardemiranda@gmail.com'
+    });
+  });
+  await page.waitForTimeout(200);
+
+  // El nombre NO debe revertirse a 'zalazardemiranda', debe permanecer 'Roberto Miranda Salazar'
+  const restoredName = await page.evaluate(() => window.appState.currentUser?.nombre);
+  expect(restoredName).toBe("Roberto Miranda Salazar");
+
+  // 2. Probar edición de expediente y recarga (refresh)
+  await page.evaluate(() => {
+    window.switchAdminFicha('operaciones');
+    const testProj = {
+      id: 'RDP2610777-K',
+      numProyecto: 'RDP2610777-K',
+      consecutivo: 'RDP2610777-K',
+      numConsecutivo: 'RDP2610777-K',
+      fechaInicio: '2026-10-14',
+      numFactura: 'FE-777',
+      cliente: 'CLIENTE TEST REFRESH',
+      generado: true,
+      tipoProyecto: 'servicio_local',
+      contenedores: []
+    };
+    window.appState.operacionesProyectos = [testProj];
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify([testProj]));
+    window.renderOperaciones();
+    window.openOperacionesDetail('RDP2610777-K');
+    window.startEditingOperacionesProject();
+    window.goToOperacionesStep(2);
+  });
+  await page.waitForTimeout(200);
+
+  // Verificar que esté en modo edición y en paso 2
+  const isEditingBefore = await page.evaluate(() => window.appState.isEditingOperacionesDetail);
+  expect(isEditingBefore).toBe(true);
+  const storedEditing = await page.evaluate(() => sessionStorage.getItem('rp_active_operaciones_editing'));
+  expect(storedEditing).toBe('true');
+  const storedStep = await page.evaluate(() => sessionStorage.getItem('rp_active_operaciones_step'));
+  expect(storedStep).toBe('2');
+
+  // Simular refresco de página: re-renderOperaciones() con sessionStorage intacto
+  await page.evaluate(() => {
+    // Cerrar visualmente el pane para simular reload antes de que el script corra
+    const detailPane = document.getElementById("operaciones-view-detail");
+    const listPane = document.getElementById("operaciones-view-list");
+    if (detailPane) detailPane.style.display = "none";
+    if (listPane) listPane.style.display = "block";
+    window.appState._hasRestoredActiveProjectOnLoad = false;
+    window.renderOperaciones();
+  });
+  await page.waitForTimeout(300);
+
+  // Verificar que el usuario sigue adentro del proyecto en detalle y en modo edición
+  await expect(page.locator("#operaciones-view-detail")).toBeVisible();
+  const isEditingAfter = await page.evaluate(() => window.appState.isEditingOperacionesDetail);
+  expect(isEditingAfter).toBe(true);
+});
+
+
 
