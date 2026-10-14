@@ -12198,16 +12198,28 @@ async function fetchOperacionesFromCloud() {
         try {
             const { data: dbOps, error: opErr } = await client.from('operaciones').select('*').order('updated_at', { ascending: false });
             if (dbOps && dbOps.length > 0) {
-                cloudProjects = dbOps.map(row => row.datos || {
-                    id: row.id || row.consecutivo,
-                    numProyecto: row.consecutivo,
-                    consecutivo: row.consecutivo,
-                    numConsecutivo: row.consecutivo,
-                    tipoProyecto: row.tipo_proyecto,
-                    estatus: row.estatus,
-                    numFactura: row.factura,
-                    numOC: row.orden_compra
-                });
+                cloudProjects = dbOps.map(row => {
+                    let d = row.datos;
+                    if (typeof d === 'string') {
+                        try { d = JSON.parse(d); } catch (e) { d = null; }
+                    }
+                    if (!d || typeof d !== 'object') {
+                        d = {
+                            id: row.id || row.consecutivo,
+                            numProyecto: row.consecutivo,
+                            consecutivo: row.consecutivo,
+                            numConsecutivo: row.consecutivo,
+                            tipoProyecto: row.tipo_proyecto || 'servicio_local',
+                            estatus: row.estatus || 'PENDIENTE',
+                            numFactura: row.factura || '',
+                            numOC: row.orden_compra || ''
+                        };
+                    }
+                    if (row.consecutivo && !d.consecutivo) d.consecutivo = row.consecutivo;
+                    if (row.id && !d.id) d.id = row.id;
+                    if (d.generado === undefined) d.generado = true;
+                    return d;
+                }).filter(Boolean);
             }
         } catch (e) {}
 
@@ -12221,9 +12233,17 @@ async function fetchOperacionesFromCloud() {
 
             if (snapMsgs && snapMsgs.length > 0 && snapMsgs[0].contenido) {
                 try {
-                    const parsed = JSON.parse(snapMsgs[0].contenido);
+                    let parsed = JSON.parse(snapMsgs[0].contenido);
+                    if (typeof parsed === 'string') {
+                        try { parsed = JSON.parse(parsed); } catch (e) {}
+                    }
                     if (Array.isArray(parsed) && parsed.length > 0) {
-                        cloudProjects = parsed;
+                        cloudProjects = parsed.map(p => {
+                            if (p && typeof p === 'object' && p.generado === undefined) {
+                                p.generado = true;
+                            }
+                            return p;
+                        });
                     }
                 } catch (e) {}
             }
@@ -12281,9 +12301,13 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
         return;
     }
 
-    const validCloudList = cloudList.filter(cp => 
-        cp && isProjectGenerado(cp) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(cp)) && !fakeOpIds.has(cp.id) && !fakeOpIds.has(cp.consecutivo) && !fakeOpIds.has(cp.numProyecto) && !String(cp.id || cp.consecutivo || '').endsWith('-')
-    );
+    const validCloudList = cloudList.filter(cp => {
+        if (!cp) return false;
+        if (cp.generado === undefined && (cp.id || cp.consecutivo || cp.numProyecto)) {
+            cp.generado = true;
+        }
+        return isProjectGenerado(cp) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(cp)) && !fakeOpIds.has(cp.id) && !fakeOpIds.has(cp.consecutivo) && !fakeOpIds.has(cp.numProyecto) && !String(cp.id || cp.consecutivo || '').endsWith('-');
+    });
 
     if (validCloudList.length === 0) {
         return;
@@ -12847,13 +12871,21 @@ function cleanOperacionesLegacyData(proyectos) {
 // =================================================================================
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
-const OPERACIONES_LOCK_TTL_MS = 30 * 60 * 1000; // 30 minutos de respaldo ante cierre inesperado
+const OPERACIONES_LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutos de respaldo ante cierre inesperado
 const SYSTEM_RELEASE_VERSION = 'release_2026_10_12_op_locks_v1';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
     if (!window._myClientId) {
-        window._myClientId = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+        try {
+            window._myClientId = localStorage.getItem('rp_client_id');
+            if (!window._myClientId) {
+                window._myClientId = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+                localStorage.setItem('rp_client_id', window._myClientId);
+            }
+        } catch (e) {
+            window._myClientId = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+        }
     }
     const u = appState.currentUser;
     const userId = u?.id || u?.email || u?.nombre || window._myClientId;
@@ -12901,10 +12933,16 @@ function saveOperacionesLocksMapToLocal() {
 function isLockOwnedByMe(lock) {
     if (!lock || !lock.isLocked) return false;
     const myInfo = getOperacionesCurrentUserInfo();
-    if (lock.clientId && myInfo.clientId) {
-        return lock.clientId === myInfo.clientId && (!lock.userId || lock.userId === myInfo.userId);
+    if (lock.clientId && myInfo.clientId && lock.clientId === myInfo.clientId) {
+        return true;
     }
-    return Boolean(lock.userId && lock.userId === myInfo.userId);
+    if (lock.userId && myInfo.userId && String(lock.userId).trim().toLowerCase() === String(myInfo.userId).trim().toLowerCase()) {
+        return true;
+    }
+    if (lock.userName && myInfo.userName && String(lock.userName).trim().toLowerCase() === String(myInfo.userName).trim().toLowerCase()) {
+        return true;
+    }
+    return false;
 }
 window.isLockOwnedByMe = isLockOwnedByMe;
 
@@ -13044,15 +13082,15 @@ function claimOperacionesProjectLock(projectOrId, customTimestamp = null) {
     return lockEntry;
 }
 
-function releaseOperacionesProjectLock(projectOrId) {
+function releaseOperacionesProjectLock(projectOrId, force = false) {
     window.releaseOperacionesProjectLock = releaseOperacionesProjectLock;
     const key = normalizeOperacionesProjectKey(projectOrId || appState.activeOperacionesProjectId || appState._myActiveProjectLock?.projectId);
     if (!key) return;
 
     const locks = ensureOperacionesLocksMap();
     const existing = locks[key];
-    if (existing && !isLockOwnedByMe(existing)) {
-        // No liberar el bloqueo si pertenece a otro usuario que ganó la carrera
+    if (existing && !isLockOwnedByMe(existing) && !force) {
+        // No liberar el bloqueo si pertenece a otro usuario que ganó la carrera a menos que sea forzado
         return;
     }
 
@@ -13074,6 +13112,19 @@ function releaseOperacionesProjectLock(projectOrId) {
     broadcastOperacionesProjectLock(unlockPayload);
     syncOperacionesProjectLocksToCloud();
 }
+
+function handleOpenLockedOperacionesProject(projectId, lockedByUserName) {
+    window.handleOpenLockedOperacionesProject = handleOpenLockedOperacionesProject;
+    const who = lockedByUserName || 'otro usuario';
+    const msg = `El proyecto aparece registrado como en uso por "${who}".\n\n¿Deseas desbloquear el proyecto y tomar el control para editarlo?`;
+    if (confirm(msg)) {
+        releaseOperacionesProjectLock(projectId, true);
+        if (typeof openOperacionesDetail === 'function') {
+            openOperacionesDetail(projectId);
+        }
+    }
+}
+window.handleOpenLockedOperacionesProject = handleOpenLockedOperacionesProject;
 
 function handleIncomingOperacionesProjectLock(payload, isFromCloudPoll = false) {
     window.handleIncomingOperacionesProjectLock = handleIncomingOperacionesProjectLock;
@@ -13551,7 +13602,7 @@ function renderOperaciones() {
         <tr data-op-id="${pId}" class="${isLockedByOther ? 'op-row-locked' : ''}" ${isLockedByOther ? `title="${lockMsg}"` : ''}>
             <td>
                 <strong>${consecutivoDisplay}</strong>
-                ${isLockedByOther ? `<div class="op-locked-project-msg" style="margin-top: 4px;"><span class="material-symbols-outlined">lock</span> ${lockMsg}</div>` : ''}
+                ${isLockedByOther ? `<div class="op-locked-project-msg" style="margin-top: 4px;"><span class="material-symbols-outlined">lock</span> ${lockMsg} <button type="button" class="btn-op-force-unlock" onclick="event.stopPropagation(); handleOpenLockedOperacionesProject('${pId}', '${(lockInfo.userName || '').replace(/'/g, "\\'")}')" style="margin-left: 6px; padding: 2px 6px; font-size: 11px; background: #EF4444; color: white; border: none; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" title="Forzar desbloqueo de este proyecto"><span class="material-symbols-outlined" style="font-size: 13px;">lock_open</span> Desbloquear</button></div>` : ''}
             </td>
             <td>${p.fechaInicioDisplay || p.fechaInicio || '-'}</td>
             <td>${p.factura || p.numFactura || '-'}</td>
@@ -14056,13 +14107,15 @@ function openOperacionesDetail(projectId, clickTimestamp = null) {
         const lockByOther = getProjectLockByOther(p);
         if (lockByOther) {
             const lockMsg = `El proyecto está siendo editado por ${lockByOther.userName || 'otro usuario'}`;
-            if (typeof showCustomNotification === 'function') {
-                showCustomNotification(lockMsg, "warning");
+            if (confirm(`${lockMsg}.\n\n¿Deseas desbloquear el proyecto y tomar el control para editarlo?`)) {
+                releaseOperacionesProjectLock(p, true);
             } else {
-                alert(lockMsg);
+                if (typeof showCustomNotification === 'function') {
+                    showCustomNotification(lockMsg, "warning");
+                }
+                renderOperaciones();
+                return;
             }
-            renderOperaciones();
-            return;
         }
 
         // Si teníamos otro proyecto bloqueado previamente, liberarlo antes de abrir el nuevo
