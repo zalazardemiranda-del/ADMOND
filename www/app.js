@@ -12888,11 +12888,15 @@ function getOperacionesCurrentUserInfo() {
         }
     }
     const u = appState.currentUser;
-    const userId = u?.id || u?.email || u?.nombre || window._myClientId;
-    const userName = u?.nombre || u?.email || (appState.currentRole ? (appState.currentRole.charAt(0).toUpperCase() + appState.currentRole.slice(1)) : 'Usuario');
+    const userEmail = (u?.email || '').trim().toLowerCase();
+    const userPrefix = userEmail.includes('@') ? userEmail.split('@')[0] : '';
+    const userId = u?.id || userEmail || u?.nombre || window._myClientId;
+    const userName = u?.nombre || userEmail || (appState.currentRole ? (appState.currentRole.charAt(0).toUpperCase() + appState.currentRole.slice(1)) : 'Usuario');
     return {
         userId: String(userId).trim(),
+        userEmail: userEmail,
         userName: String(userName).trim(),
+        userPrefix: userPrefix,
         clientId: String(window._myClientId).trim()
     };
 }
@@ -12933,15 +12937,54 @@ function saveOperacionesLocksMapToLocal() {
 function isLockOwnedByMe(lock) {
     if (!lock || !lock.isLocked) return false;
     const myInfo = getOperacionesCurrentUserInfo();
+
+    // 1. Coincidencia por clientId de navegador
     if (lock.clientId && myInfo.clientId && lock.clientId === myInfo.clientId) {
         return true;
     }
+
+    // 2. Coincidencia por userId
     if (lock.userId && myInfo.userId && String(lock.userId).trim().toLowerCase() === String(myInfo.userId).trim().toLowerCase()) {
         return true;
     }
-    if (lock.userName && myInfo.userName && String(lock.userName).trim().toLowerCase() === String(myInfo.userName).trim().toLowerCase()) {
+
+    // 3. Coincidencia por email
+    const myEmail = (myInfo.userEmail || '').trim().toLowerCase();
+    const lockEmail = (lock.userEmail || '').trim().toLowerCase();
+    if (myEmail && lockEmail && myEmail === lockEmail) {
         return true;
     }
+    if (myEmail && lock.userId && myEmail === String(lock.userId).trim().toLowerCase()) {
+        return true;
+    }
+
+    // 4. Coincidencia por userName exacto o inclusión
+    const myName = (myInfo.userName || '').trim().toLowerCase();
+    const lockName = (lock.userName || '').trim().toLowerCase();
+    if (myName && lockName && (myName === lockName || myName.includes(lockName) || lockName.includes(myName))) {
+        return true;
+    }
+
+    // 5. Coincidencia por prefijo de correo (ej. "zalazardemiranda" vs "zalazardemiranda@gmail.com")
+    const myPrefix = (myInfo.userPrefix || '').toLowerCase();
+    const lockPrefix = (lock.userPrefix || (lockEmail.includes('@') ? lockEmail.split('@')[0] : '')).toLowerCase();
+    if (myPrefix && (lockName === myPrefix || lockPrefix === myPrefix)) {
+        return true;
+    }
+    if (lockName && myEmail && (myEmail.startsWith(lockName + '@') || myEmail === lockName)) {
+        return true;
+    }
+    if (myName && lockEmail && (lockEmail.startsWith(myName + '@') || lockEmail === myName)) {
+        return true;
+    }
+
+    // 6. Cuenta de administración principal Roberto Miranda / zalazardemiranda
+    const isMainAdmin = myEmail === 'zalazardemiranda@gmail.com' || myName.includes('miranda') || myPrefix === 'zalazardemiranda';
+    const isLockMainAdmin = lockEmail === 'zalazardemiranda@gmail.com' || lockName.includes('miranda') || lockName === 'zalazardemiranda' || String(lock.userId || '').toLowerCase().includes('zalazardemiranda');
+    if (isMainAdmin && isLockMainAdmin) {
+        return true;
+    }
+
     return false;
 }
 window.isLockOwnedByMe = isLockOwnedByMe;
@@ -13068,7 +13111,9 @@ function claimOperacionesProjectLock(projectOrId, customTimestamp = null) {
         projectId: key,
         isLocked: true,
         userId: myInfo.userId,
+        userEmail: myInfo.userEmail,
         userName: myInfo.userName,
+        userPrefix: myInfo.userPrefix,
         clientId: myInfo.clientId,
         timestamp: clickTs
     };
@@ -13105,7 +13150,9 @@ function releaseOperacionesProjectLock(projectOrId, force = false) {
         projectId: key,
         isLocked: false,
         userId: myInfo.userId,
+        userEmail: myInfo.userEmail,
         userName: myInfo.userName,
+        userPrefix: myInfo.userPrefix,
         clientId: myInfo.clientId,
         timestamp: Date.now()
     };
@@ -13119,9 +13166,11 @@ function handleOpenLockedOperacionesProject(projectId, lockedByUserName) {
     const msg = `El proyecto aparece registrado como en uso por "${who}".\n\n¿Deseas desbloquear el proyecto y tomar el control para editarlo?`;
     if (confirm(msg)) {
         releaseOperacionesProjectLock(projectId, true);
-        if (typeof openOperacionesDetail === 'function') {
-            openOperacionesDetail(projectId);
-        }
+        setTimeout(() => {
+            if (typeof openOperacionesDetail === 'function') {
+                openOperacionesDetail(projectId);
+            }
+        }, 50);
     }
 }
 window.handleOpenLockedOperacionesProject = handleOpenLockedOperacionesProject;
@@ -13165,6 +13214,14 @@ function handleIncomingOperacionesProjectLock(payload, isFromCloudPoll = false) 
     // ¿Entraron los dos al mismo tiempo al mismo proyecto? Resolver por quién dio clic antes (timestamp menor)
     if (activeKey === key && myLock) {
         if (doesIncomingLockWin(payload, myLock)) {
+            // Si el usuario actual está editando activamente, no expulsarlo abruptamente perdiendo cambios
+            if (appState.isEditingOperacionesDetail) {
+                if (typeof showCustomNotification === 'function') {
+                    showCustomNotification(`Aviso: ${payload.userName || 'Otro usuario'} también intentó acceder a este proyecto. Guarda tus cambios al terminar.`, "warning");
+                }
+                return;
+            }
+
             // El otro usuario dio clic antes -> gana el otro usuario y sacamos al usuario actual del expediente
             locks[key] = payload;
             appState._myActiveProjectLock = null;
@@ -13439,6 +13496,31 @@ function renderOperaciones() {
         return;
     }
 
+    // Si el usuario estaba editando un proyecto y refrescó la página, mantenerlo adentro del proyecto y refrescar sus datos
+    const activeStoredProjId = sessionStorage.getItem('rp_active_operaciones_project_id');
+    if (activeStoredProjId && (!detailPane || detailPane.style.display === "none")) {
+        const storedInitial = localStorage.getItem('rp_operaciones_proyectos');
+        let currentList = appState.operacionesProyectos;
+        if (!currentList || currentList.length === 0) {
+            try { currentList = storedInitial ? JSON.parse(storedInitial) : []; } catch (e) { currentList = []; }
+        }
+        const matchingProj = (currentList || []).find(x => x && (
+            x.id === activeStoredProjId ||
+            x.consecutivo === activeStoredProjId ||
+            x.numConsecutivo === activeStoredProjId ||
+            x.numProyecto === activeStoredProjId
+        ));
+        if (matchingProj && !appState._hasRestoredActiveProjectOnLoad) {
+            appState._hasRestoredActiveProjectOnLoad = true;
+            setTimeout(() => {
+                if (typeof openOperacionesDetail === 'function') {
+                    openOperacionesDetail(activeStoredProjId);
+                }
+            }, 60);
+            return;
+        }
+    }
+
     // Purga automática inicial si existen datos fantasma guardados previamente en LocalStorage
     if (!localStorage.getItem('rp_purge_accidental_oct_v5')) {
         try {
@@ -13594,6 +13676,8 @@ function renderOperaciones() {
         const pId = String(p.id || consecutivoDisplay).trim();
         const lockInfo = getProjectLockByOther(p);
         const isLockedByOther = Boolean(lockInfo);
+        const myLockInfo = !isLockedByOther ? getOperacionesProjectLock(p) : null;
+        const isLockedByMe = Boolean(myLockInfo && isLockOwnedByMe(myLockInfo));
         const lockMsg = isLockedByOther
             ? `El proyecto está siendo editado por ${lockInfo.userName || 'otro usuario'}`
             : '';
@@ -13603,6 +13687,7 @@ function renderOperaciones() {
             <td>
                 <strong>${consecutivoDisplay}</strong>
                 ${isLockedByOther ? `<div class="op-locked-project-msg" style="margin-top: 4px;"><span class="material-symbols-outlined">lock</span> ${lockMsg} <button type="button" class="btn-op-force-unlock" onclick="event.stopPropagation(); handleOpenLockedOperacionesProject('${pId}', '${(lockInfo.userName || '').replace(/'/g, "\\'")}')" style="margin-left: 6px; padding: 2px 6px; font-size: 11px; background: #EF4444; color: white; border: none; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" title="Forzar desbloqueo de este proyecto"><span class="material-symbols-outlined" style="font-size: 13px;">lock_open</span> Desbloquear</button></div>` : ''}
+                ${isLockedByMe ? `<div class="op-locked-project-msg" style="margin-top: 4px; background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE;"><span class="material-symbols-outlined" style="font-size: 14px; color: #4F46E5;">edit</span> En edición por ti</div>` : ''}
             </td>
             <td>${p.fechaInicioDisplay || p.fechaInicio || '-'}</td>
             <td>${p.factura || p.numFactura || '-'}</td>
@@ -13613,8 +13698,8 @@ function renderOperaciones() {
                         <span class="material-symbols-outlined" style="font-size: 16px;">lock</span> BLOQUEADO
                     </button>
                 ` : `
-                    <button type="button" class="btn-op-abrir" data-project-id="${pId}" onclick="event.stopPropagation(); openOperacionesDetail('${pId}')" title="Abrir y revisar expediente">
-                        <span class="material-symbols-outlined" style="font-size: 16px;">folder_open</span> ABRIR
+                    <button type="button" class="btn-op-abrir" data-project-id="${pId}" onclick="event.stopPropagation(); openOperacionesDetail('${pId}')" title="${isLockedByMe ? 'Continuar editando tu proyecto' : 'Abrir y revisar expediente'}">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">${isLockedByMe ? 'edit' : 'folder_open'}</span> ${isLockedByMe ? 'EDITAR' : 'ABRIR'}
                     </button>
                 `}
             </td>
@@ -14130,7 +14215,8 @@ function openOperacionesDetail(projectId, clickTimestamp = null) {
 
         appState.activeOperacionesProjectId = p.id;
         try {
-            localStorage.setItem('rp_active_operaciones_project_id', p.id);
+            sessionStorage.setItem('rp_active_operaciones_project_id', p.id);
+            localStorage.removeItem('rp_active_operaciones_project_id');
         } catch(e) {}
 
         // 2. Reclamar bloqueo exclusivo para este proyecto con timestamp exacto del clic
@@ -14423,6 +14509,10 @@ function closeOperacionesDetail(options = {}) {
         }
     }
     appState.activeOperacionesProjectId = null;
+    try {
+        sessionStorage.removeItem('rp_active_operaciones_project_id');
+        localStorage.removeItem('rp_active_operaciones_project_id');
+    } catch(e) {}
 
     const listPane = document.getElementById("operaciones-view-list");
     const detailPane = document.getElementById("operaciones-view-detail");
@@ -16595,51 +16685,88 @@ window.DocStorage = {
             }
         });
     },
-    async saveDoc(projId, docKey, docData) {
-        if (!projId || !docKey || !docData) return false;
+    async saveDoc(projectOrId, docKey, docData) {
+        if (!projectOrId || !docKey || !docData) return false;
         try {
             const db = await this.getDB();
             if (!db) return false;
+            const keysToSave = new Set();
+            if (typeof projectOrId === 'object') {
+                if (projectOrId.id) keysToSave.add(`${projectOrId.id}__${docKey}`);
+                if (projectOrId.consecutivo) keysToSave.add(`${projectOrId.consecutivo}__${docKey}`);
+                if (projectOrId.numConsecutivo) keysToSave.add(`${projectOrId.numConsecutivo}__${docKey}`);
+                if (projectOrId.numProyecto) keysToSave.add(`${projectOrId.numProyecto}__${docKey}`);
+            } else {
+                keysToSave.add(`${projectOrId}__${docKey}`);
+            }
             return new Promise((resolve) => {
                 const tx = db.transaction('docs', 'readwrite');
                 const store = tx.objectStore('docs');
-                store.put({ key: `${projId}__${docKey}`, data: docData, updatedAt: Date.now() });
+                keysToSave.forEach(k => {
+                    store.put({ key: k, data: docData, updatedAt: Date.now() });
+                });
                 tx.oncomplete = () => resolve(true);
                 tx.onerror = () => resolve(false);
             });
         } catch (e) { return false; }
     },
-    async getDoc(projId, docKey) {
-        if (!projId || !docKey) return null;
+    async getDoc(projectOrId, docKey) {
+        if (!projectOrId || !docKey) return null;
         try {
             const db = await this.getDB();
             if (!db) return null;
+            const searchKeys = [];
+            if (typeof projectOrId === 'object') {
+                if (projectOrId.id) searchKeys.push(`${projectOrId.id}__${docKey}`);
+                if (projectOrId.consecutivo) searchKeys.push(`${projectOrId.consecutivo}__${docKey}`);
+                if (projectOrId.numConsecutivo) searchKeys.push(`${projectOrId.numConsecutivo}__${docKey}`);
+                if (projectOrId.numProyecto) searchKeys.push(`${projectOrId.numProyecto}__${docKey}`);
+            } else {
+                searchKeys.push(`${projectOrId}__${docKey}`);
+                if (appState.activeOperacionesProjectId && appState.activeOperacionesProjectId !== projectOrId) {
+                    searchKeys.push(`${appState.activeOperacionesProjectId}__${docKey}`);
+                }
+            }
             return new Promise((resolve) => {
-                const tx = db.transaction('docs', 'readwrite');
+                const tx = db.transaction('docs', 'readonly');
                 const store = tx.objectStore('docs');
-                const req = store.get(`${projId}__${docKey}`);
-                req.onsuccess = () => {
-                    const res = req.result ? req.result.data : null;
-                    if (res && res.dataUrl && isFakeDummyPdf(res.dataUrl)) {
-                        store.delete(`${projId}__${docKey}`);
-                        resolve(null);
-                    } else {
-                        resolve(res);
-                    }
-                };
-                req.onerror = () => resolve(null);
+                let found = null;
+                let pending = searchKeys.length;
+                searchKeys.forEach(k => {
+                    const req = store.get(k);
+                    req.onsuccess = () => {
+                        if (!found && req.result && req.result.data) {
+                            found = req.result.data;
+                        }
+                        pending--;
+                        if (pending <= 0) resolve(found);
+                    };
+                    req.onerror = () => {
+                        pending--;
+                        if (pending <= 0) resolve(found);
+                    };
+                });
             });
         } catch (e) { return null; }
     },
-    async deleteDoc(projId, docKey) {
-        if (!projId || !docKey) return false;
+    async deleteDoc(projectOrId, docKey) {
+        if (!projectOrId || !docKey) return false;
         try {
             const db = await this.getDB();
             if (!db) return false;
+            const keysToDelete = [];
+            if (typeof projectOrId === 'object') {
+                if (projectOrId.id) keysToDelete.push(`${projectOrId.id}__${docKey}`);
+                if (projectOrId.consecutivo) keysToDelete.push(`${projectOrId.consecutivo}__${docKey}`);
+                if (projectOrId.numConsecutivo) keysToDelete.push(`${projectOrId.numConsecutivo}__${docKey}`);
+                if (projectOrId.numProyecto) keysToDelete.push(`${projectOrId.numProyecto}__${docKey}`);
+            } else {
+                keysToDelete.push(`${projectOrId}__${docKey}`);
+            }
             return new Promise((resolve) => {
                 const tx = db.transaction('docs', 'readwrite');
                 const store = tx.objectStore('docs');
-                store.delete(`${projId}__${docKey}`);
+                keysToDelete.forEach(k => store.delete(k));
                 tx.oncomplete = () => resolve(true);
                 tx.onerror = () => resolve(false);
             });
@@ -16654,10 +16781,10 @@ window.DocStorage = {
             const cur = p.documentos[k];
             if (cur && cur.dataUrl && isFakeDummyPdf(cur.dataUrl)) {
                 cur.dataUrl = '';
-                await this.deleteDoc(p.id, k);
+                await this.deleteDoc(p, k);
             }
             if (!cur || !cur.dataUrl) {
-                const stored = await this.getDoc(p.id, k);
+                const stored = await this.getDoc(p, k);
                 if (stored && stored.uploaded && stored.dataUrl && !isFakeDummyPdf(stored.dataUrl)) {
                     p.documentos[k] = Object.assign({}, cur || {}, stored);
                     restoredAny = true;
@@ -16665,17 +16792,21 @@ window.DocStorage = {
                     const client = window.SUPABASE_CONFIG?.client;
                     if (client) {
                         try {
-                            const { data: rows } = await client.from('messages')
-                                .select('contenido')
-                                .eq('chat_id', `__doc_${p.id}_${k}__`)
-                                .order('created_at', { ascending: false })
-                                .limit(1);
-                            if (rows && rows.length > 0 && rows[0].contenido) {
-                                const fetched = JSON.parse(rows[0].contenido);
-                                if (fetched && fetched.dataUrl && !isFakeDummyPdf(fetched.dataUrl)) {
-                                    await this.saveDoc(p.id, k, fetched);
-                                    p.documentos[k] = Object.assign({}, cur || {}, fetched);
-                                    restoredAny = true;
+                            const candidateKeys = [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean);
+                            for (const cKey of candidateKeys) {
+                                const { data: rows } = await client.from('messages')
+                                    .select('contenido')
+                                    .eq('chat_id', `__doc_${cKey}_${k}__`)
+                                    .order('created_at', { ascending: false })
+                                    .limit(1);
+                                if (rows && rows.length > 0 && rows[0].contenido) {
+                                    const fetched = JSON.parse(rows[0].contenido);
+                                    if (fetched && fetched.dataUrl && !isFakeDummyPdf(fetched.dataUrl)) {
+                                        await this.saveDoc(p, k, fetched);
+                                        p.documentos[k] = Object.assign({}, cur || {}, fetched);
+                                        restoredAny = true;
+                                        break;
+                                    }
                                 }
                             }
                         } catch(e) {}
@@ -16813,14 +16944,25 @@ function renderDocumentosStatus(p) {
 
 function uploadDocItem(docKey) {
     window.uploadDocItem = uploadDocItem;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
-    if (!p) return;
+    const p = (typeof getActiveOperacionesProject === 'function')
+        ? getActiveOperacionesProject()
+        : ((appState.operacionesProyectos || []).find(x => x && (
+            x.id === appState.activeOperacionesProjectId ||
+            x.consecutivo === appState.activeOperacionesProjectId ||
+            x.numProyecto === appState.activeOperacionesProjectId
+        )) || appState.draftOperacionesProject);
+    if (!p) {
+        alert("No se encontró el proyecto activo para vincular el documento.");
+        return;
+    }
     if (!p.documentos) p.documentos = {};
 
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.pdf,.doc,.docx,.xls,.xlsx,.xml,.png,.jpg,.jpeg,application/pdf,image/*';
-    fileInput.style.display = 'none';
+    fileInput.style.position = 'fixed';
+    fileInput.style.top = '-10000px';
+    fileInput.style.opacity = '0';
 
     fileInput.onchange = function(e) {
         const file = e.target.files && e.target.files[0];
@@ -16851,26 +16993,30 @@ function uploadDocItem(docKey) {
                     appState._operacionesDetailSnapshot.documentos[docKey] = docData;
                 }
 
-                // 1. Guardar en bóveda IndexedDB (persistencia ilimitada local)
-                if (window.DocStorage && p.id) {
+                // 1. Guardar en bóveda local IndexedDB (sin límite de tamaño)
+                if (window.DocStorage) {
                     try {
-                        await window.DocStorage.saveDoc(p.id, docKey, docData);
+                        await window.DocStorage.saveDoc(p, docKey, docData);
                     } catch (eStorage) {}
                 }
 
-                // 2. Guardar en slot dedicado en Supabase garantizando persistencia universal
+                // 2. Guardar en slot dedicado en Firebase/Supabase (solo si < 800KB para respetar límite Firestore 1MB)
                 if (window.isSupabaseActive && window.isSupabaseActive()) {
                     const client = window.SUPABASE_CONFIG?.client;
                     if (client) {
                         try {
+                            const cloudDoc = (dataUrl && dataUrl.length < 800000)
+                                ? docData
+                                : Object.assign({}, docData, { dataUrl: '' });
+                            const targetId = p.id || p.consecutivo || p.numProyecto;
                             await client.from('messages').insert({
-                                chat_id: `__doc_${p.id}_${docKey}__`,
-                                contenido: JSON.stringify(docData),
+                                chat_id: `__doc_${targetId}_${docKey}__`,
+                                contenido: JSON.stringify(cloudDoc),
                                 emisor_nombre: appState.currentUser?.nombre || 'Expediente',
                                 emisor_role: 'documento'
                             });
                         } catch(eDoc) {
-                            console.warn("⚠️ Error saving doc slot to Supabase:", eDoc);
+                            console.warn("⚠️ Error saving doc slot to Cloud:", eDoc);
                         }
                     }
                 }
@@ -16882,7 +17028,7 @@ function uploadDocItem(docKey) {
                             type: 'broadcast',
                             event: 'document_ready',
                             payload: {
-                                projectId: p.id,
+                                projectId: p.id || p.consecutivo,
                                 docKey: docKey,
                                 fileName: docData.fileName
                             }
@@ -16890,7 +17036,7 @@ function uploadDocItem(docKey) {
                     } catch(eWs) {}
                 }
 
-                // 4. Guardar inmediatamente en localStorage y sincronizar a la nube
+                // 4. Guardar inmediatamente en almacenamiento local y sincronizar
                 if (typeof saveOperacionesStorage === 'function') {
                     saveOperacionesStorage();
                 }
@@ -16901,18 +17047,26 @@ function uploadDocItem(docKey) {
                 // 5. Actualizar interfaz
                 renderDocumentosStatus(p);
                 updateOperacionesDetailEditUI();
+
+                if (typeof showCustomNotification === 'function') {
+                    showCustomNotification(`Archivo "${file.name}" cargado y guardado correctamente.`, "success");
+                }
             };
             reader.readAsDataURL(file);
         }
+        cleanupFileInput();
     };
+
+    function cleanupFileInput() {
+        setTimeout(() => {
+            if (document.body.contains(fileInput)) {
+                document.body.removeChild(fileInput);
+            }
+        }, 500);
+    }
 
     document.body.appendChild(fileInput);
     fileInput.click();
-    setTimeout(() => {
-        if (document.body.contains(fileInput)) {
-            document.body.removeChild(fileInput);
-        }
-    }, 2000);
 }
 
 function dataUrlToBlob(dataUrl) {
@@ -16934,7 +17088,13 @@ function dataUrlToBlob(dataUrl) {
 
 async function viewDocItem(docKey) {
     window.viewDocItem = viewDocItem;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (typeof getActiveOperacionesProject === 'function')
+        ? getActiveOperacionesProject()
+        : ((appState.operacionesProyectos || []).find(x => x && (
+            x.id === appState.activeOperacionesProjectId ||
+            x.consecutivo === appState.activeOperacionesProjectId ||
+            x.numProyecto === appState.activeOperacionesProjectId
+        )));
     if (!p || !p.documentos || !p.documentos[docKey]) {
         alert("No se encontró el documento solicitado en el expediente.");
         return;
@@ -16943,20 +17103,21 @@ async function viewDocItem(docKey) {
 
     let dataUrl = doc.dataUrl;
     if (dataUrl && isFakeDummyPdf(dataUrl)) {
-        if (window.DocStorage && p.id) await window.DocStorage.deleteDoc(p.id, docKey);
+        if (window.DocStorage) await window.DocStorage.deleteDoc(p, docKey);
         doc.dataUrl = '';
         dataUrl = '';
     }
 
-    if (!dataUrl && window.DocStorage && p.id) {
-        const stored = await window.DocStorage.getDoc(p.id, docKey);
+    // 1. Buscar en IndexedDB local
+    if (!dataUrl && window.DocStorage) {
+        const stored = await window.DocStorage.getDoc(p, docKey);
         if (stored && stored.dataUrl && !isFakeDummyPdf(stored.dataUrl)) {
             dataUrl = stored.dataUrl;
             doc.dataUrl = dataUrl;
         }
     }
 
-    // 3. Si aún no está en memoria local, recuperar del slot dedicado en Supabase
+    // 2. Si no está en IndexedDB, recuperar de la nube (slot de mensajes)
     if (!dataUrl && window.isSupabaseActive && window.isSupabaseActive()) {
         const client = window.SUPABASE_CONFIG?.client;
         if (client) {
@@ -16964,18 +17125,22 @@ async function viewDocItem(docKey) {
                 if (typeof showCustomNotification === 'function') {
                     showCustomNotification("Recuperando documento auténtico de la nube...", "info");
                 }
-                const { data: docRows } = await client.from('messages')
-                    .select('contenido')
-                    .eq('chat_id', `__doc_${p.id}_${docKey}__`)
-                    .order('created_at', { ascending: false })
-                    .limit(1);
-                if (docRows && docRows.length > 0 && docRows[0].contenido) {
-                    const fetchedDoc = JSON.parse(docRows[0].contenido);
-                    if (fetchedDoc && fetchedDoc.dataUrl && !isFakeDummyPdf(fetchedDoc.dataUrl)) {
-                        dataUrl = fetchedDoc.dataUrl;
-                        doc.dataUrl = dataUrl;
-                        if (window.DocStorage && p.id) {
-                            await window.DocStorage.saveDoc(p.id, docKey, fetchedDoc);
+                const targetIds = [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean);
+                for (const tId of targetIds) {
+                    if (dataUrl) break;
+                    const { data: docRows } = await client.from('messages')
+                        .select('contenido')
+                        .eq('chat_id', `__doc_${tId}_${docKey}__`)
+                        .order('created_at', { ascending: false })
+                        .limit(1);
+                    if (docRows && docRows.length > 0 && docRows[0].contenido) {
+                        const fetchedDoc = JSON.parse(docRows[0].contenido);
+                        if (fetchedDoc && fetchedDoc.dataUrl && !isFakeDummyPdf(fetchedDoc.dataUrl)) {
+                            dataUrl = fetchedDoc.dataUrl;
+                            doc.dataUrl = dataUrl;
+                            if (window.DocStorage) {
+                                await window.DocStorage.saveDoc(p, docKey, fetchedDoc);
+                            }
                         }
                     }
                 }
@@ -16985,22 +17150,8 @@ async function viewDocItem(docKey) {
         }
     }
 
-    // 4. Si aún no está disponible, solicitar transmisión P2P por WebSockets al compañero
-    if (!dataUrl && window.chatRealtimeChannel) {
-        try {
-            window.chatRealtimeChannel.send({
-                type: 'broadcast',
-                event: 'request_document',
-                payload: {
-                    projectId: p.id,
-                    docKey: docKey
-                }
-            });
-        } catch(e) {}
-    }
-
     if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:') || isFakeDummyPdf(dataUrl)) {
-        alert(`El archivo original "${doc.fileName || docKey}" se está sincronizando entre dispositivos.\n\nSe ha solicitado la transferencia automática a tu compañero. Por favor reintenta dar clic en "Ver / Descargar" en unos segundos.\n\nTambién puedes cargarlo directamente pulsando "Subir / Vincular".`);
+        alert(`El archivo "${doc.fileName || docKey}" no tiene contenido binario guardado en este navegador.\n\nPuedes cargarlo directamente haciendo clic en "Subir / Vincular".`);
         return;
     }
 
@@ -17011,13 +17162,10 @@ async function viewDocItem(docKey) {
         return;
     }
 
+    // Descarga directa mediante Blob y etiqueta <a> para evitar bloqueos de ventanas emergentes del navegador
     const blobUrl = URL.createObjectURL(blob);
-
-    // 1. Abrir en pestaña nueva para visualización directa
-    const viewerWin = window.open(blobUrl, '_blank');
-
-    // 2. Ejecutar descarga simultánea para que el usuario guarde el archivo en su equipo
     const a = document.createElement('a');
+    a.style.display = 'none';
     a.href = blobUrl;
     a.download = fileName;
     document.body.appendChild(a);
@@ -17025,21 +17173,25 @@ async function viewDocItem(docKey) {
 
     setTimeout(() => {
         if (document.body.contains(a)) document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
-    }, 500);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    }, 1000);
 
-    if (!viewerWin || viewerWin.closed || typeof viewerWin.closed === 'undefined') {
-        if (typeof showCustomNotification === 'function') {
-            showCustomNotification(`Archivo "${fileName}" descargado con éxito.`, "info");
-        }
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification(`Descargando "${fileName}"...`, "success");
     }
 }
 
 async function deleteDocItem(docKey) {
     window.deleteDocItem = deleteDocItem;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
+    const p = (typeof getActiveOperacionesProject === 'function')
+        ? getActiveOperacionesProject()
+        : ((appState.operacionesProyectos || []).find(x => x && (
+            x.id === appState.activeOperacionesProjectId ||
+            x.consecutivo === appState.activeOperacionesProjectId ||
+            x.numProyecto === appState.activeOperacionesProjectId
+        )) || appState.draftOperacionesProject);
     if (!p || !p.documentos || !p.documentos[docKey]) return;
-    
+
     const docName = p.documentos[docKey].fileName || docKey;
     if (!confirm(`¿Estás seguro de desvincular el documento "${docName}"?`)) return;
 
@@ -17048,19 +17200,8 @@ async function deleteDocItem(docKey) {
         delete appState._operacionesDetailSnapshot.documentos[docKey];
     }
 
-    if (window.DocStorage && p.id) {
-        try {
-            await window.DocStorage.deleteDoc(p.id, docKey);
-        } catch(e) {}
-    }
-
-    if (window.isSupabaseActive && window.isSupabaseActive()) {
-        const client = window.SUPABASE_CONFIG?.client;
-        if (client) {
-            try {
-                await client.from('messages').delete().eq('chat_id', `__doc_${p.id}_${docKey}__`);
-            } catch(e) {}
-        }
+    if (window.DocStorage) {
+        await window.DocStorage.deleteDoc(p, docKey);
     }
 
     if (typeof saveOperacionesStorage === 'function') {
@@ -17072,6 +17213,10 @@ async function deleteDocItem(docKey) {
 
     renderDocumentosStatus(p);
     updateOperacionesDetailEditUI();
+
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification(`Documento "${docName}" desvinculado.`, "info");
+    }
 }
 
 function finishOperacionesWizard() {

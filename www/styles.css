@@ -7117,6 +7117,17 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     pointer-events: none !important;
 }
 
+.btn-op-force-unlock {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease;
+}
+
+.btn-op-force-unlock:hover {
+    background: #DC2626 !important;
+    transform: scale(1.05);
+}
+
 /* Modo Solo Lectura en el Detalle de Proyecto (hasta dar clic en 'Editar') */
 #operaciones-view-detail.op-detail-readonly .project-type-card,
 #operaciones-view-detail.op-detail-readonly .op-step-pane input,

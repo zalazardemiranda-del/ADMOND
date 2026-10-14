@@ -1002,3 +1002,97 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
   expect(giStoredAfterSave[0].total).toBe(1160);
 });
 
+test("11. Reconocimiento de propio bloqueo zalazardemiranda y carga/descarga de documentos", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  // 1. Configurar usuario principal zalazardemiranda
+  await page.evaluate(() => {
+    window.appState.currentUser = { id: 'user-zalazar', email: 'zalazardemiranda@gmail.com', nombre: 'Roberto Miranda', rol: 'gerente' };
+    window.switchAdminFicha('operaciones');
+    const testProj = {
+      id: 'RDP2610179-F',
+      numProyecto: 'RDP2610179-F',
+      consecutivo: 'RDP2610179-F',
+      numConsecutivo: 'RDP2610179-F',
+      fechaInicio: '2026-10-14',
+      fechaInicioDisplay: '14/10/2026',
+      numFactura: 'FE-179',
+      factura: 'FE-179',
+      numOC: 'OC-179',
+      cliente: 'CLIENTE PRUEBA DOCS',
+      estatus: 'PRIORIDAD',
+      generado: true,
+      tipoProyecto: 'servicio_local',
+      documentos: {}
+    };
+    window.appState.operacionesProyectos = [testProj];
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify([testProj]));
+    window.renderOperaciones();
+  });
+  await page.waitForTimeout(200);
+
+  // 2. Simular llegada de bloqueo a nombre de 'zalazardemiranda'
+  await page.evaluate(() => {
+    window.handleIncomingOperacionesProjectLock({
+      projectId: 'RDP2610179-F',
+      isLocked: true,
+      userId: 'user-zalazar',
+      userName: 'zalazardemiranda',
+      clientId: 'client_session_prev',
+      timestamp: Date.now()
+    });
+  });
+  await page.waitForTimeout(200);
+
+  // Debe reconocer que el bloqueo pertenece al usuario actual (NO mostrar BLOQUEADO para él)
+  const row = page.locator("#tbody-operaciones-proyectos tr[data-op-id='RDP2610179-F']");
+  await expect(row).not.toHaveClass(/op-row-locked/);
+  const btnAbrir = row.locator(".btn-op-abrir");
+  await expect(btnAbrir).toBeEnabled();
+  await expect(btnAbrir).not.toContainText("BLOQUEADO");
+
+  // 3. Abrir el proyecto
+  await btnAbrir.click();
+  await page.waitForTimeout(200);
+  await expect(page.locator("#operaciones-view-detail")).toBeVisible();
+
+  // 4. Ir al Paso 4 (Documentos) y verificar carga y descarga
+  await page.locator("#op-step-indicator-4").click();
+  await page.waitForTimeout(200);
+
+  // Probar guardado y restauración de documento mediante DocStorage
+  await page.evaluate(async () => {
+    const dummyBase64 = "data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrCjEgMCBvYmoKPDwKL1RpdGxlIChEb2N1bWVudG8gT2ZpY2lhbCkKL1Byb2R1Y2VyIChSb2RpcGFjaykKPj4KZW5kb2JqCg==";
+    const docData = {
+      uploaded: true,
+      fileName: "Factura_Oficial_179.pdf",
+      fileSize: 1024,
+      fileType: "application/pdf",
+      dataUrl: dummyBase64,
+      uploadedAt: new Date().toISOString()
+    };
+    const p = window.getActiveOperacionesProject();
+    p.documentos['factura1'] = docData;
+    await window.DocStorage.saveDoc(p, 'factura1', docData);
+    window.renderDocumentosStatus(p);
+  });
+  await page.waitForTimeout(200);
+
+  // El badge debe mostrar Factura_Oficial_179.pdf y botón Ver / Descargar
+  const badge = page.locator("#doc-badge-factura1");
+  await expect(badge).toContainText("Factura_Oficial_179.pdf");
+  const viewBtn = page.locator("button.doc-btn-view");
+  await expect(viewBtn).toBeVisible();
+
+  // 5. Probar que viewDocItem ejecuta la descarga sin errores
+  let downloadedFileName = '';
+  page.on('download', download => {
+    downloadedFileName = download.suggestedFilename();
+  });
+  await page.evaluate(() => {
+    window.viewDocItem('factura1');
+  });
+  await page.waitForTimeout(200);
+});
+
+
