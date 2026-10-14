@@ -13889,8 +13889,13 @@ function syncOperacionesDetailReadonlyDOM(isReadonly) {
 
     const controls = detailPane.querySelectorAll(".op-step-pane input, .op-step-pane select, .op-step-pane textarea");
     controls.forEach(el => {
-        if (el.id === "op-step1-lavado-total" || el.id === "op-step1-consecutivo-num") {
+        if (el.id === "op-step1-lavado-total") {
             el.readOnly = true;
+            return;
+        }
+        if (el.id === "op-step1-consecutivo-num") {
+            el.readOnly = Boolean(isReadonly);
+            el.disabled = false;
             return;
         }
         el.disabled = Boolean(isReadonly);
@@ -16808,8 +16813,7 @@ function renderDocumentosStatus(p) {
 
 function uploadDocItem(docKey) {
     window.uploadDocItem = uploadDocItem;
-    if (!appState.isEditingOperacionesDetail) return;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p) return;
     if (!p.documentos) p.documentos = {};
 
@@ -16842,10 +16846,16 @@ function uploadDocItem(docKey) {
                 };
 
                 p.documentos[docKey] = docData;
+                if (appState._operacionesDetailSnapshot) {
+                    if (!appState._operacionesDetailSnapshot.documentos) appState._operacionesDetailSnapshot.documentos = {};
+                    appState._operacionesDetailSnapshot.documentos[docKey] = docData;
+                }
 
                 // 1. Guardar en bóveda IndexedDB (persistencia ilimitada local)
                 if (window.DocStorage && p.id) {
-                    await window.DocStorage.saveDoc(p.id, docKey, docData);
+                    try {
+                        await window.DocStorage.saveDoc(p.id, docKey, docData);
+                    } catch (eStorage) {}
                 }
 
                 // 2. Guardar en slot dedicado en Supabase garantizando persistencia universal
@@ -16880,7 +16890,15 @@ function uploadDocItem(docKey) {
                     } catch(eWs) {}
                 }
 
-                // 4. Actualizar interfaz (se persiste al expediente cuando el usuario da clic en "Guardar")
+                // 4. Guardar inmediatamente en localStorage y sincronizar a la nube
+                if (typeof saveOperacionesStorage === 'function') {
+                    saveOperacionesStorage();
+                }
+                if (typeof syncOperacionesToCloud === 'function') {
+                    syncOperacionesToCloud(true);
+                }
+
+                // 5. Actualizar interfaz
                 renderDocumentosStatus(p);
                 updateOperacionesDetailEditUI();
             };
@@ -17019,17 +17037,21 @@ async function viewDocItem(docKey) {
 
 async function deleteDocItem(docKey) {
     window.deleteDocItem = deleteDocItem;
-    if (!appState.isEditingOperacionesDetail) return;
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (!p || !p.documentos || !p.documentos[docKey]) return;
     
     const docName = p.documentos[docKey].fileName || docKey;
     if (!confirm(`¿Estás seguro de desvincular el documento "${docName}"?`)) return;
 
     delete p.documentos[docKey];
+    if (appState._operacionesDetailSnapshot && appState._operacionesDetailSnapshot.documentos) {
+        delete appState._operacionesDetailSnapshot.documentos[docKey];
+    }
 
     if (window.DocStorage && p.id) {
-        await window.DocStorage.deleteDoc(p.id, docKey);
+        try {
+            await window.DocStorage.deleteDoc(p.id, docKey);
+        } catch(e) {}
     }
 
     if (window.isSupabaseActive && window.isSupabaseActive()) {
@@ -17039,6 +17061,13 @@ async function deleteDocItem(docKey) {
                 await client.from('messages').delete().eq('chat_id', `__doc_${p.id}_${docKey}__`);
             } catch(e) {}
         }
+    }
+
+    if (typeof saveOperacionesStorage === 'function') {
+        saveOperacionesStorage();
+    }
+    if (typeof syncOperacionesToCloud === 'function') {
+        syncOperacionesToCloud(true);
     }
 
     renderDocumentosStatus(p);
