@@ -1030,6 +1030,12 @@ function switchTab(tabName) {
     } else if (tabName === 'administracion') {
         titleEl.innerText = "Administración General";
         subtitleEl.innerText = "Control financiero, estadísticas por departamento, nóminas quincenales y proveedores";
+        if (isGerente || isAdmin) {
+            const adminWs = document.getElementById("administracion-manager-workspace");
+            const adminLock = document.getElementById("administracion-lock-screen");
+            if (adminWs) adminWs.style.display = "block";
+            if (adminLock) adminLock.style.display = "none";
+        }
         if (!window._isBootstrappingApp) {
             renderAdministracion();
         }
