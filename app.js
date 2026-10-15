@@ -1205,9 +1205,9 @@ function switchTab(tabName) {
     if (typeof enforceAuthenticationGuard === 'function' && !enforceAuthenticationGuard()) {
         return;
     }
-    // Redirigir emails a schema
-    if (tabName === 'emails') {
-        tabName = 'schema';
+    // Redirigir pestañas obsoletas o eliminadas
+    if (tabName === 'emails' || tabName === 'schema' || tabName === 'chat') {
+        tabName = 'tasks';
     }
 
     const r = (appState.currentRole || '').toLowerCase();
