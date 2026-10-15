@@ -10,10 +10,6 @@ const { test, expect } = require("@playwright/test");
 const fs = require("fs");
 const path = require("path");
 
-const supabaseUmd = fs.readFileSync(
-  path.resolve(__dirname, "..", "node_modules", "@supabase", "supabase-js", "dist", "umd", "supabase.js"),
-  "utf8"
-);
 const firebaseMock = fs.readFileSync(
   path.resolve(__dirname, "firebase-mock.js"),
   "utf8"
@@ -42,9 +38,6 @@ async function mockNetwork(page, requests = []) {
   await page.route("**/*", async (route) => {
     const url = route.request().url();
     if (url.startsWith("http://localhost")) return route.continue();
-    if (url.includes("cdn.jsdelivr.net/npm/@supabase/supabase-js")) {
-      return route.fulfill({ contentType: "text/javascript", body: supabaseUmd });
-    }
     if (url.includes("cdn.jsdelivr.net/npm/chart.js")) {
       return route.fulfill({
         contentType: "text/javascript",
@@ -57,7 +50,7 @@ async function mockNetwork(page, requests = []) {
         body: firebaseMock,
       });
     }
-    if (url.includes(".supabase.co")) {
+    if (url.includes(".supabase.co") || url.includes("firebaseapp.com/api")) {
       requests.push({ method: route.request().method(), url, body: route.request().postData() });
       const isGet = route.request().method() === "GET";
       if (url.includes("/auth/v1/")) return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
