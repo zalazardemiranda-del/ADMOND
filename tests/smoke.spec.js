@@ -3,10 +3,6 @@ const { test, expect } = require("@playwright/test");
 const fs = require("fs");
 const path = require("path");
 
-const supabaseUmd = fs.readFileSync(
-  path.resolve(__dirname, "..", "node_modules", "@supabase", "supabase-js", "dist", "umd", "supabase.js"),
-  "utf8"
-);
 const firebaseMock = fs.readFileSync(
   path.resolve(__dirname, "firebase-mock.js"),
   "utf8"
@@ -16,7 +12,7 @@ async function mockNetwork(page, requests) {
   await page.addInitScript(() => {
     const OrigWS = window.WebSocket;
     window.WebSocket = function (url, protocols) {
-      if (url && String(url).includes("supabase.co")) {
+      if (url && (String(url).includes("supabase.co") || String(url).includes("firebase"))) {
         return {
           readyState: 1,
           send() {},
@@ -35,9 +31,6 @@ async function mockNetwork(page, requests) {
   await page.route("**/*", async (route) => {
     const url = route.request().url();
     if (url.startsWith("http://localhost")) return route.continue();
-    if (url.includes("cdn.jsdelivr.net/npm/@supabase/supabase-js")) {
-      return route.fulfill({ contentType: "text/javascript", body: supabaseUmd });
-    }
     if (url.includes("cdn.jsdelivr.net/npm/chart.js")) {
       return route.fulfill({
         contentType: "text/javascript",
@@ -50,7 +43,7 @@ async function mockNetwork(page, requests) {
         body: firebaseMock,
       });
     }
-    if (url.includes(".supabase.co")) {
+    if (url.includes(".supabase.co") || url.includes("firebaseapp.com/api")) {
       requests.push({ method: route.request().method(), url, body: route.request().postData() });
       const isGet = route.request().method() === "GET";
       if (url.includes("/auth/v1/")) return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
@@ -105,7 +98,7 @@ test("syncOperacionesToCloud no lanza ReferenceError y guarda el snapshot en la 
   expect(result).toBe("ok");
   await page.waitForTimeout(800);
   const snapshot = requests.find(
-    (r) => r.method === "POST" && r.url.includes("/rest/v1/messages") && (r.body || "").includes("__cloud_sync_operaciones__")
+    (r) => r.method === "POST" && (r.url.includes("/messages") || r.url.includes("/rest/v1/messages")) && (r.body || "").includes("__cloud_sync_operaciones__")
   );
   expect(snapshot, "no se envio el snapshot de operaciones").toBeTruthy();
   expect(errors).toEqual([]);
@@ -114,7 +107,7 @@ test("syncOperacionesToCloud no lanza ReferenceError y guarda el snapshot en la 
 test("el chat se carga excluyendo filas internas y pidiendo las mas recientes (limite 1000)", async ({ page }) => {
   const requests = [];
   await openApp(page, requests);
-  const msgReq = requests.find((r) => r.method === "GET" && r.url.includes("/rest/v1/messages?select=*") && r.url.includes("limit=1000"));
+  const msgReq = requests.find((r) => r.method === "GET" && (r.url.includes("/messages?select=*") || r.url.includes("/rest/v1/messages?select=*")) && r.url.includes("limit=1000"));
   expect(msgReq, "no se consulto messages").toBeTruthy();
   expect(decodeURIComponent(msgReq.url)).toContain("chat_id=not.like.\\_\\_%");
   expect(msgReq.url).toContain("order=created_at.desc");
@@ -130,6 +123,6 @@ test("el borrado de un expediente envia el DELETE a la nube", async ({ page }) =
     window.eliminarProyectoOperaciones("RDP-TEST-1");
   });
   await page.waitForTimeout(800);
-  const del = requests.find((r) => r.method === "DELETE" && r.url.includes("/rest/v1/operaciones"));
+  const del = requests.find((r) => r.method === "DELETE" && (r.url.includes("/operaciones") || r.url.includes("/rest/v1/operaciones")));
   expect(del, "no se envio DELETE a operaciones").toBeTruthy();
 });

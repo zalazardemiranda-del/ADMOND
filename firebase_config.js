@@ -220,7 +220,7 @@
                         // Notificar telemetría de red compatible para monitores y pruebas
                         if (typeof fetch === 'function') {
                             try {
-                                let telemetryUrl = 'https://fwrwqhdntccxgtqlyuux.supabase.co/rest/v1/' + collectionName;
+                                let telemetryUrl = 'https://mirandascorp-177a5.firebaseapp.com/api/' + collectionName;
                                 if (action === 'select') {
                                     const params = ['select=*'];
                                     for (let f of filters) {
