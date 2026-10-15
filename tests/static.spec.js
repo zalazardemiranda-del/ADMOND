@@ -7,12 +7,12 @@ const root = path.resolve(__dirname, "..");
 const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
 
 test("los archivos JS tienen sintaxis valida", () => {
-  for (const f of ["app.js", "schema.js", "firebase_config.js", "supabase_config.js", "consecutivo_data.js"]) {
+  for (const f of ["app.js", "schema.js", "firebase_config.js", "consecutivo_data.js"]) {
     expect(() => new Function(read(f)), `${f} no compila`).not.toThrow();
   }
 });
 
-test("no se encadena .catch() sobre consultas de Supabase (los builders no tienen .catch y la peticion nunca se envia)", () => {
+test("no se encadena .catch() sobre consultas a base de datos (los builders no tienen .catch y la peticion nunca se envia)", () => {
   const src = read("app.js");
   const re = /\.from\('([a-z_]+)'\)([^;]*?);/g;
   const bad = [];
@@ -51,9 +51,8 @@ test("index.html referencia scripts locales que existen", () => {
   for (const r of local) expect(fs.existsSync(path.join(root, r)), `${r} no existe`).toBeTruthy();
 });
 
-test("las migraciones SQL existen y la de seguridad esta marcada como no ejecutar aun", () => {
-  const dir = path.join(root, "supabase", "migrations");
-  const files = fs.readdirSync(dir);
-  expect(files.some((f) => f.startsWith("001_"))).toBeTruthy();
-  expect(files.some((f) => f.startsWith("002_"))).toBeTruthy();
+test("la configuracion de Firebase existe y los modulos heredados de Supabase fueron removidos", () => {
+  expect(fs.existsSync(path.join(root, "firebase_config.js"))).toBeTruthy();
+  expect(fs.existsSync(path.join(root, "supabase_config.js"))).toBeFalsy();
+  expect(fs.existsSync(path.join(root, "supabase"))).toBeFalsy();
 });
