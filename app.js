@@ -8155,18 +8155,24 @@ async function handleUserSession(user) {
             if (rawStored) localLoggedUser = JSON.parse(rawStored);
         } catch (e) {}
 
+        let localProfileMatch = null;
+        try {
+            const allLocal = JSON.parse(localStorage.getItem('rp_local_profiles') || '[]');
+            localProfileMatch = allLocal.find(p => p.email && p.email.toLowerCase() === userEmail);
+        } catch (e) {}
+
         const emailPrefix = userEmail ? userEmail.split('@')[0] : '';
-        const fallbackDefaultName = (userEmail === 'diego@rodipack.com') ? 'Diego Miranda' : (emailPrefix || 'Usuario');
+        const fallbackDefaultName = (userEmail === 'diego@rodipack.com') ? 'Diego Miranda' : (localProfileMatch?.nombre || emailPrefix || 'Usuario');
 
         if (!profile) {
             // Profile fallback
             profile = {
                 id: user.id,
                 email: user.email,
-                nombre: savedCustomName || localLoggedUser?.nombre || user.displayName || user.user_metadata?.nombre || fallbackDefaultName,
-                telefono: savedCustomPhone || localLoggedUser?.telefono || '',
-                rol: user.user_metadata?.rol || localLoggedUser?.rol || (userEmail === 'diego@rodipack.com' ? 'administrativo' : 'gerente'),
-                departamento: user.user_metadata?.departamento || localLoggedUser?.departamento || 'Administración'
+                nombre: savedCustomName || localProfileMatch?.nombre || localLoggedUser?.nombre || user.displayName || user.user_metadata?.nombre || fallbackDefaultName,
+                telefono: savedCustomPhone || localProfileMatch?.telefono || localLoggedUser?.telefono || '',
+                rol: localProfileMatch?.rol || user.user_metadata?.rol || localLoggedUser?.rol || (userEmail === 'diego@rodipack.com' ? 'administrativo' : 'gerente'),
+                departamento: localProfileMatch?.departamento || user.user_metadata?.departamento || localLoggedUser?.departamento || 'Administración'
             };
         } else {
             // Si el perfil remoto tiene el nombre vacío o coincide exactamente con el prefijo plano del email ("zalazardemiranda")
@@ -9669,6 +9675,21 @@ async function handleFirebaseRegister(event) {
                     data: { nombre, rol, departamento: depto }
                 }
             });
+            if (signUpRes && signUpRes.error) {
+                let userMsg = signUpRes.error.message || "Error al registrar en Firebase";
+                if (userMsg.includes("ADMIN_ONLY_OPERATION") || signUpRes.error.code === 'auth/admin-restricted-operation') {
+                    userMsg = "Firebase tiene deshabilitado el autoregistro (ADMIN_ONLY_OPERATION). Para habilitar el acceso a este usuario, créalo en la consola de Firebase con el botón 'Agregar usuario' o activa 'Permitir a los usuarios crear cuentas' en la pestaña Configuración de Firebase Authentication.";
+                } else if (userMsg.includes("email-already-in-use")) {
+                    userMsg = "Este correo electrónico ya está registrado en Firebase.";
+                } else if (userMsg.includes("weak-password")) {
+                    userMsg = "La contraseña debe tener al menos 6 caracteres.";
+                }
+                if (errorEl) {
+                    errorEl.innerText = userMsg;
+                    errorEl.style.display = "block";
+                }
+                return;
+            }
             if (signUpRes && signUpRes.data && signUpRes.data.user && signUpRes.data.user.id) {
                 newId = signUpRes.data.user.id;
                 newProfileObj.id = newId;

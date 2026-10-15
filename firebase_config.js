@@ -425,8 +425,28 @@
                     const password = credentials ? credentials.password : '';
                     const metadata = credentials && credentials.options ? credentials.options.data : {};
                     if (auth && typeof auth.createUserWithEmailAndPassword === 'function') {
+                        let secondaryApp = null;
+                        let targetAuth = auth;
+                        if (window.firebase && typeof window.firebase.initializeApp === 'function') {
+                            try {
+                                secondaryApp = window.firebase.initializeApp({
+                                    apiKey: window.FIREBASE_CONFIG.apiKey,
+                                    authDomain: window.FIREBASE_CONFIG.authDomain,
+                                    projectId: window.FIREBASE_CONFIG.projectId,
+                                    storageBucket: window.FIREBASE_CONFIG.storageBucket,
+                                    messagingSenderId: window.FIREBASE_CONFIG.messagingSenderId,
+                                    appId: window.FIREBASE_CONFIG.appId
+                                }, 'SecondaryApp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4));
+                                targetAuth = secondaryApp.auth();
+                            } catch (e) {
+                                targetAuth = auth;
+                            }
+                        }
                         try {
-                            const res = await auth.createUserWithEmailAndPassword(email, password);
+                            const res = await targetAuth.createUserWithEmailAndPassword(email, password);
+                            if (secondaryApp) {
+                                try { await secondaryApp.delete(); } catch (e) {}
+                            }
                             const user = res.user;
                             const profile = Object.assign({
                                 id: user.uid,
@@ -440,6 +460,9 @@
                             }
                             return { data: { user: user }, error: null };
                         } catch (err) {
+                            if (secondaryApp) {
+                                try { await secondaryApp.delete(); } catch (e) {}
+                            }
                             return { data: { user: null }, error: { message: err.message, code: err.code } };
                         }
                     }
