@@ -904,14 +904,15 @@ function updateUserSessionUI() {
         const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
         const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
 
-        if (userNameEl) userNameEl.innerText = u.nombre || u.email;
+        const realName = u.nombre || (u.email ? u.email.split('@')[0] : 'Usuario');
+        if (userNameEl) userNameEl.innerText = realName;
         if (userRoleEl) {
-            if (isGerente) userRoleEl.innerText = 'Gerente / Director';
-            else if (isAdmin) userRoleEl.innerText = 'Administrativo (Finanzas & Nómina)';
-            else userRoleEl.innerText = `Colaborador (${u.departamento || 'Equipo'})`;
+            if (isGerente) userRoleEl.innerText = 'Rango: Gerente / Director';
+            else if (isAdmin) userRoleEl.innerText = 'Rango: Administrativo';
+            else userRoleEl.innerText = `Rango: Colaborador (${u.departamento || 'Operaciones'})`;
         }
         if (userAvatarEl) {
-            const initial = (u.nombre || u.email || 'G').charAt(0).toUpperCase();
+            const initial = realName.charAt(0).toUpperCase();
             const avatarColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
             userAvatarEl.innerText = initial;
             userAvatarEl.style.borderColor = avatarColor;
@@ -920,14 +921,13 @@ function updateUserSessionUI() {
         if (authNavIcon) authNavIcon.innerText = "logout";
         if (authNavLabel) authNavLabel.innerText = "Cerrar Sesión";
     } else {
-        // Adaptar avatar y texto de sesión según el rol activo actual si no hay currentUser explícito
         const r = (appState.currentRole || '').toLowerCase();
         const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
         const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
         
-        const roleName = isGerente ? 'Gerente Principal' : (isAdmin ? 'Administrativo' : 'Perfil Colaborador');
-        const roleLabel = isGerente ? 'Gerente / Director' : (isAdmin ? 'Administrativo (Finanzas)' : 'Colaborador (Operaciones)');
-        const avatarLetter = isGerente ? 'G' : (isAdmin ? 'A' : 'C');
+        const roleName = 'Sin sesión';
+        const roleLabel = isGerente ? 'Rango: Gerente / Director' : (isAdmin ? 'Rango: Administrativo' : 'Rango: Colaborador');
+        const avatarLetter = '?';
         const avatarColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
 
         if (userNameEl) userNameEl.innerText = roleName;
@@ -1205,9 +1205,9 @@ function switchTab(tabName) {
     if (typeof enforceAuthenticationGuard === 'function' && !enforceAuthenticationGuard()) {
         return;
     }
-    // Redirigir emails a schema
-    if (tabName === 'emails') {
-        tabName = 'schema';
+    // Redirigir pestañas obsoletas o eliminadas
+    if (tabName === 'emails' || tabName === 'schema' || tabName === 'chat') {
+        tabName = 'tasks';
     }
 
     const r = (appState.currentRole || '').toLowerCase();
@@ -5092,7 +5092,7 @@ function getCurrentUserActive() {
         } catch (e) {}
     }
     return {
-        nombre: typeof getUserCorporateName === 'function' ? getUserCorporateName() : (appState.currentRole === 'gerente' ? 'Gerente Principal' : 'Colaborador'),
+        nombre: typeof getUserCorporateName === 'function' ? getUserCorporateName() : (appState.currentRole === 'gerente' ? 'Gerente' : 'Colaborador'),
         email: typeof getUserCorporateEmail === 'function' ? getUserCorporateEmail() : (appState.currentRole === 'gerente' ? 'gerencia@rodipack.online' : 'operaciones@rodipack.online'),
         rol: appState.currentRole
     };
@@ -7645,7 +7645,7 @@ function getAvailableAssignees() {
         if (current.email) seenEmails.add(current.email.toLowerCase().trim());
         if (selfName) seenNames.add(selfName.toLowerCase().trim());
     } else {
-        const defaultName = appState.currentRole === 'gerente' ? 'Gerente Principal' : 'Colaborador';
+        const defaultName = appState.currentUser?.nombre || (appState.currentRole === 'gerente' ? 'Gerente' : 'Colaborador');
         list.push({
             id: 'self-user',
             nombre: defaultName,
@@ -8150,7 +8150,7 @@ async function handleUserSession(user) {
         } catch (e) {}
 
         const emailPrefix = userEmail ? userEmail.split('@')[0] : '';
-        const fallbackDefaultName = (userEmail === 'diego@rodipack.com') ? 'Diego Miranda' : 'Gerente Principal';
+        const fallbackDefaultName = (userEmail === 'diego@rodipack.com') ? 'Diego Miranda' : (emailPrefix || 'Usuario');
 
         if (!profile) {
             // Profile fallback
@@ -9340,40 +9340,24 @@ async function loadProfilesList() {
     window.loadProfilesList = loadProfilesList;
     const container = document.getElementById("profiles-list-container");
     
-    const defaultProfiles = [
-        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO" },
-        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT" },
-        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas" },
-        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración" }
-    ];
-    
     let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-    // Limpiar perfiles temporales o inventados
+    const deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
+
+    // Filtrar perfiles eliminados y no deseados
     localProfiles = localProfiles.filter(p => {
         if (!p || !p.email) return false;
         const e = p.email.toLowerCase();
-        return e !== 'jennifer@rodipack.online' && e !== 'diego.miranda@rodipack.com';
-    });
-
-    defaultProfiles.forEach(dp => {
-        const idx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === dp.email.toLowerCase());
-        if (idx === -1) {
-            localProfiles.push(dp);
-        } else {
-            if (!localProfiles[idx].nombre) localProfiles[idx].nombre = dp.nombre;
-            if (!localProfiles[idx].departamento) localProfiles[idx].departamento = dp.departamento;
-            if (dp.email.toLowerCase() === 'diego@rodipack.com') {
-                localProfiles[idx].rol = 'administrativo';
-            }
-        }
+        if (e === 'jennifer@rodipack.online' || e === 'diego.miranda@rodipack.com') return false;
+        if (deletedProfiles.includes(e)) return false;
+        return true;
     });
     localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
     
     let mergedProfiles = [...localProfiles];
     
-    if (window.isSupabaseActive()) {
+    if (window.isFirebaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG.client;
+            const client = window.FIREBASE_CONFIG.client;
             const { data: dbProfiles, error } = await client
                 .from('profiles')
                 .select('*')
@@ -9383,7 +9367,9 @@ async function loadProfilesList() {
                 const cleanDbProfiles = dbProfiles.filter(p => {
                     if (!p || !p.email) return false;
                     const e = p.email.toLowerCase();
-                    return e !== 'jennifer@rodipack.online' && e !== 'diego.miranda@rodipack.com';
+                    if (e === 'jennifer@rodipack.online' || e === 'diego.miranda@rodipack.com') return false;
+                    if (deletedProfiles.includes(e)) return false;
+                    return true;
                 });
                 mergedProfiles = [...cleanDbProfiles];
                 localProfiles.forEach(lp => {
@@ -9393,7 +9379,7 @@ async function loadProfilesList() {
                 });
             }
         } catch (err) {
-            console.warn("Error loading profiles from Supabase:", err);
+            console.warn("Error loading profiles from Firebase:", err);
         }
     }
     
@@ -9419,9 +9405,8 @@ async function loadProfilesList() {
             const r = (p.rol || '').toLowerCase();
             const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
             const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
-            const isMainGerente = (p.email || '').toLowerCase() === 'zalazardemiranda@gmail.com';
             
-            const roleColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#475569');
+            const roleColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
             const roleBg = isGerente ? 'rgba(37, 99, 235, 0.1)' : (isAdmin ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)');
             const roleLabel = isGerente ? 'Manager' : (isAdmin ? 'Administrativo' : 'Colaborador');
 
@@ -9431,7 +9416,7 @@ async function loadProfilesList() {
                 </button>
             `;
 
-            const deleteBtnHtml = isMainGerente ? '' : `
+            const deleteBtnHtml = `
                 <button type="button" onclick="handleDeleteProfile('${p.email}', '${(p.nombre || '').replace(/'/g, "\\'")}')" style="background: #FEF2F2; border: 1px solid #FCA5A5; color: #EF4444; border-radius: 8px; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; margin-left: 4px;" title="Eliminar Perfil de ${p.nombre || p.email}">
                     <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
                 </button>
@@ -9629,14 +9614,15 @@ async function handleFirebaseRegister(event) {
     let newId = generateUUID();
     const newProfileObj = { id: newId, nombre, email, rol, departamento: depto, password };
 
-    // 1. Guardar localmente siempre
-    const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [
-        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO" },
-        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT" },
-        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas" },
-        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración" }
-    ];
-    const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === email.toLowerCase());
+    // 1. Desmarcar de eliminados si se vuelve a dar de alta
+    const emailLower = email.toLowerCase();
+    let deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
+    deletedProfiles = deletedProfiles.filter(e => e !== emailLower);
+    localStorage.setItem('rp_deleted_profiles', JSON.stringify(deletedProfiles));
+
+    // 2. Guardar localmente
+    const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
+    const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
     if (existingIdx >= 0) {
         localProfiles[existingIdx] = { ...localProfiles[existingIdx], ...newProfileObj };
     } else {
@@ -9644,12 +9630,14 @@ async function handleFirebaseRegister(event) {
     }
     localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
 
-    if (!window.isSupabaseActive()) {
+    const regForm = document.getElementById("form-firebase-register") || document.getElementById("form-supabase-register");
+
+    if (!window.isFirebaseActive()) {
         if (successEl) {
             successEl.innerText = `¡Perfil de "${nombre}" (${email}) registrado exitosamente!`;
             successEl.style.display = "block";
         }
-        document.getElementById("form-supabase-register").reset();
+        if (regForm) regForm.reset();
         loadProfilesList();
         setTimeout(() => { toggleNewUserForm(); }, 1200);
         return;
@@ -9659,7 +9647,7 @@ async function handleFirebaseRegister(event) {
     btnSubmit.innerHTML = "<span class='material-symbols-outlined'>hourglass_empty</span> Guardando...";
     
     try {
-        const client = window.SUPABASE_CONFIG.client;
+        const client = window.FIREBASE_CONFIG.client;
         
         try {
             const signUpRes = await client.auth.signUp({
@@ -9673,14 +9661,14 @@ async function handleFirebaseRegister(event) {
                 newId = signUpRes.data.user.id;
                 newProfileObj.id = newId;
                 const updatedLocal = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-                const idx = updatedLocal.findIndex(p => p.email && p.email.toLowerCase() === email.toLowerCase());
+                const idx = updatedLocal.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
                 if (idx >= 0) {
                     updatedLocal[idx].id = newId;
                     localStorage.setItem('rp_local_profiles', JSON.stringify(updatedLocal));
                 }
             }
         } catch (e) {
-            console.warn("Supabase signUp warning:", e);
+            console.warn("Firebase signUp warning:", e);
         }
 
         try {
@@ -9700,7 +9688,7 @@ async function handleFirebaseRegister(event) {
             successEl.innerText = `¡Perfil de "${nombre}" (${email}) registrado y habilitado exitosamente!`;
             successEl.style.display = "block";
         }
-        document.getElementById("form-supabase-register").reset();
+        if (regForm) regForm.reset();
         loadProfilesList();
         setTimeout(() => {
             toggleNewUserForm();
@@ -9746,17 +9734,33 @@ async function handleDeleteProfile(email, nombre) {
     const confirmDelete = confirm(`¿Estás seguro de que deseas eliminar el perfil de "${targetName}" del sistema?`);
     if (!confirmDelete) return;
 
+    const emailLower = email.toLowerCase();
     let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-    localProfiles = localProfiles.filter(p => p.email && p.email.toLowerCase() !== email.toLowerCase());
+    localProfiles = localProfiles.filter(p => p.email && p.email.toLowerCase() !== emailLower);
     localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
 
-    if (window.isSupabaseActive()) {
+    // Registrar en eliminados para evitar que vuelva a aparecer de cachés residuales
+    let deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
+    if (!deletedProfiles.includes(emailLower)) {
+        deletedProfiles.push(emailLower);
+        localStorage.setItem('rp_deleted_profiles', JSON.stringify(deletedProfiles));
+    }
+
+    if (window.isFirebaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG.client;
+            const client = window.FIREBASE_CONFIG.client;
             await client.from('profiles').delete().eq('email', email);
+            if (window.FIREBASE_CONFIG.db) {
+                const snap = await window.FIREBASE_CONFIG.db.collection('profiles').where('email', '==', email).get();
+                snap.forEach(doc => doc.ref.delete());
+            }
         } catch (e) {
-            console.warn("Supabase profile deletion warning:", e);
+            console.warn("Firebase profile deletion warning:", e);
         }
+    }
+
+    if (window.cachedProfilesList) {
+        window.cachedProfilesList = window.cachedProfilesList.filter(p => (p.email || '').toLowerCase() !== emailLower);
     }
 
     loadProfilesList();
@@ -9979,11 +9983,11 @@ async function handleGlobalLoginSubmit(event) {
                 return;
             }
 
-            const isManager = (roleSelect === 'gerente' || email.toLowerCase() === 'zalazardemiranda@gmail.com' || (matchedProfile && matchedProfile.rol === 'gerente'));
+            const isManager = (roleSelect === 'gerente' || (matchedProfile && matchedProfile.rol === 'gerente'));
             const userObj = {
                 id: matchedProfile?.id || (isDiego ? 'usr-diego-miranda' : `usr-${Date.now()}`),
-                email: email || 'zalazardemiranda@gmail.com',
-                nombre: isDiego ? 'Diego Miranda' : (matchedProfile?.nombre || (isManager ? 'Gerente' : 'Colaborador')),
+                email: email,
+                nombre: isDiego ? 'Diego Miranda' : (matchedProfile?.nombre || (email ? email.split('@')[0] : 'Usuario')),
                 rol: isDiego ? 'administrativo' : (matchedProfile?.rol || (isManager ? 'gerente' : 'colaborador')),
                 departamento: isDiego ? 'Administración' : (matchedProfile?.departamento || 'Operaciones'),
                 password: password || ''
@@ -10138,7 +10142,7 @@ function verifyEmailResetCode() {
         document.getElementById("reset-step-2").style.display = "block";
         
         const phoneInput = document.getElementById("myprofile-edit-phone");
-        const userPhone = (phoneInput && phoneInput.value) ? phoneInput.value : "+52 55 1234 5678";
+        const userPhone = (phoneInput && phoneInput.value && phoneInput.value.trim()) ? phoneInput.value.trim() : "tu número registrado";
         
         const smsNotice = document.getElementById("reset-sms-notice");
         if (smsNotice) {
@@ -10395,23 +10399,26 @@ function updateUserProfileUI() {
         }
     }
 
-    const defaultName = isAuth ? (appState.currentRole === 'gerente' ? "Gerente Principal" : "Colaborador") : "Iniciar Sesión";
-    const defaultEmail = isAuth ? (appState.currentRole === 'gerente' ? "zalazardemiranda@gmail.com" : "colaborador@rodipack.com") : "";
+    const resolvedName = isAuth ? ((appState.currentUser && appState.currentUser.nombre) || (appState.currentUser && appState.currentUser.email ? appState.currentUser.email.split('@')[0] : "Usuario")) : "Iniciar Sesión";
+    const resolvedEmail = isAuth ? ((appState.currentUser && appState.currentUser.email) || "") : "";
 
-    const user = isAuth ? (appState.currentUser || { nombre: defaultName, email: defaultEmail, rol: appState.currentRole || "colaborador" }) : { nombre: "Iniciar Sesión", email: "", rol: "colaborador" };
+    const user = isAuth ? (appState.currentUser || { nombre: resolvedName, email: resolvedEmail, rol: appState.currentRole || "colaborador" }) : { nombre: "Iniciar Sesión", email: "", rol: "colaborador" };
     const currentPass = isAuth ? ((user && user.password) || sessionStorage.getItem("rp_session_pass") || localStorage.getItem("rp_user_pass") || "") : "";
 
-    if (footerName) footerName.innerText = isAuth ? (user.nombre || defaultName) : "Iniciar Sesión";
-    if (footerRole) footerRole.innerText = isAuth ? ((user.rol === 'gerente') ? "Administrador del Sistema" : ((user.rol === 'administrador') ? "Administrador (Finanzas)" : "Colaborador")) : "Sin autenticar";
+    const displayName = isAuth ? (user.nombre || (user.email ? user.email.split('@')[0] : "Usuario")) : "Iniciar Sesión";
+    const displayInitial = isAuth ? displayName.charAt(0).toUpperCase() : "?";
+
+    if (footerName) footerName.innerText = displayName;
+    if (footerRole) footerRole.innerText = isAuth ? ((user.rol === 'gerente') ? "Rango: Gerente / Director" : ((user.rol === 'administrador') ? "Rango: Administrativo" : "Rango: Colaborador")) : "Sin autenticar";
     if (footerAvatar) {
-        footerAvatar.innerText = isAuth ? (user.nombre || defaultName).charAt(0).toUpperCase() : "?";
+        footerAvatar.innerText = displayInitial;
         footerAvatar.style.borderColor = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#CBD5E1';
         footerAvatar.style.color = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#94A3B8';
     }
 
-    if (headerName) headerName.innerText = isAuth ? (user.nombre || defaultName) : "Mi Perfil";
+    if (headerName) headerName.innerText = displayName;
     if (headerAvatar) {
-        headerAvatar.innerText = isAuth ? (user.nombre || defaultName).charAt(0).toUpperCase() : "?";
+        headerAvatar.innerText = displayInitial;
         headerAvatar.style.borderColor = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#CBD5E1';
         headerAvatar.style.color = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#94A3B8';
     }
@@ -10476,7 +10483,10 @@ function getUserCorporateName() {
     if (appState.currentUser && appState.currentUser.nombre) {
         return appState.currentUser.nombre.trim();
     }
-    return appState.currentRole === 'gerente' ? 'Gerente Principal' : 'Colaborador';
+    if (appState.currentUser && appState.currentUser.email) {
+        return appState.currentUser.email.split('@')[0];
+    }
+    return 'Usuario';
 }
 
 function getDefaultSeedEmails() {
