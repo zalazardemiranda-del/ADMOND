@@ -904,14 +904,15 @@ function updateUserSessionUI() {
         const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
         const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
 
-        if (userNameEl) userNameEl.innerText = u.nombre || u.email;
+        const realName = u.nombre || (u.email ? u.email.split('@')[0] : 'Usuario');
+        if (userNameEl) userNameEl.innerText = realName;
         if (userRoleEl) {
-            if (isGerente) userRoleEl.innerText = 'Gerente / Director';
-            else if (isAdmin) userRoleEl.innerText = 'Administrativo (Finanzas & Nómina)';
-            else userRoleEl.innerText = `Colaborador (${u.departamento || 'Equipo'})`;
+            if (isGerente) userRoleEl.innerText = 'Rango: Gerente / Director';
+            else if (isAdmin) userRoleEl.innerText = 'Rango: Administrativo';
+            else userRoleEl.innerText = `Rango: Colaborador (${u.departamento || 'Operaciones'})`;
         }
         if (userAvatarEl) {
-            const initial = (u.nombre || u.email || 'G').charAt(0).toUpperCase();
+            const initial = realName.charAt(0).toUpperCase();
             const avatarColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
             userAvatarEl.innerText = initial;
             userAvatarEl.style.borderColor = avatarColor;
@@ -920,14 +921,13 @@ function updateUserSessionUI() {
         if (authNavIcon) authNavIcon.innerText = "logout";
         if (authNavLabel) authNavLabel.innerText = "Cerrar Sesión";
     } else {
-        // Adaptar avatar y texto de sesión según el rol activo actual si no hay currentUser explícito
         const r = (appState.currentRole || '').toLowerCase();
         const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
         const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
         
-        const roleName = isGerente ? 'Gerente Principal' : (isAdmin ? 'Administrativo' : 'Perfil Colaborador');
-        const roleLabel = isGerente ? 'Gerente / Director' : (isAdmin ? 'Administrativo (Finanzas)' : 'Colaborador (Operaciones)');
-        const avatarLetter = isGerente ? 'G' : (isAdmin ? 'A' : 'C');
+        const roleName = 'Sin sesión';
+        const roleLabel = isGerente ? 'Rango: Gerente / Director' : (isAdmin ? 'Rango: Administrativo' : 'Rango: Colaborador');
+        const avatarLetter = '?';
         const avatarColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
 
         if (userNameEl) userNameEl.innerText = roleName;

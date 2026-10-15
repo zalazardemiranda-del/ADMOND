@@ -214,18 +214,6 @@
 
                 <ul>
 
-                    <li id="sidebar-item-schema">
-
-                        <a href="#" class="nav-item" id="nav-schema" onclick="switchTab('schema')" title="Esquematización de Sistema">
-
-                            <span class="material-symbols-outlined">account_tree</span>
-
-                            <span class="nav-text-label">Esquematización</span>
-
-                        </a>
-
-                    </li>
-
                     <li>
 
                         <a href="#" class="nav-item active" id="nav-tasks" onclick="switchTab('tasks')" title="Tablero de Tareas">
@@ -233,20 +221,6 @@
                             <span class="material-symbols-outlined">assignment</span>
 
                             <span class="nav-text-label">Tablero de Tareas</span>
-
-                        </a>
-
-                    </li>
-
-                    <li>
-
-                        <a href="#" class="nav-item" id="nav-chat" onclick="switchTab('chat')" title="Chat Interno">
-
-                            <span class="material-symbols-outlined">chat_bubble</span>
-
-                            <span class="nav-text-label">Chat Interno</span>
-
-                            <span class="chat-badge" id="unread-chat-count" style="display: none;">0</span>
 
                         </a>
 
@@ -3686,7 +3660,7 @@
 
                             </div>
 
-                            <form id="form-supabase-register" onsubmit="handleFirebaseRegister(event)">
+                            <form id="form-firebase-register" onsubmit="handleFirebaseRegister(event)">
 
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
 
@@ -3868,7 +3842,7 @@
 
                                             </label>
 
-                                            <input type="tel" id="myprofile-edit-phone" placeholder="+52 55 1234 5678" style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 10px; font-size: 14px; font-weight: 500;">
+                                            <input type="tel" id="myprofile-edit-phone" placeholder="Teléfono móvil (opcional)" style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 10px; font-size: 14px; font-weight: 500;">
 
                                         </div>
 
@@ -4026,13 +4000,13 @@
 
                             </div>
 
-                            <form id="form-supabase-login" onsubmit="handleFirebaseLogin(event)">
+                            <form id="form-firebase-login" onsubmit="handleFirebaseLogin(event)">
 
                                 <div class="form-group" style="margin-bottom: 14px;">
 
                                     <label style="font-size: 12px; font-weight: 600;">Correo Electrónico:</label>
 
-                                    <input type="email" id="login-email" placeholder="ejemplo@rodipack.com" required style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
+                                    <input type="email" id="login-email" placeholder="" required style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
 
                                 </div>
 
@@ -4040,7 +4014,7 @@
 
                                     <label style="font-size: 12px; font-weight: 600;">Contraseña:</label>
 
-                                    <input type="password" id="login-password" placeholder="••••••••" required style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
+                                    <input type="password" id="login-password" placeholder="" required style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 13px;">
 
                                 </div>
 
@@ -5497,7 +5471,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="firebase_config.js?v=20261015_lockout_v2"></script>
-    <script src="supabase_config.js?v=20261015_lockout_v2"></script>
     <script src="backup_data.js?v=20261015_lockout_v2"></script>
 
     <script src="consecutivo_data.js?v=20261015_lockout_v2"></script>
