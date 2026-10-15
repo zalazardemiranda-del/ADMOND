@@ -9407,7 +9407,7 @@ async function handleFirebaseLogin(event) {
             loadProfilesList();
         }
     } catch (err) {
-        if (isDiegoValidPass || (matchedProfile && matchedProfile.password === password)) {
+        if (matchedProfile && matchedProfile.password === password) {
             await doLocalOrDiegoLogin(window.SUPABASE_CONFIG ? window.SUPABASE_CONFIG.client : null);
             return;
         }
