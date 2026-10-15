@@ -44,25 +44,58 @@
         const auth = firebaseInstance && typeof firebaseInstance.auth === 'function' ? firebaseInstance.auth() : null;
         const db = firebaseInstance && typeof firebaseInstance.firestore === 'function' ? firebaseInstance.firestore() : null;
 
+        // Identificador único por pestaña/dispositivo para evitar auto-ecos sin bloquear otros equipos/pestañas
+        if (!window._myClientId) {
+            try {
+                let sid = sessionStorage.getItem('rp_tab_client_id');
+                if (!sid) {
+                    sid = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+                    sessionStorage.setItem('rp_tab_client_id', sid);
+                }
+                window._myClientId = sid;
+            } catch (e) {
+                window._myClientId = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+            }
+        }
+
         const broadcastHandlers = {};
         const postgresChangeHandlers = {};
         let realtimeHubUnsub = null;
         let hubInitialSnapshotSeen = false;
 
-        // Escuchar eventos en tiempo real en Firestore documento sync/realtime_hub
+        // Canal local en el navegador (BroadcastChannel) para sincronización instantánea (0 ms) entre pestañas/ventanas del mismo navegador
+        let localBus = null;
+        try {
+            if (typeof window.BroadcastChannel === 'function') {
+                localBus = new BroadcastChannel('central_realtime_local_bus');
+                localBus.onmessage = function(ev) {
+                    const msg = ev.data;
+                    if (!msg || !msg.event) return;
+                    if (msg.senderClientId && msg.senderClientId === window._myClientId) return;
+                    const handlers = broadcastHandlers[msg.event] || [];
+                    handlers.forEach(function(fn) {
+                        try { fn({ payload: msg.payload }); } catch (e) {}
+                    });
+                };
+            }
+        } catch (e) {}
+
+        // Escuchar eventos en tiempo real en Firestore en la colección sync (usando documentos individuales por evento para que no se sobreescriban)
         if (db) {
             try {
-                realtimeHubUnsub = db.collection('sync').doc('realtime_hub').onSnapshot(function(docSnap) {
-                    // Ignorar la primera entrega: es el último evento guardado, no una actualización en vivo
+                realtimeHubUnsub = db.collection('sync').onSnapshot(function(snapshot) {
+                    // Ignorar la primera entrega: son estados guardados previamente, no eventos nuevos en vivo
                     if (!hubInitialSnapshotSeen) { hubInitialSnapshotSeen = true; return; }
-                    if (!docSnap || !docSnap.exists) return;
-                    const data = docSnap.data();
-                    if (!data || !data.event) return;
-                    // Evitar auto-eco inmediato si el emisor coincide
-                    if (data.senderClientId && data.senderClientId === window._myClientId) return;
-                    const handlers = broadcastHandlers[data.event] || [];
-                    handlers.forEach(function(fn) {
-                        try { fn({ payload: data.payload }); } catch (e) { console.warn("Error en broadcast handler:", e); }
+                    snapshot.docChanges().forEach(function(change) {
+                        if (change.type === 'removed') return;
+                        const data = change.doc.data();
+                        if (!data || !data.event) return;
+                        // Evitar auto-eco inmediato si el emisor es esta misma pestaña
+                        if (data.senderClientId && data.senderClientId === window._myClientId) return;
+                        const handlers = broadcastHandlers[data.event] || [];
+                        handlers.forEach(function(fn) {
+                            try { fn({ payload: data.payload }); } catch (e) { console.warn("Error en broadcast handler:", e); }
+                        });
                     });
                 }, function(err) {
                     console.warn("Realtime hub listener status:", err.message || err);
@@ -115,19 +148,37 @@
                 if (msg.type === 'broadcast') {
                     const evt = msg.event;
                     const payload = msg.payload || {};
-                    // Ejecutar de inmediato en la misma pestaña si aplica
-                    const currentHandlers = broadcastHandlers[evt] || [];
-                    currentHandlers.forEach(function(fn) {
-                        try { fn({ payload: payload }); } catch (e) {}
-                    });
+                    const senderId = window._myClientId || 'client_main';
+                    const nowTs = Date.now();
 
-                    // Persistir en Firestore para emitir a otras pestañas y dispositivos
+                    // 1. Emitir al instante a otras pestañas/ventanas del mismo navegador (0 ms)
+                    if (localBus) {
+                        try {
+                            localBus.postMessage({
+                                event: evt,
+                                payload: payload,
+                                senderClientId: senderId,
+                                timestamp: nowTs
+                            });
+                        } catch (e) {}
+                    }
+
+                    // 2. Persistir en Firestore por documento único por tipo de evento
+                    // Así, si se emite 'nominas_update' y luego 'nominas_lock_update', NUNCA se pisan entre sí
                     if (db) {
+                        db.collection('sync').doc('evt_' + evt).set({
+                            event: evt,
+                            payload: payload,
+                            senderClientId: senderId,
+                            timestamp: nowTs
+                        }).catch(function() {});
+
+                        // Respaldo para compatibilidad en el documento único anterior
                         db.collection('sync').doc('realtime_hub').set({
                             event: evt,
                             payload: payload,
-                            senderClientId: window._myClientId || 'client_main',
-                            timestamp: Date.now()
+                            senderClientId: senderId,
+                            timestamp: nowTs
                         }).catch(function() {});
                     }
                 }
@@ -148,6 +199,10 @@
             },
             destroy: function() {
                 // Cierre total de listeners (solo para cerrar la app por completo)
+                if (localBus) {
+                    try { localBus.close(); } catch (e) {}
+                    localBus = null;
+                }
                 if (realtimeHubUnsub) {
                     try { realtimeHubUnsub(); } catch (e) {}
                     realtimeHubUnsub = null;
