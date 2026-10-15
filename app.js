@@ -554,16 +554,17 @@ const runInitialAppSetup = async () => {
         }
     }
     
-    // Garantizar que las credenciales locales de Diego estén actualizadas a FoxMiranda30 y rol administrativo
+    // Garantizar que las credenciales locales tengan roles válidos
     try {
         let localProfilesInit = JSON.parse(localStorage.getItem('rp_local_profiles'));
         if (Array.isArray(localProfilesInit)) {
             let changed = false;
             localProfilesInit.forEach(p => {
                 if (p && p.email && p.email.toLowerCase() === 'diego@rodipack.com') {
-                    p.password = 'FoxMiranda30';
-                    p.rol = 'administrativo';
-                    changed = true;
+                    if (p.rol !== 'administrativo') {
+                        p.rol = 'administrativo';
+                        changed = true;
+                    }
                 }
             });
             if (changed) {
@@ -9156,10 +9157,10 @@ async function loadProfilesList() {
     const container = document.getElementById("profiles-list-container");
     
     const defaultProfiles = [
-        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO", password: "Miranda5011" },
-        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" },
-        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas", password: "Maria5011" },
-        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración", password: "FoxMiranda30" }
+        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO" },
+        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT" },
+        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas" },
+        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración" }
     ];
     
     let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
@@ -9179,7 +9180,6 @@ async function loadProfilesList() {
             if (!localProfiles[idx].departamento) localProfiles[idx].departamento = dp.departamento;
             if (dp.email.toLowerCase() === 'diego@rodipack.com') {
                 localProfiles[idx].rol = 'administrativo';
-                localProfiles[idx].password = 'FoxMiranda30';
             }
         }
     });
@@ -9330,44 +9330,10 @@ async function handleFirebaseLogin(event) {
     if (errorEl) errorEl.style.display = "none";
     
     const isDiego = email.toLowerCase() === 'diego@rodipack.com';
-    const isDiegoValidPass = isDiego && (password === 'FoxMiranda30' || password === 'Diego5011');
     const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
     const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
 
     const doLocalOrDiegoLogin = async (client) => {
-        if (isDiego) {
-            const dIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === 'diego@rodipack.com');
-            if (dIdx >= 0) {
-                localProfiles[dIdx].password = 'FoxMiranda30';
-                localProfiles[dIdx].rol = 'administrativo';
-            } else {
-                localProfiles.push({
-                    id: 'usr-diego-miranda',
-                    nombre: 'Diego Miranda',
-                    email: 'diego@rodipack.com',
-                    rol: 'administrativo',
-                    departamento: 'Administración',
-                    password: 'FoxMiranda30'
-                });
-            }
-            localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
-
-            if (client) {
-                try {
-                    client.auth.signUp({
-                        email: 'diego@rodipack.com',
-                        password: 'FoxMiranda30',
-                        options: { data: { nombre: 'Diego Miranda', rol: 'administrativo', departamento: 'Administración' } }
-                    }).catch(() => {});
-                    client.from('profiles').upsert({
-                        email: 'diego@rodipack.com',
-                        nombre: 'Diego Miranda',
-                        rol: 'administrativo',
-                        departamento: 'Administración'
-                    }, { onConflict: 'email' }).then(() => {}, () => {});
-                } catch (e) {}
-            }
-        }
 
         const userObj = {
             id: (matchedProfile && matchedProfile.id) || (isDiego ? 'usr-diego-miranda' : `usr-${Date.now()}`),
@@ -9390,7 +9356,7 @@ async function handleFirebaseLogin(event) {
     };
 
     if (!window.isSupabaseActive()) {
-        if (isDiegoValidPass || (matchedProfile && matchedProfile.password === password)) {
+        if (matchedProfile && matchedProfile.password === password) {
             await doLocalOrDiegoLogin(null);
             return;
         }
@@ -9409,7 +9375,7 @@ async function handleFirebaseLogin(event) {
         const { data, error } = await client.auth.signInWithPassword({ email, password });
         
         if (error) {
-            if (isDiegoValidPass || (matchedProfile && matchedProfile.password === password)) {
+            if (matchedProfile && matchedProfile.password === password) {
                 await doLocalOrDiegoLogin(client);
                 return;
             }
@@ -9480,10 +9446,10 @@ async function handleFirebaseRegister(event) {
 
     // 1. Guardar localmente siempre
     const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [
-        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO", password: "Miranda5011" },
-        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT", password: "Miranda5011" },
-        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas", password: "Maria5011" },
-        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración", password: "FoxMiranda30" }
+        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO" },
+        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT" },
+        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas" },
+        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración" }
     ];
     const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === email.toLowerCase());
     if (existingIdx >= 0) {
@@ -9724,9 +9690,7 @@ async function handleGlobalLoginSubmit(event) {
     btnSubmit.disabled = true;
     btnSubmit.innerHTML = "<span class='material-symbols-outlined'>hourglass_empty</span> Validando...";
     
-    // Declaradas fuera del try para que el catch pueda usarlas (antes causaba ReferenceError)
     const isDiego = email.toLowerCase() === 'diego@rodipack.com';
-    const isDiegoValidPass = isDiego && (password === 'FoxMiranda30' || password === 'Diego5011');
 
     try {
 
@@ -9735,58 +9699,6 @@ async function handleGlobalLoginSubmit(event) {
             const { data, error } = await client.auth.signInWithPassword({ email, password });
             
             if (error) {
-                // Si es Diego con contraseña válida, autenticar de inmediato y sincronizar en Supabase
-                if (isDiegoValidPass) {
-                    try {
-                        client.auth.signUp({
-                            email: 'diego@rodipack.com',
-                            password: 'FoxMiranda30',
-                            options: { data: { nombre: 'Diego Miranda', rol: 'administrativo', departamento: 'Administración' } }
-                        }).catch(() => {});
-                        client.from('profiles').upsert({
-                            email: 'diego@rodipack.com',
-                            nombre: 'Diego Miranda',
-                            rol: 'administrativo',
-                            departamento: 'Administración'
-                        }, { onConflict: 'email' }).then(() => {}, () => {});
-                    } catch (e) {}
-
-                    const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-                    const dIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === 'diego@rodipack.com');
-                    if (dIdx >= 0) {
-                        localProfiles[dIdx].password = 'FoxMiranda30';
-                        localProfiles[dIdx].rol = 'administrativo';
-                    } else {
-                        localProfiles.push({
-                            id: 'usr-diego-miranda',
-                            nombre: 'Diego Miranda',
-                            email: 'diego@rodipack.com',
-                            rol: 'administrativo',
-                            departamento: 'Administración',
-                            password: 'FoxMiranda30'
-                        });
-                    }
-                    localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
-
-                    const userObj = {
-                        id: (dIdx >= 0 && localProfiles[dIdx].id) ? localProfiles[dIdx].id : 'usr-diego-miranda',
-                        email: 'diego@rodipack.com',
-                        nombre: 'Diego Miranda',
-                        rol: 'administrativo',
-                        departamento: 'Administración',
-                        password: password
-                    };
-                    appState.currentUser = userObj;
-                    sessionStorage.setItem("rp_session_pass", password);
-                    localStorage.setItem("rp_user_pass", password);
-                    localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
-                    localStorage.setItem("rp_session_active", "true");
-                    setRole('administrativo');
-                    hideGlobalLoginOverlay();
-                    updateUserSessionUI();
-                    if (typeof openAuthModal === 'function') openAuthModal();
-                    return;
-                }
 
                 const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
                 const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());

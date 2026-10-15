@@ -82,7 +82,10 @@ async function openAppAsAdmin(page) {
 
   // Iniciar sesión como Gerente/Administrador y entrar a ficha consecutivo
   await page.evaluate(() => {
-    window.appState.currentUser = { id: 'admin-user-1', email: 'admin@rodipack.com', nombre: 'Roberto Miranda', rol: 'gerente' };
+    const adminUser = { id: 'admin-user-1', email: 'admin@rodipack.com', nombre: 'Roberto Miranda', rol: 'gerente' };
+    localStorage.setItem('rp_session_active', 'true');
+    localStorage.setItem('rp_logged_user', JSON.stringify(adminUser));
+    window.appState.currentUser = adminUser;
     window.appState.currentRole = 'gerente';
     if (typeof window.hideGlobalLoginOverlay === 'function') window.hideGlobalLoginOverlay();
     if (typeof window.switchTab === 'function') window.switchTab('administracion');
@@ -1007,7 +1010,10 @@ test("11. Reconocimiento de propio bloqueo zalazardemiranda y carga/descarga de 
 
   // 1. Configurar usuario principal zalazardemiranda
   await page.evaluate(() => {
-    window.appState.currentUser = { id: 'user-zalazar', email: 'zalazardemiranda@gmail.com', nombre: 'Roberto Miranda', rol: 'gerente' };
+    const userZ = { id: 'user-zalazar', email: 'zalazardemiranda@gmail.com', nombre: 'Roberto Miranda', rol: 'gerente' };
+    localStorage.setItem('rp_logged_user', JSON.stringify(userZ));
+    localStorage.setItem('rp_session_active', 'true');
+    window.appState.currentUser = userZ;
     window.switchAdminFicha('operaciones');
     const testProj = {
       id: 'RDP2610179-F',
