@@ -1370,6 +1370,11 @@ function renderAdministracion() {
     if (!isGerente && !isAdmin) return;
     
     if (appState.currentAdminFicha === 'visualizacion') {
+        if (typeof window.fetchAdminConceptsFromCloud === 'function') window.fetchAdminConceptsFromCloud();
+        if (typeof window.fetchConsecutivoFromCloud === 'function') window.fetchConsecutivoFromCloud();
+        if (typeof window.fetchProveedoresDataFromCloud === 'function') window.fetchProveedoresDataFromCloud();
+        if (typeof window.fetchNominasFromCloud === 'function') window.fetchNominasFromCloud();
+        if (typeof window.fetchGastosIndirectosFromCloud === 'function') window.fetchGastosIndirectosFromCloud();
         renderVisualizacion();
     } else if (appState.currentAdminFicha === 'quincenal') {
         if (typeof window.fetchNominasLockFromCloud === 'function') {
@@ -1598,6 +1603,124 @@ function renderVisualizacion() {
     renderPieChart(totals);
 }
 
+let _syncAdminConceptsTimer = null;
+function syncAdminConceptsToCloud(forceImmediate = false) {
+    window.syncAdminConceptsToCloud = syncAdminConceptsToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    const doSync = async () => {
+        try {
+            window._lastLocalAdminConceptsSyncTime = Date.now();
+            const payload = {
+                bancos: appState.concepts?.bancos !== undefined ? appState.concepts.bancos : 0,
+                bancosFecha: appState.concepts?.bancosFecha || '',
+                impuestos: appState.concepts?.impuestos !== undefined ? appState.concepts.impuestos : 0,
+                updatedAt: new Date().toISOString()
+            };
+            await client.from('messages').insert({
+                chat_id: '__cloud_sync_admin_concepts__',
+                contenido: JSON.stringify(payload),
+                emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                emisor_role: 'sistema'
+            });
+            const db = (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.db) || (window.firebase && firebase.firestore && firebase.firestore());
+            if (db) {
+                await db.collection('sync_snapshots').doc('__cloud_sync_admin_concepts__').set({
+                    id: '__cloud_sync_admin_concepts__',
+                    chat_id: '__cloud_sync_admin_concepts__',
+                    contenido: JSON.stringify(payload),
+                    emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                    emisor_role: 'sistema',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }, { merge: true });
+            }
+        } catch (e) {
+            console.warn("⚠️ Error persisting admin concepts to cloud:", e);
+        }
+    };
+
+    if (_syncAdminConceptsTimer) clearTimeout(_syncAdminConceptsTimer);
+    if (forceImmediate) {
+        doSync();
+    } else {
+        _syncAdminConceptsTimer = setTimeout(doSync, 400);
+    }
+}
+window.syncAdminConceptsToCloud = syncAdminConceptsToCloud;
+
+function broadcastAdminConceptsUpdate() {
+    window.broadcastAdminConceptsUpdate = broadcastAdminConceptsUpdate;
+    const payload = {
+        concepts: {
+            bancos: appState.concepts?.bancos !== undefined ? appState.concepts.bancos : 0,
+            bancosFecha: appState.concepts?.bancosFecha || '',
+            impuestos: appState.concepts?.impuestos !== undefined ? appState.concepts.impuestos : 0,
+            updatedAt: new Date().toISOString()
+        },
+        senderClientId: window._myClientId,
+        timestamp: Date.now()
+    };
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'admin_concepts_update',
+                payload: payload
+            });
+        } catch (e) {}
+    }
+}
+window.broadcastAdminConceptsUpdate = broadcastAdminConceptsUpdate;
+
+async function fetchAdminConceptsFromCloud() {
+    window.fetchAdminConceptsFromCloud = fetchAdminConceptsFromCloud;
+    if (Date.now() - (window._lastLocalAdminConceptsSyncTime || 0) < 3000) return;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_admin_concepts__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                if (parsed && typeof parsed === 'object') {
+                    if (!appState.concepts) appState.concepts = {};
+                    let changed = false;
+                    if (parsed.bancos !== undefined && appState.concepts.bancos !== parsed.bancos) {
+                        appState.concepts.bancos = parsed.bancos;
+                        changed = true;
+                    }
+                    if (parsed.bancosFecha !== undefined && appState.concepts.bancosFecha !== parsed.bancosFecha) {
+                        appState.concepts.bancosFecha = parsed.bancosFecha;
+                        changed = true;
+                    }
+                    if (parsed.impuestos !== undefined && appState.concepts.impuestos !== parsed.impuestos) {
+                        appState.concepts.impuestos = parsed.impuestos;
+                        changed = true;
+                    }
+                    if (changed) {
+                        saveToStorage();
+                        try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
+                        renderVisualizacion();
+                    }
+                }
+            } catch (e) {}
+        }
+    } catch (err) {
+        console.warn("⚠️ Error fetching admin concepts from cloud:", err);
+    }
+}
+window.fetchAdminConceptsFromCloud = fetchAdminConceptsFromCloud;
+
 function updateAdminConcept(key, value) {
     window.updateAdminConcept = updateAdminConcept;
     if (!appState.concepts) appState.concepts = {};
@@ -1611,6 +1734,12 @@ function updateAdminConcept(key, value) {
     }
     saveToStorage();
     renderVisualizacion();
+    if (typeof broadcastAdminConceptsUpdate === 'function') {
+        broadcastAdminConceptsUpdate();
+    }
+    if (typeof syncAdminConceptsToCloud === 'function') {
+        syncAdminConceptsToCloud();
+    }
 };
 
 function renderPieChart(totals) {
@@ -8841,8 +8970,9 @@ function setupRealtimeSubscriptions() {
                 if (row.contenido && !appState.isEditingGastosIndirectos) {
                     try {
                         const parsed = JSON.parse(row.contenido);
-                        if (parsed && Array.isArray(parsed.gastosIndirectos)) {
-                            appState.gastosIndirectos = parsed.gastosIndirectos.filter(item => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(item));
+                        const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.gastosIndirectos) ? parsed.gastosIndirectos : null);
+                        if (list) {
+                            appState.gastosIndirectos = list.filter(item => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(item));
                             saveToStorage();
                             try { localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos)); } catch (e) {}
                             if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
@@ -8855,6 +8985,25 @@ function setupRealtimeSubscriptions() {
                 }
                 if (typeof window.fetchGastosIndirectosFromCloud === 'function') {
                     window.fetchGastosIndirectosFromCloud();
+                }
+            }
+            if (channelKey === '__cloud_sync_admin_concepts__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (parsed && typeof parsed === 'object') {
+                            if (!appState.concepts) appState.concepts = {};
+                            if (parsed.bancos !== undefined) appState.concepts.bancos = parsed.bancos;
+                            if (parsed.bancosFecha !== undefined) appState.concepts.bancosFecha = parsed.bancosFecha;
+                            if (parsed.impuestos !== undefined) appState.concepts.impuestos = parsed.impuestos;
+                            saveToStorage();
+                            try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
+                            if (typeof renderVisualizacion === 'function') renderVisualizacion();
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchAdminConceptsFromCloud === 'function') {
+                    window.fetchAdminConceptsFromCloud();
                 }
             }
             if (channelKey === '__cloud_sync_gastos_indirectos_lock__' && typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
@@ -8971,6 +9120,21 @@ function setupRealtimeSubscriptions() {
         } catch (e) {}
     });
 
+    // 11. Actualización instantánea de conceptos contables de Visualización (Bancos, Impuestos) por broadcast
+    window.chatRealtimeChannel.on('broadcast', { event: 'admin_concepts_update' }, payload => {
+        const data = payload?.payload;
+        if (data && data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
+        if (data && data.concepts) {
+            if (!appState.concepts) appState.concepts = {};
+            if (data.concepts.bancos !== undefined) appState.concepts.bancos = data.concepts.bancos;
+            if (data.concepts.bancosFecha !== undefined) appState.concepts.bancosFecha = data.concepts.bancosFecha;
+            if (data.concepts.impuestos !== undefined) appState.concepts.impuestos = data.concepts.impuestos;
+            saveToStorage();
+            try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
+            if (typeof renderVisualizacion === 'function') renderVisualizacion();
+        }
+    });
+
     let _reconnectRealtimeTimer = null;
     window.chatRealtimeChannel.subscribe((status) => {
         console.log("⚡ [Realtime Hub Subscripción]:", status);
@@ -9061,12 +9225,12 @@ function setupRealtimeSubscriptions() {
                         }
                     } else if (appState.currentAdminFicha === 'visualizacion') {
                         window._visualizacionHeartbeatTick = (window._visualizacionHeartbeatTick || 0) + 1;
-                        if (window._visualizacionHeartbeatTick % 3 === 0) {
+                        if (window._visualizacionHeartbeatTick % 2 === 0) {
                             const visSig = () => {
-                                try { return JSON.stringify([appState.nominas, appState.gastosIndirectos, appState.consecutivo, appState.proveedores]); } catch (e) { return String(Date.now()); }
+                                try { return JSON.stringify([appState.concepts, appState.nominas, appState.gastosIndirectos, appState.consecutivo, appState.proveedores]); } catch (e) { return String(Date.now()); }
                             };
                             const before = visSig();
-                            const fetchers = ['fetchNominasFromCloud', 'fetchGastosIndirectosFromCloud', 'fetchConsecutivoFromCloud', 'fetchProveedoresDataFromCloud'];
+                            const fetchers = ['fetchAdminConceptsFromCloud', 'fetchNominasFromCloud', 'fetchGastosIndirectosFromCloud', 'fetchConsecutivoFromCloud', 'fetchProveedoresDataFromCloud'];
                             for (const fn of fetchers) {
                                 if (typeof window[fn] === 'function') { try { await window[fn](); } catch (e) {} }
                             }
@@ -9259,6 +9423,11 @@ async function fetchCloudData() {
         }
         if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
             await window.fetchGastosIndirectosLockFromCloud();
+        }
+        
+        // Sincronizar conceptos contables de Visualización (Bancos, Impuestos)
+        if (typeof window.fetchAdminConceptsFromCloud === 'function') {
+            await window.fetchAdminConceptsFromCloud();
         }
         
         // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)
