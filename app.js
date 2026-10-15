@@ -8543,6 +8543,9 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'nominas_lock_update' }, payload => {
         const data = payload.payload;
         if (!data) return;
+        if (data.timestamp && appState.nominasLockedBy?.timestamp && data.timestamp < appState.nominasLockedBy.timestamp) {
+            return;
+        }
         const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
         if (data.isLocked) {
             if (data.userId !== currentUserId) {
@@ -8582,6 +8585,9 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'gastos_indirectos_lock_update' }, payload => {
         const data = payload.payload;
         if (!data) return;
+        if (data.timestamp && appState.gastosIndirectosLockedBy?.timestamp && data.timestamp < appState.gastosIndirectosLockedBy.timestamp) {
+            return;
+        }
         const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
         if (data.isLocked) {
             if (data.userId !== currentUserId) {
