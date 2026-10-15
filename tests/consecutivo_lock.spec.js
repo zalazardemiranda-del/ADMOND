@@ -898,7 +898,7 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
 
   // Dar clic en Guardar en Nóminas: guarda cambios y libera bloqueo
   await page.locator("#btn-save-nominas").click();
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(400);
 
   await expect(page.locator("#btn-save-nominas")).toBeDisabled();
   await expect(page.locator("#nominas-lock-banner")).toBeHidden();
@@ -911,12 +911,12 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
       isLocked: true,
       userId: 'other-user-99',
       userName: 'Carlos Ruiz',
-      timestamp: Date.now()
+      timestamp: Date.now() + 2000
     };
     window.updateNominasEditButtonsUI();
     window.renderNominas();
   });
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(300);
   await expect(page.locator("#btn-edit-nominas")).toBeDisabled();
   await expect(page.locator("#nominas-lock-banner")).toBeVisible();
   await expect(page.locator("#nominas-lock-banner")).toContainText("Esta tabla está siendo editada por Carlos Ruiz");
