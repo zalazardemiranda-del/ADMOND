@@ -8145,9 +8145,10 @@ async function handleUserSession(user) {
             } catch (e) {}
         }
 
-        // Cargar datos personalizados locales
-        const savedCustomName = localStorage.getItem('rp_custom_user_nombre') ||
-            (userEmail ? localStorage.getItem('rp_user_profile_name_' + userEmail) : null);
+        // Cargar datos personalizados locales (aislados por correo para evitar contaminar otros usuarios)
+        const isMasterAdminEmail = (userEmail === 'admin@rodipack.com' || userEmail === 'zalazardemiranda@gmail.com');
+        const savedCustomName = (userEmail ? localStorage.getItem('rp_user_profile_name_' + userEmail) : null) ||
+            (isMasterAdminEmail ? localStorage.getItem('rp_custom_user_nombre') : null);
         const savedCustomPhone = userEmail ? localStorage.getItem('rp_user_profile_phone_' + userEmail) : null;
         let localLoggedUser = null;
         try {
@@ -9533,6 +9534,7 @@ async function handleFirebaseLogin(event) {
         appState.currentUser = userObj;
         sessionStorage.setItem("rp_session_pass", password);
         localStorage.setItem("rp_user_pass", password);
+        if (email) localStorage.setItem("rp_user_pass_" + email.toLowerCase(), password);
         localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
         localStorage.setItem("rp_session_active", "true");
         localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
@@ -9581,6 +9583,7 @@ async function handleFirebaseLogin(event) {
                 data.user.password = password;
                 sessionStorage.setItem("rp_session_pass", password);
                 localStorage.setItem("rp_user_pass", password);
+                if (email) localStorage.setItem("rp_user_pass_" + email.toLowerCase(), password);
             }
             await handleUserSession(data.user);
             openAuthModal(); // Refresh modal view to show logged-in info
@@ -10436,7 +10439,8 @@ function updateUserProfileUI() {
     const resolvedEmail = isAuth ? ((appState.currentUser && appState.currentUser.email) || "") : "";
 
     const user = isAuth ? (appState.currentUser || { nombre: resolvedName, email: resolvedEmail, rol: appState.currentRole || "colaborador" }) : { nombre: "Iniciar Sesión", email: "", rol: "colaborador" };
-    const currentPass = isAuth ? ((user && user.password) || sessionStorage.getItem("rp_session_pass") || localStorage.getItem("rp_user_pass") || "") : "";
+    const userEmailKey = (user && user.email) ? user.email.toLowerCase() : "";
+    const currentPass = isAuth ? ((user && user.password) || (userEmailKey && localStorage.getItem("rp_user_pass_" + userEmailKey)) || sessionStorage.getItem("rp_session_pass") || "") : "";
 
     const displayName = isAuth ? (user.nombre || (user.email ? user.email.split('@')[0] : "Usuario")) : "Iniciar Sesión";
     const displayInitial = isAuth ? displayName.charAt(0).toUpperCase() : "?";
