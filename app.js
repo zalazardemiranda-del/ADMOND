@@ -572,27 +572,43 @@ const runInitialAppSetup = async () => {
         }
     } catch (e) {}
 
-    // Restaurar usuario en sesión si la sesión está activa
-    const isSessionActive = localStorage.getItem("rp_session_active") === "true";
+    // Restaurar usuario en sesión si la sesión está activa y es válida
+    let isSessionActive = localStorage.getItem("rp_session_active") === "true";
     const storedUser = localStorage.getItem("rp_logged_user");
     if (isSessionActive && storedUser) {
         try {
             appState.currentUser = JSON.parse(storedUser);
-            const isDiego = appState.currentUser && (
-                (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
-                (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('diego'))
-            );
-            if (isDiego) {
-                appState.currentUser.rol = 'administrativo';
-                localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
-                localStorage.setItem("rp_current_role", 'administrativo');
+            if (!appState.currentUser || !appState.currentUser.email) {
+                appState.currentUser = null;
+                isSessionActive = false;
+                localStorage.setItem("rp_session_active", "false");
+                localStorage.removeItem("rp_logged_user");
+            } else {
+                const isDiego = (
+                    (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
+                    (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('diego'))
+                );
+                if (isDiego) {
+                    appState.currentUser.rol = 'administrativo';
+                    localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
+                    localStorage.setItem("rp_current_role", 'administrativo');
+                }
             }
         } catch (e) {
             console.warn("Error parsing stored user session:", e);
+            appState.currentUser = null;
+            isSessionActive = false;
+            localStorage.setItem("rp_session_active", "false");
+            localStorage.removeItem("rp_logged_user");
         }
+    } else {
+        appState.currentUser = null;
+        isSessionActive = false;
+        localStorage.setItem("rp_session_active", "false");
+        localStorage.removeItem("rp_logged_user");
     }
 
-    // Restaurar rol activo persistido (o del usuario logueado)
+    // Restaurar rol activo persistido (solo si hay currentUser autenticado)
     const storedRole = localStorage.getItem("rp_current_role");
     const isDiegoUser = appState.currentUser && (
         (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
@@ -600,12 +616,12 @@ const runInitialAppSetup = async () => {
     );
     if (isDiegoUser) {
         appState.currentRole = 'administrativo';
-    } else if (storedRole) {
-        appState.currentRole = storedRole;
     } else if (appState.currentUser && appState.currentUser.rol) {
         appState.currentRole = appState.currentUser.rol;
+    } else if (appState.currentUser && storedRole) {
+        appState.currentRole = storedRole;
     } else {
-        appState.currentRole = 'gerente';
+        appState.currentRole = 'colaborador';
     }
 
     // Restaurar pestaña activa persistida o desde hash de URL
@@ -671,9 +687,11 @@ const runInitialAppSetup = async () => {
         loadProfilesList();
     }
 
-    // Check if session is active or logged out
-    if (!isSessionActive) {
+    // Check if session is active and valid, otherwise force login overlay
+    const validSession = localStorage.getItem("rp_session_active") === "true" && !!appState.currentUser;
+    if (!validSession) {
         appState.currentUser = null;
+        localStorage.setItem("rp_session_active", "false");
         showGlobalLoginOverlay();
     }
 
@@ -7779,15 +7797,14 @@ async function initAuthAndRealtime() {
             if (resetModal) resetModal.style.display = "flex";
         }
 
-        const isSessionActive = localStorage.getItem("rp_session_active") === "true";
+        const isSessionActive = localStorage.getItem("rp_session_active") === "true" && !!appState.currentUser;
         const storedUser = localStorage.getItem("rp_logged_user");
         const { data: { session }, error } = await client.auth.getSession();
         
         if (session && session.user && isSessionActive) {
             await handleUserSession(session.user);
-        } else if (isSessionActive && storedUser) {
+        } else if (isSessionActive && storedUser && appState.currentUser) {
             try {
-                appState.currentUser = JSON.parse(storedUser);
                 if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
                     appState.currentUser.rol = 'administrativo';
                 }
@@ -7796,9 +7813,10 @@ async function initAuthAndRealtime() {
                 updateCloudStatusUI(true, appState.currentUser);
             } catch (e) {}
         } else {
+            appState.currentUser = null;
+            localStorage.setItem("rp_session_active", "false");
             updateCloudStatusUI(true, null);
-            if (!isSessionActive && !window.location.hash.includes('type=recovery')) {
-                appState.currentUser = null;
+            if (!window.location.hash.includes('type=recovery')) {
                 showGlobalLoginOverlay();
             }
         }
@@ -7811,14 +7829,13 @@ async function initAuthAndRealtime() {
                 if (resetModal) resetModal.style.display = "flex";
                 return;
             }
-            const active = localStorage.getItem("rp_session_active") === "true";
+            const active = localStorage.getItem("rp_session_active") === "true" && !!appState.currentUser;
             const localUser = localStorage.getItem("rp_logged_user");
 
             if (session && session.user && active) {
                 await handleUserSession(session.user);
-            } else if (active && localUser) {
+            } else if (active && localUser && appState.currentUser) {
                 try {
-                    appState.currentUser = JSON.parse(localUser);
                     if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
                         appState.currentUser.rol = 'administrativo';
                     }
@@ -7826,8 +7843,9 @@ async function initAuthAndRealtime() {
                     updateUserSessionUI();
                     updateCloudStatusUI(true, appState.currentUser);
                 } catch (e) {}
-            } else if (!active) {
+            } else {
                 appState.currentUser = null;
+                localStorage.setItem("rp_session_active", "false");
                 updateCloudStatusUI(true, null);
                 if (!window.location.hash.includes('type=recovery')) showGlobalLoginOverlay();
             }
@@ -8969,7 +8987,7 @@ function openAuthModal() {
         }
     }
 
-    const isSessionActive = localStorage.getItem("rp_session_active") === "true";
+    const isSessionActive = localStorage.getItem("rp_session_active") === "true" && !!appState.currentUser;
     const loggedInView = document.getElementById("gerente-logged-in-view");
     const loginView = document.getElementById("gerente-login-view");
     const cloudIndicator = document.getElementById("modal-cloud-indicator");
@@ -8990,7 +9008,7 @@ function openAuthModal() {
 
     updateUserSessionUI();
 
-    if (appState.currentUser || isSessionActive) {
+    if (appState.currentUser && isSessionActive) {
         if (loggedInView) loggedInView.style.display = "block";
         if (loginView) loginView.style.display = "none";
     } else {
@@ -9475,7 +9493,11 @@ async function handleFirebaseRegister(event) {
 };
 
 function showGlobalLoginOverlay() {
-
+    window.showGlobalLoginOverlay = showGlobalLoginOverlay;
+    const earlyStyle = document.getElementById("early-auth-hide");
+    if (earlyStyle && earlyStyle.parentNode) {
+        earlyStyle.parentNode.removeChild(earlyStyle);
+    }
     const overlay = document.getElementById("global-login-overlay");
     const emailInput = document.getElementById("login-global-email");
     const passInput = document.getElementById("login-global-pass");
@@ -9488,6 +9510,13 @@ function hideGlobalLoginOverlay() {
     window.hideGlobalLoginOverlay = hideGlobalLoginOverlay;
     const overlay = document.getElementById("global-login-overlay");
     if (overlay) overlay.style.display = "none";
+    let earlyStyle = document.getElementById("early-auth-hide");
+    if (!earlyStyle) {
+        earlyStyle = document.createElement('style');
+        earlyStyle.id = 'early-auth-hide';
+        earlyStyle.innerHTML = '#global-login-overlay { display: none !important; }';
+        document.head.appendChild(earlyStyle);
+    }
 };
 
 async function handleDeleteProfile(email, nombre) {
@@ -9853,9 +9882,13 @@ async function handleFirebaseLogout() {
         console.warn("Logout error:", err);
     }
     appState.currentUser = null;
+    appState.currentRole = 'colaborador';
     localStorage.setItem("rp_session_active", "false");
     localStorage.removeItem("rp_logged_user");
+    localStorage.removeItem("rp_user_pass");
+    sessionStorage.removeItem("rp_session_pass");
     updateCloudStatusUI(false, null);
+    updateUserSessionUI();
     showGlobalLoginOverlay();
 };
 
@@ -10183,13 +10216,14 @@ async function handleSaveMyProfile(event) {
 };
 
 function updateUserProfileUI() {
-
     if (!appState.currentUser) {
         const storedUser = localStorage.getItem("rp_logged_user");
         if (storedUser) {
             try { appState.currentUser = JSON.parse(storedUser); } catch (e) {}
         }
     }
+
+    const isAuth = !!appState.currentUser && localStorage.getItem("rp_session_active") === "true";
 
     const footerName = document.querySelector(".user-info h4");
     const footerRole = document.querySelector(".user-info span");
@@ -10202,52 +10236,73 @@ function updateUserProfileUI() {
     const editPassInput = document.getElementById("myprofile-edit-pass");
     const loggedEmailText = document.getElementById("logged-email-text");
     const loggedRoleText = document.getElementById("logged-role-text");
+    const statusTag = document.getElementById("modal-session-status-tag");
 
-    const defaultName = appState.currentRole === 'gerente' ? "Gerente Principal" : "Colaborador";
-    const defaultEmail = appState.currentRole === 'gerente' ? "zalazardemiranda@gmail.com" : "colaborador@rodipack.com";
-
-    const user = appState.currentUser || { nombre: defaultName, email: defaultEmail, rol: appState.currentRole || "colaborador" };
-    const currentPass = (user && user.password) || sessionStorage.getItem("rp_session_pass") || localStorage.getItem("rp_user_pass") || "";
-
-    if (footerName) footerName.innerText = user.nombre || defaultName;
-    if (footerRole) footerRole.innerText = (user.rol === 'gerente') ? "Administrador del Sistema" : ((user.rol === 'administrador') ? "Administrador (Finanzas)" : "Colaborador");
-    if (footerAvatar) {
-        footerAvatar.innerText = (user.nombre || defaultName).charAt(0).toUpperCase();
-        footerAvatar.style.borderColor = user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B');
-        footerAvatar.style.color = user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B');
+    if (statusTag) {
+        if (isAuth) {
+            statusTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px; color: #10B981;">check_circle</span> Sesión Activa`;
+            statusTag.style.background = '#ECFDF5';
+            statusTag.style.color = '#059669';
+            statusTag.style.borderColor = '#A7F3D0';
+        } else {
+            statusTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px; color: #EF4444;">lock</span> Sesión Inactiva`;
+            statusTag.style.background = '#FEF2F2';
+            statusTag.style.color = '#DC2626';
+            statusTag.style.borderColor = '#FECACA';
+        }
     }
 
-    if (headerName) headerName.innerText = user.nombre || defaultName;
+    const defaultName = isAuth ? (appState.currentRole === 'gerente' ? "Gerente Principal" : "Colaborador") : "Iniciar Sesión";
+    const defaultEmail = isAuth ? (appState.currentRole === 'gerente' ? "zalazardemiranda@gmail.com" : "colaborador@rodipack.com") : "";
+
+    const user = isAuth ? (appState.currentUser || { nombre: defaultName, email: defaultEmail, rol: appState.currentRole || "colaborador" }) : { nombre: "Iniciar Sesión", email: "", rol: "colaborador" };
+    const currentPass = isAuth ? ((user && user.password) || sessionStorage.getItem("rp_session_pass") || localStorage.getItem("rp_user_pass") || "") : "";
+
+    if (footerName) footerName.innerText = isAuth ? (user.nombre || defaultName) : "Iniciar Sesión";
+    if (footerRole) footerRole.innerText = isAuth ? ((user.rol === 'gerente') ? "Administrador del Sistema" : ((user.rol === 'administrador') ? "Administrador (Finanzas)" : "Colaborador")) : "Sin autenticar";
+    if (footerAvatar) {
+        footerAvatar.innerText = isAuth ? (user.nombre || defaultName).charAt(0).toUpperCase() : "?";
+        footerAvatar.style.borderColor = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#CBD5E1';
+        footerAvatar.style.color = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#94A3B8';
+    }
+
+    if (headerName) headerName.innerText = isAuth ? (user.nombre || defaultName) : "Mi Perfil";
     if (headerAvatar) {
-        headerAvatar.innerText = (user.nombre || defaultName).charAt(0).toUpperCase();
-        headerAvatar.style.borderColor = user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B');
-        headerAvatar.style.color = user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B');
+        headerAvatar.innerText = isAuth ? (user.nombre || defaultName).charAt(0).toUpperCase() : "?";
+        headerAvatar.style.borderColor = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#CBD5E1';
+        headerAvatar.style.color = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#94A3B8';
     }
 
     const headerRoleTag = document.getElementById("modal-gerente-role-tag");
     if (headerRoleTag) {
-        const r = (user.rol || '').toLowerCase();
-        if (r === 'gerente' || r === 'manager') {
-            headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">star</span> Manager / Gerente`;
-            headerRoleTag.style.background = 'rgba(37, 99, 235, 0.1)';
-            headerRoleTag.style.color = '#2563EB';
-        } else if (r === 'administrador' || r === 'admin') {
-            headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">admin_panel_settings</span> Administrativo`;
-            headerRoleTag.style.background = 'rgba(16, 185, 129, 0.1)';
-            headerRoleTag.style.color = '#10B981';
-        } else {
-            headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">group</span> Colaborador`;
+        if (!isAuth) {
+            headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">no_accounts</span> No Autenticado`;
             headerRoleTag.style.background = 'rgba(100, 116, 139, 0.1)';
-            headerRoleTag.style.color = '#475569';
+            headerRoleTag.style.color = '#64748B';
+        } else {
+            const r = (user.rol || '').toLowerCase();
+            if (r === 'gerente' || r === 'manager') {
+                headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">star</span> Manager / Gerente`;
+                headerRoleTag.style.background = 'rgba(37, 99, 235, 0.1)';
+                headerRoleTag.style.color = '#2563EB';
+            } else if (r === 'administrador' || r === 'admin') {
+                headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">admin_panel_settings</span> Administrativo`;
+                headerRoleTag.style.background = 'rgba(16, 185, 129, 0.1)';
+                headerRoleTag.style.color = '#10B981';
+            } else {
+                headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">group</span> Colaborador`;
+                headerRoleTag.style.background = 'rgba(100, 116, 139, 0.1)';
+                headerRoleTag.style.color = '#475569';
+            }
         }
     }
 
-    if (editNameInput) editNameInput.value = user.nombre || defaultName;
-    if (editPhoneInput) editPhoneInput.value = user.telefono || "";
-    if (editEmailInput) editEmailInput.value = user.email || defaultEmail;
+    if (editNameInput) editNameInput.value = isAuth ? (user.nombre || "") : "";
+    if (editPhoneInput) editPhoneInput.value = isAuth ? (user.telefono || "") : "";
+    if (editEmailInput) editEmailInput.value = isAuth ? (user.email || "") : "";
 
     if (editPassInput) {
-        if (currentPass) {
+        if (isAuth && currentPass) {
             editPassInput.value = currentPass;
         } else {
             editPassInput.value = "";
@@ -10255,8 +10310,8 @@ function updateUserProfileUI() {
         }
     }
 
-    if (loggedEmailText) loggedEmailText.innerText = user.email || defaultEmail;
-    if (loggedRoleText) loggedRoleText.innerText = user.rol === 'gerente' ? "Gerente / Administrador" : "Colaborador de Operaciones";
+    if (loggedEmailText) loggedEmailText.innerText = isAuth ? (user.email || "") : "Sin sesión activa";
+    if (loggedRoleText) loggedRoleText.innerText = isAuth ? (user.rol === 'gerente' ? "Gerente / Administrador" : "Colaborador de Operaciones") : "Debes autenticarte";
 };
 
 // ==============================================================================
