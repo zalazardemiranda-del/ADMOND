@@ -749,8 +749,8 @@ function saveToStorage() {
         if (appState.customChannels) localStorage.setItem('rp_custom_channels', JSON.stringify(appState.customChannels));
         if (appState.meetings) localStorage.setItem('rp_meetings', JSON.stringify(appState.meetings));
         if (appState.proveedores) localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
-        if (appState.nominas) localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
-        if (appState.gastosIndirectos) localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos));
+        if (appState.nominas && !appState.isEditingNominas) localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
+        if (appState.gastosIndirectos && !appState.isEditingGastosIndirectos) localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos));
         if (appState.archivosQuincenales) localStorage.setItem('rp_archivos_quincenales', JSON.stringify(appState.archivosQuincenales));
         if (appState.concepts) localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts));
         if (appState.proveedorNamesList) localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
