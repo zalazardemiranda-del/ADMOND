@@ -210,7 +210,9 @@
                 const active = channelInterface._activeColListeners || {};
                 Object.keys(active).forEach(function(k) { try { active[k](); } catch (e) {} delete active[k]; });
                 return Promise.resolve();
-            }
+            },
+            _broadcastHandlers: broadcastHandlers,
+            _postgresChangeHandlers: postgresChangeHandlers
         };
 
         // Query Builder para Firestore con compatibilidad completa para la API existente

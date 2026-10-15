@@ -1370,12 +1370,16 @@ function renderAdministracion() {
     if (!isGerente && !isAdmin) return;
     
     if (appState.currentAdminFicha === 'visualizacion') {
-        if (typeof window.fetchAdminConceptsFromCloud === 'function') window.fetchAdminConceptsFromCloud();
-        if (typeof window.fetchConsecutivoFromCloud === 'function') window.fetchConsecutivoFromCloud();
-        if (typeof window.fetchProveedoresDataFromCloud === 'function') window.fetchProveedoresDataFromCloud();
-        if (typeof window.fetchNominasFromCloud === 'function') window.fetchNominasFromCloud();
-        if (typeof window.fetchGastosIndirectosFromCloud === 'function') window.fetchGastosIndirectosFromCloud();
         renderVisualizacion();
+        Promise.allSettled([
+            typeof window.fetchAdminConceptsFromCloud === 'function' ? window.fetchAdminConceptsFromCloud() : Promise.resolve(),
+            typeof window.fetchConsecutivoFromCloud === 'function' ? window.fetchConsecutivoFromCloud() : Promise.resolve(),
+            typeof window.fetchProveedoresDataFromCloud === 'function' ? window.fetchProveedoresDataFromCloud() : Promise.resolve(),
+            typeof window.fetchNominasFromCloud === 'function' ? window.fetchNominasFromCloud() : Promise.resolve(),
+            typeof window.fetchGastosIndirectosFromCloud === 'function' ? window.fetchGastosIndirectosFromCloud() : Promise.resolve()
+        ]).then(() => {
+            if (typeof renderVisualizacion === 'function') renderVisualizacion();
+        });
     } else if (appState.currentAdminFicha === 'quincenal') {
         if (typeof window.fetchNominasLockFromCloud === 'function') {
             window.fetchNominasLockFromCloud();
@@ -1489,7 +1493,12 @@ function calculateAdminTotals() {
     let gastosInd = 0;
     if (Array.isArray(appState.gastosIndirectos)) {
         appState.gastosIndirectos.forEach(g => {
-            if (g) gastosInd += Number(g.total) || 0;
+            if (g) {
+                const val = (g.total !== undefined && g.total !== null && g.total !== '' && !isNaN(g.total))
+                    ? Number(g.total)
+                    : (Number(g.subtotal) || Number(g.monto) || 0);
+                gastosInd += val;
+            }
         });
     }
     gastosInd = Math.round(gastosInd * 100) / 100;
@@ -1501,7 +1510,21 @@ function calculateAdminTotals() {
     // Nominas: resultado del total de nóminas
     let totalNominas = 0;
     window.getActiveNominasList().forEach(n => {
-        if (n) totalNominas += Number(n.total) || 0;
+        if (n) {
+            const nomVal = Number(n.nomina !== undefined && n.nomina !== null && n.nomina !== '' ? n.nomina : (n.servicio && !isNaN(n.servicio) ? n.servicio : (n.total || 0))) || 0;
+            const ivaPct = Number(n.ivaPct) || 0;
+            const ivaVal = Number(n.iva !== undefined ? n.iva : (nomVal * (ivaPct / 100))) || 0;
+            const sub1 = nomVal + ivaVal;
+            const retPct = Number(n.retPct ?? n.ret4Pct) || 0;
+            const retVal = Number(n.ret4 !== undefined ? n.ret4 : (sub1 * (retPct / 100))) || 0;
+            const sub2 = sub1 + retVal;
+            const retIsrPct = Number(n.retIsrPct) || 0;
+            const retIsrVal = Number(n.retIsr !== undefined ? n.retIsr : (sub2 * (retIsrPct / 100))) || 0;
+            const totVal = (n.total !== undefined && n.total !== null && n.total !== '' && !isNaN(n.total))
+                ? Number(n.total)
+                : (sub2 + retIsrVal);
+            totalNominas += totVal;
+        }
     });
     totalNominas = Math.round(totalNominas * 100) / 100;
     
@@ -1896,15 +1919,29 @@ async function startEditingNominas() {
     updateNominasEditButtonsUI();
     renderNominas();
 
+    // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
+    try {
+        const activeCloudLock = await checkCloudLockActive('__cloud_sync_nominas_lock__', currentUserId);
+        if (activeCloudLock && activeCloudLock.isLocked && activeCloudLock.userId !== currentUserId) {
+            appState.isEditingNominas = false;
+            appState.nominasLockedBy = activeCloudLock;
+            if (appState._nominasSnapshot) {
+                appState.nominas = JSON.parse(JSON.stringify(appState._nominasSnapshot));
+                appState._nominasSnapshot = null;
+            }
+            if (appState._archivosQuincenalesSnapshot) {
+                appState.archivosQuincenales = JSON.parse(JSON.stringify(appState._archivosQuincenalesSnapshot));
+                appState._archivosQuincenalesSnapshot = null;
+            }
+            updateNominasEditButtonsUI();
+            renderNominas();
+            alert(`⚠️ Esta tabla está siendo editada por ${activeCloudLock.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    } catch (e) {}
+
     broadcastNominasLockState(true, currentUserName, currentUserId, lockTime);
     await syncNominasLockToCloud(true, currentUserName, currentUserId, lockTime);
-
-    // 2. Verificación en la nube para asegurar que nadie más haya tomado el bloqueo previamente
-    if (typeof fetchNominasLockFromCloud === 'function') {
-        try {
-            await fetchNominasLockFromCloud();
-        } catch (e) {}
-    }
 
     if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
     _editNominasTimeout = setTimeout(() => {
@@ -2151,25 +2188,11 @@ async function fetchNominasLockFromCloud() {
                     if (elapsed < 5 * 60 * 1000) {
                         if (parsed.userId !== currentUserId) {
                             if (appState.isEditingNominas) {
-                                const myLockTime = appState.nominasLockedBy?.timestamp || 0;
-                                const cloudLockTime = parsed.timestamp || 0;
-                                const myUserId = currentUserId;
-                                const cloudUserId = parsed.userId || '';
-                                const iHavePriority = (myLockTime < cloudLockTime) || (myLockTime === cloudLockTime && myUserId <= cloudUserId);
-
-                                if (iHavePriority) {
-                                    // Mantener mi sesión activa y re-asegurar en la nube
-                                    syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                                    broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
-                                    return;
-                                } else {
-                                    // El otro usuario comenzó antes legítimamente
-                                    cancelEditingNominas();
-                                    appState.nominasLockedBy = parsed;
-                                    updateNominasEditButtonsUI();
-                                    alert(`⚠️ ${parsed.userName || 'Otro usuario'} comenzó a editar antes esta sección. Por favor espera a que termine de guardar.`);
-                                    return;
-                                }
+                                // Preferencia absoluta: mantener mi sesión activa hasta que yo de clic en Guardar
+                                const myLockTime = appState.nominasLockedBy?.timestamp || Date.now();
+                                syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
+                                return;
                             }
                             appState.nominasLockedBy = parsed;
                         }
@@ -2576,9 +2599,9 @@ async function fetchNominasFromCloud() {
                     } catch (e) {}
                     const tbody = document.getElementById("tbody-nominas");
                     const tableNeedsRender = !tbody || tbody.children.length === 0;
-                    if (changed || tableNeedsRender) {
+                    if (changed || tableNeedsRender || appState.currentAdminFicha === 'visualizacion') {
                         if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
-                            renderNominas();
+                            if (appState.currentAdminFicha === 'quincenal') renderNominas();
                             renderVisualizacion();
                         }
                     }
@@ -2625,15 +2648,25 @@ async function startEditingGastosIndirectos() {
     updateGastosIndirectosEditButtonsUI();
     renderGastosIndirectos();
 
+    // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
+    try {
+        const activeCloudLock = await checkCloudLockActive('__cloud_sync_gastos_indirectos_lock__', currentUserId);
+        if (activeCloudLock && activeCloudLock.isLocked && activeCloudLock.userId !== currentUserId) {
+            appState.isEditingGastosIndirectos = false;
+            appState.gastosIndirectosLockedBy = activeCloudLock;
+            if (appState._gastosIndirectosSnapshot) {
+                appState.gastosIndirectos = JSON.parse(JSON.stringify(appState._gastosIndirectosSnapshot));
+                appState._gastosIndirectosSnapshot = null;
+            }
+            updateGastosIndirectosEditButtonsUI();
+            renderGastosIndirectos();
+            alert(`⚠️ Esta tabla está siendo editada por ${activeCloudLock.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    } catch (e) {}
+
     broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, lockTime);
     await syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, lockTime);
-
-    // 2. Verificación en la nube para asegurar que nadie más haya tomado el bloqueo previamente
-    if (typeof fetchGastosIndirectosLockFromCloud === 'function') {
-        try {
-            await fetchGastosIndirectosLockFromCloud();
-        } catch (e) {}
-    }
 
     if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
     _editGastosIndirectosTimeout = setTimeout(() => {
@@ -2871,25 +2904,11 @@ async function fetchGastosIndirectosLockFromCloud() {
                     if (elapsed < 5 * 60 * 1000) {
                         if (parsed.userId !== currentUserId) {
                             if (appState.isEditingGastosIndirectos) {
-                                const myLockTime = appState.gastosIndirectosLockedBy?.timestamp || 0;
-                                const cloudLockTime = parsed.timestamp || 0;
-                                const myUserId = currentUserId;
-                                const cloudUserId = parsed.userId || '';
-                                const iHavePriority = (myLockTime < cloudLockTime) || (myLockTime === cloudLockTime && myUserId <= cloudUserId);
-
-                                if (iHavePriority) {
-                                    // Mantener mi sesión activa y re-asegurar en la nube
-                                    syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                                    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, myLockTime);
-                                    return;
-                                } else {
-                                    // El otro usuario comenzó antes legítimamente
-                                    cancelEditingGastosIndirectos();
-                                    appState.gastosIndirectosLockedBy = parsed;
-                                    updateGastosIndirectosEditButtonsUI();
-                                    alert(`⚠️ ${parsed.userName || 'Otro usuario'} comenzó a editar antes esta sección. Por favor espera a que termine de guardar.`);
-                                    return;
-                                }
+                                // Preferencia absoluta: mantener mi sesión activa hasta que yo de clic en Guardar
+                                const myLockTime = appState.gastosIndirectosLockedBy?.timestamp || Date.now();
+                                syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, myLockTime);
+                                return;
                             }
                             appState.gastosIndirectosLockedBy = parsed;
                         }
@@ -3002,6 +3021,13 @@ async function fetchGastosIndirectosFromCloud() {
                             renderGastosIndirectos();
                         }
                         recalculateGastosIndirectosTotals();
+                        if (typeof renderVisualizacion === 'function') {
+                            renderVisualizacion();
+                        }
+                    } else if (appState.currentAdminFicha === 'visualizacion') {
+                        if (typeof renderVisualizacion === 'function') {
+                            renderVisualizacion();
+                        }
                     }
                 }
             } catch (e) {}
@@ -4307,6 +4333,31 @@ window.handleProvEstatusDblClick = handleProvEstatusDblClick;
 
 let _editProveedoresTimeout = null;
 
+async function checkCloudLockActive(lockChatId, currentUserId) {
+    window.checkCloudLockActive = checkCloudLockActive;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return null;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return null;
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', lockChatId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            const parsed = JSON.parse(msgs[0].contenido);
+            if (parsed && parsed.isLocked) {
+                const elapsed = Date.now() - (parsed.timestamp || 0);
+                if (elapsed < 5 * 60 * 1000 && parsed.userId !== currentUserId) {
+                    return parsed;
+                }
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+window.checkCloudLockActive = checkCloudLockActive;
+
 async function startEditingProveedores() {
     window.startEditingProveedores = startEditingProveedores;
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
@@ -4338,16 +4389,30 @@ async function startEditingProveedores() {
     updateProveedoresEditButtonsUI();
     renderProveedores();
 
+    // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
+    try {
+        const activeCloudLock = await checkCloudLockActive('__cloud_sync_proveedores_lock__', currentUserId);
+        if (activeCloudLock && activeCloudLock.isLocked && activeCloudLock.userId !== currentUserId) {
+            appState.isEditingProveedores = false;
+            appState.proveedoresLockedBy = activeCloudLock;
+            if (appState._proveedoresSnapshot) {
+                appState.proveedores = JSON.parse(JSON.stringify(appState._proveedoresSnapshot));
+                appState._proveedoresSnapshot = null;
+            }
+            if (appState._operacionesSnapshotProv) {
+                appState.operacionesProyectos = JSON.parse(JSON.stringify(appState._operacionesSnapshotProv));
+                appState._operacionesSnapshotProv = null;
+            }
+            updateProveedoresEditButtonsUI();
+            renderProveedores();
+            alert(`⚠️ Esta tabla está siendo editada por ${activeCloudLock.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    } catch (e) {}
+
     // Notificar a otras máquinas por WebSockets y persistir en Supabase
     broadcastProveedoresLockState(true, currentUserName, currentUserId, lockTime);
     syncProveedoresLockToCloud(true, currentUserName, currentUserId, lockTime);
-
-    // 2. Verificación en la nube para asegurar que nadie más haya tomado el bloqueo previamente
-    if (typeof fetchProveedoresLockFromCloud === 'function') {
-        try {
-            await fetchProveedoresLockFromCloud();
-        } catch (e) {}
-    }
 
     if (typeof showCustomNotification === 'function') {
         showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
@@ -4574,25 +4639,11 @@ async function fetchProveedoresLockFromCloud() {
                     if (elapsed < 5 * 60 * 1000) {
                         if (parsed.userId !== currentUserId) {
                             if (appState.isEditingProveedores) {
-                                const myLockTime = appState.proveedoresLockedBy?.timestamp || 0;
-                                const cloudLockTime = parsed.timestamp || 0;
-                                const myUserId = currentUserId;
-                                const cloudUserId = parsed.userId || '';
-                                const iHavePriority = (myLockTime < cloudLockTime) || (myLockTime === cloudLockTime && myUserId <= cloudUserId);
-
-                                if (iHavePriority) {
-                                    // Mantener mi sesión activa y re-asegurar en la nube
-                                    syncProveedoresLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                                    broadcastProveedoresLockState(true, currentUserName, currentUserId, myLockTime);
-                                    return;
-                                } else {
-                                    // El otro usuario comenzó antes legítimamente
-                                    cancelEditingProveedores();
-                                    appState.proveedoresLockedBy = parsed;
-                                    updateProveedoresEditButtonsUI();
-                                    alert(`⚠️ ${parsed.userName || 'Otro usuario'} comenzó a editar antes esta sección. Por favor espera a que termine de guardar.`);
-                                    return;
-                                }
+                                // Preferencia absoluta: mantener mi sesión activa hasta que yo de clic en Guardar
+                                const myLockTime = appState.proveedoresLockedBy?.timestamp || Date.now();
+                                syncProveedoresLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                broadcastProveedoresLockState(true, currentUserName, currentUserId, myLockTime);
+                                return;
                             }
                             appState.proveedoresLockedBy = parsed;
                         }
@@ -6780,16 +6831,30 @@ async function startEditingConsecutivo() {
     updateConsecutivoEditButtonsUI();
     renderConsecutivo();
 
+    // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
+    try {
+        const activeCloudLock = await checkCloudLockActive('__cloud_sync_consecutivo_lock__', currentUserId);
+        if (activeCloudLock && activeCloudLock.isLocked && activeCloudLock.userId !== currentUserId) {
+            appState.isEditingConsecutivo = false;
+            appState.consecutivoLockedBy = activeCloudLock;
+            if (appState._consecutivoSnapshot) {
+                appState.consecutivo = JSON.parse(JSON.stringify(appState._consecutivoSnapshot));
+                appState._consecutivoSnapshot = null;
+            }
+            if (appState._operacionesSnapshotConsec) {
+                appState.operacionesProyectos = JSON.parse(JSON.stringify(appState._operacionesSnapshotConsec));
+                appState._operacionesSnapshotConsec = null;
+            }
+            updateConsecutivoEditButtonsUI();
+            renderConsecutivo();
+            alert(`⚠️ Esta sección está siendo editada por ${activeCloudLock.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    } catch (e) {}
+
     // Notificar a otras máquinas por WebSockets y persistir en Supabase
     broadcastConsecutivoLockState(true, currentUserName, currentUserId, lockTime);
     syncConsecutivoLockToCloud(true, currentUserName, currentUserId, lockTime);
-
-    // 2. Verificación en la nube para asegurar que nadie más haya tomado el bloqueo previamente
-    if (typeof fetchConsecutivoLockFromCloud === 'function') {
-        try {
-            await fetchConsecutivoLockFromCloud();
-        } catch (e) {}
-    }
 
     if (typeof showCustomNotification === 'function') {
         showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
@@ -7012,25 +7077,11 @@ async function fetchConsecutivoLockFromCloud() {
                     if (elapsed < 5 * 60 * 1000) {
                         if (parsed.userId !== currentUserId) {
                             if (appState.isEditingConsecutivo) {
-                                const myLockTime = appState.consecutivoLockedBy?.timestamp || 0;
-                                const cloudLockTime = parsed.timestamp || 0;
-                                const myUserId = currentUserId;
-                                const cloudUserId = parsed.userId || '';
-                                const iHavePriority = (myLockTime < cloudLockTime) || (myLockTime === cloudLockTime && myUserId <= cloudUserId);
-
-                                if (iHavePriority) {
-                                    // Mantener mi sesión activa y re-asegurar en la nube
-                                    syncConsecutivoLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                                    broadcastConsecutivoLockState(true, currentUserName, currentUserId, myLockTime);
-                                    return;
-                                } else {
-                                    // El otro usuario comenzó antes legítimamente
-                                    cancelEditingConsecutivo();
-                                    appState.consecutivoLockedBy = parsed;
-                                    updateConsecutivoEditButtonsUI();
-                                    alert(`⚠️ ${parsed.userName || 'Otro usuario'} comenzó a editar antes esta sección. Por favor espera a que termine de guardar.`);
-                                    return;
-                                }
+                                // Preferencia absoluta: mantener mi sesión activa hasta que yo de clic en Guardar
+                                const myLockTime = appState.consecutivoLockedBy?.timestamp || Date.now();
+                                syncConsecutivoLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                broadcastConsecutivoLockState(true, currentUserName, currentUserId, myLockTime);
+                                return;
                             }
                             appState.consecutivoLockedBy = parsed;
                         }
@@ -8771,29 +8822,12 @@ function setupRealtimeSubscriptions() {
             if (data.userId === currentUserId) return;
 
             if (appState.isEditingProveedores) {
-                const myLockTime = appState.proveedoresLockedBy?.timestamp || 0;
-                const incomingTime = data.timestamp || Date.now();
-                const myUserId = currentUserId;
-                const incomingUserId = data.userId || '';
-                const iHavePriority = (myLockTime < incomingTime) || (myLockTime === incomingTime && myUserId <= incomingUserId);
-
-                if (iHavePriority) {
-                    // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
-                    // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
-                    broadcastProveedoresLockState(true, currentUserName, currentUserId, myLockTime);
-                    syncProveedoresLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                    return;
-                } else {
-                    // El otro usuario dio click antes legítimamente en el tiempo
-                    cancelEditingProveedores();
-                    appState.proveedoresLockedBy = data;
-                    updateProveedoresEditButtonsUI();
-                    if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
-                        window.renderProveedores();
-                    }
-                    alert(`⚠️ ${data.userName || 'Otro usuario'} comenzó a editar primero esta sección. Tus cambios no guardados fueron cancelados.`);
-                    return;
-                }
+                // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
+                // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
+                const myLockTime = appState.proveedoresLockedBy?.timestamp || Date.now();
+                broadcastProveedoresLockState(true, currentUserName, currentUserId, myLockTime);
+                syncProveedoresLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                return;
             }
 
             appState.proveedoresLockedBy = data;
@@ -8821,29 +8855,12 @@ function setupRealtimeSubscriptions() {
             if (data.userId === currentUserId) return;
 
             if (appState.isEditingConsecutivo) {
-                const myLockTime = appState.consecutivoLockedBy?.timestamp || 0;
-                const incomingTime = data.timestamp || Date.now();
-                const myUserId = currentUserId;
-                const incomingUserId = data.userId || '';
-                const iHavePriority = (myLockTime < incomingTime) || (myLockTime === incomingTime && myUserId <= incomingUserId);
-
-                if (iHavePriority) {
-                    // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
-                    // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
-                    broadcastConsecutivoLockState(true, currentUserName, currentUserId, myLockTime);
-                    syncConsecutivoLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                    return;
-                } else {
-                    // El otro usuario dio click antes legítimamente en el tiempo
-                    cancelEditingConsecutivo();
-                    appState.consecutivoLockedBy = data;
-                    updateConsecutivoEditButtonsUI();
-                    if (appState.currentAdminFicha === 'consecutivo' && typeof window.renderConsecutivo === 'function') {
-                        window.renderConsecutivo();
-                    }
-                    alert(`⚠️ ${data.userName || 'Otro usuario'} comenzó a editar primero esta sección. Tus cambios no guardados fueron cancelados.`);
-                    return;
-                }
+                // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
+                // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
+                const myLockTime = appState.consecutivoLockedBy?.timestamp || Date.now();
+                broadcastConsecutivoLockState(true, currentUserName, currentUserId, myLockTime);
+                syncConsecutivoLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                return;
             }
 
             appState.consecutivoLockedBy = data;
@@ -8960,29 +8977,12 @@ function setupRealtimeSubscriptions() {
             if (data.userId === currentUserId) return;
 
             if (appState.isEditingNominas) {
-                const myLockTime = appState.nominasLockedBy?.timestamp || 0;
-                const incomingTime = data.timestamp || Date.now();
-                const myUserId = currentUserId;
-                const incomingUserId = data.userId || '';
-                const iHavePriority = (myLockTime < incomingTime) || (myLockTime === incomingTime && myUserId <= incomingUserId);
-
-                if (iHavePriority) {
-                    // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
-                    // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
-                    broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
-                    syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                    return;
-                } else {
-                    // El otro usuario dio click antes legítimamente en el tiempo
-                    cancelEditingNominas();
-                    appState.nominasLockedBy = data;
-                    updateNominasEditButtonsUI();
-                    if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderNominas === 'function') {
-                        window.renderNominas();
-                    }
-                    alert(`⚠️ ${data.userName || 'Otro usuario'} comenzó a editar primero esta sección. Tus cambios no guardados fueron cancelados.`);
-                    return;
-                }
+                // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
+                // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
+                const myLockTime = appState.nominasLockedBy?.timestamp || Date.now();
+                broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
+                syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                return;
             }
 
             appState.nominasLockedBy = data;
@@ -9031,29 +9031,12 @@ function setupRealtimeSubscriptions() {
             if (data.userId === currentUserId) return;
 
             if (appState.isEditingGastosIndirectos) {
-                const myLockTime = appState.gastosIndirectosLockedBy?.timestamp || 0;
-                const incomingTime = data.timestamp || Date.now();
-                const myUserId = currentUserId;
-                const incomingUserId = data.userId || '';
-                const iHavePriority = (myLockTime < incomingTime) || (myLockTime === incomingTime && myUserId <= incomingUserId);
-
-                if (iHavePriority) {
-                    // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
-                    // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
-                    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, myLockTime);
-                    syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                    return;
-                } else {
-                    // El otro usuario dio click antes legítimamente en el tiempo
-                    cancelEditingGastosIndirectos();
-                    appState.gastosIndirectosLockedBy = data;
-                    updateGastosIndirectosEditButtonsUI();
-                    if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderGastosIndirectos === 'function') {
-                        window.renderGastosIndirectos();
-                    }
-                    alert(`⚠️ ${data.userName || 'Otro usuario'} comenzó a editar primero esta sección. Tus cambios no guardados fueron cancelados.`);
-                    return;
-                }
+                // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
+                // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
+                const myLockTime = appState.gastosIndirectosLockedBy?.timestamp || Date.now();
+                broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, myLockTime);
+                syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                return;
             }
 
             appState.gastosIndirectosLockedBy = data;
@@ -9246,17 +9229,139 @@ function setupRealtimeSubscriptions() {
                     window.fetchAdminConceptsFromCloud();
                 }
             }
-            if (channelKey === '__cloud_sync_nominas_lock__' && typeof window.fetchNominasLockFromCloud === 'function') {
-                window.fetchNominasLockFromCloud();
+            if (channelKey === '__cloud_sync_proveedores_lock__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+                        if (parsed.isLocked === false) {
+                            if (!appState.isEditingProveedores) {
+                                appState.proveedoresLockedBy = null;
+                                if (typeof window.updateProveedoresEditButtonsUI === 'function') window.updateProveedoresEditButtonsUI();
+                                if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') window.renderProveedores();
+                            }
+                        } else if (parsed.isLocked) {
+                            if (parsed.userId !== currentUserId) {
+                                if (appState.isEditingProveedores) {
+                                    const myLockTime = appState.proveedoresLockedBy?.timestamp || Date.now();
+                                    broadcastProveedoresLockState(true, currentUserName, currentUserId, myLockTime);
+                                    syncProveedoresLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                } else {
+                                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                                    if (elapsed < 5 * 60 * 1000) {
+                                        appState.proveedoresLockedBy = parsed;
+                                        if (typeof window.updateProveedoresEditButtonsUI === 'function') window.updateProveedoresEditButtonsUI();
+                                        if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') window.renderProveedores();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchProveedoresLockFromCloud === 'function') {
+                    window.fetchProveedoresLockFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_gastos_indirectos_lock__' && typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
-                window.fetchGastosIndirectosLockFromCloud();
+            if (channelKey === '__cloud_sync_consecutivo_lock__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+                        if (parsed.isLocked === false) {
+                            if (!appState.isEditingConsecutivo) {
+                                appState.consecutivoLockedBy = null;
+                                if (typeof window.updateConsecutivoEditButtonsUI === 'function') window.updateConsecutivoEditButtonsUI();
+                                if (appState.currentAdminFicha === 'consecutivo' && typeof window.renderConsecutivo === 'function') window.renderConsecutivo();
+                            }
+                        } else if (parsed.isLocked) {
+                            if (parsed.userId !== currentUserId) {
+                                if (appState.isEditingConsecutivo) {
+                                    const myLockTime = appState.consecutivoLockedBy?.timestamp || Date.now();
+                                    broadcastConsecutivoLockState(true, currentUserName, currentUserId, myLockTime);
+                                    syncConsecutivoLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                } else {
+                                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                                    if (elapsed < 5 * 60 * 1000) {
+                                        appState.consecutivoLockedBy = parsed;
+                                        if (typeof window.updateConsecutivoEditButtonsUI === 'function') window.updateConsecutivoEditButtonsUI();
+                                        if (appState.currentAdminFicha === 'consecutivo' && typeof window.renderConsecutivo === 'function') window.renderConsecutivo();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
+                    window.fetchConsecutivoLockFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_proveedores_lock__' && typeof window.fetchProveedoresLockFromCloud === 'function') {
-                window.fetchProveedoresLockFromCloud();
+            if (channelKey === '__cloud_sync_nominas_lock__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+                        if (parsed.isLocked === false) {
+                            if (!appState.isEditingNominas) {
+                                appState.nominasLockedBy = null;
+                                if (typeof window.updateNominasEditButtonsUI === 'function') window.updateNominasEditButtonsUI();
+                                if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderNominas === 'function') window.renderNominas();
+                            }
+                        } else if (parsed.isLocked) {
+                            if (parsed.userId !== currentUserId) {
+                                if (appState.isEditingNominas) {
+                                    const myLockTime = appState.nominasLockedBy?.timestamp || Date.now();
+                                    broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
+                                    syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                } else {
+                                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                                    if (elapsed < 5 * 60 * 1000) {
+                                        appState.nominasLockedBy = parsed;
+                                        if (typeof window.updateNominasEditButtonsUI === 'function') window.updateNominasEditButtonsUI();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchNominasLockFromCloud === 'function') {
+                    window.fetchNominasLockFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_consecutivo_lock__' && typeof window.fetchConsecutivoLockFromCloud === 'function') {
-                window.fetchConsecutivoLockFromCloud();
+            if (channelKey === '__cloud_sync_gastos_indirectos_lock__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+                        if (parsed.isLocked === false) {
+                            if (!appState.isEditingGastosIndirectos) {
+                                appState.gastosIndirectosLockedBy = null;
+                                if (typeof window.updateGastosIndirectosEditButtonsUI === 'function') window.updateGastosIndirectosEditButtonsUI();
+                                if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderGastosIndirectos === 'function') window.renderGastosIndirectos();
+                            }
+                        } else if (parsed.isLocked) {
+                            if (parsed.userId !== currentUserId) {
+                                if (appState.isEditingGastosIndirectos) {
+                                    const myLockTime = appState.gastosIndirectosLockedBy?.timestamp || Date.now();
+                                    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, myLockTime);
+                                    syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                } else {
+                                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                                    if (elapsed < 5 * 60 * 1000) {
+                                        appState.gastosIndirectosLockedBy = parsed;
+                                        if (typeof window.updateGastosIndirectosEditButtonsUI === 'function') window.updateGastosIndirectosEditButtonsUI();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
+                    window.fetchGastosIndirectosLockFromCloud();
+                }
             }
             return;
         }
@@ -9467,18 +9572,11 @@ function setupRealtimeSubscriptions() {
                             await window.fetchConsecutivoLockFromCloud();
                         }
                     } else if (appState.currentAdminFicha === 'visualizacion') {
-                        window._visualizacionHeartbeatTick = (window._visualizacionHeartbeatTick || 0) + 1;
-                        if (window._visualizacionHeartbeatTick % 2 === 0) {
-                            const visSig = () => {
-                                try { return JSON.stringify([appState.concepts, appState.nominas, appState.gastosIndirectos, appState.consecutivo, appState.proveedores]); } catch (e) { return String(Date.now()); }
-                            };
-                            const before = visSig();
-                            const fetchers = ['fetchAdminConceptsFromCloud', 'fetchNominasFromCloud', 'fetchGastosIndirectosFromCloud', 'fetchConsecutivoFromCloud', 'fetchProveedoresDataFromCloud'];
-                            for (const fn of fetchers) {
-                                if (typeof window[fn] === 'function') { try { await window[fn](); } catch (e) {} }
-                            }
-                            if (before !== visSig() && typeof window.renderVisualizacion === 'function') window.renderVisualizacion();
+                        const fetchers = ['fetchAdminConceptsFromCloud', 'fetchNominasFromCloud', 'fetchGastosIndirectosFromCloud', 'fetchConsecutivoFromCloud', 'fetchProveedoresDataFromCloud'];
+                        for (const fn of fetchers) {
+                            if (typeof window[fn] === 'function') { try { await window[fn](); } catch (e) {} }
                         }
+                        if (typeof window.renderVisualizacion === 'function') window.renderVisualizacion();
                     }
                 } else if (appState.currentTab === 'users' || appState.currentTab === 'profile') {
                     window._usersHeartbeatTick = (window._usersHeartbeatTick || 0) + 1;

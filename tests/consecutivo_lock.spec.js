@@ -1242,5 +1242,102 @@ test("15. Consecutivo: El usuario que da clic primero a Editar mantiene preferen
   await expect(btnSave).toBeDisabled();
 });
 
+test("16. Control de Proveedores: Desbloqueo instantáneo al guardar por otro usuario sin retardo de 10 segundos", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  // 1. Ir a la ficha de Proveedores
+  await page.evaluate(() => {
+    window.switchAdminFicha('proveedores');
+  });
+  await page.waitForTimeout(200);
+
+  const btnEditProv = page.locator("#btn-edit-proveedores");
+  const bannerProv = page.locator("#proveedores-lock-banner");
+
+  // 2. Simular que otro usuario está editando Proveedores
+  await page.evaluate(() => {
+    window.appState.proveedoresLockedBy = {
+      isLocked: true,
+      userId: 'other-user-maria',
+      userName: 'Maria Perez',
+      timestamp: Date.now()
+    };
+    window.updateProveedoresEditButtonsUI();
+  });
+  await page.waitForTimeout(100);
+
+  await expect(bannerProv).toBeVisible();
+  await expect(bannerProv).toContainText("Esta tabla está siendo editada por Maria Perez");
+  await expect(btnEditProv).toContainText("Bloqueado");
+  await expect(btnEditProv).toBeDisabled();
+
+  // 3. Simular que el otro usuario da clic en 'Guardar' y se recibe el evento postgres_changes con isLocked: false
+  await page.evaluate(() => {
+    const channel = window.chatRealtimeChannel;
+    const pgHandlers = channel?._postgresChangeHandlers?.['messages'] || [];
+    const payload = {
+      eventType: 'INSERT',
+      new: {
+        chat_id: '__cloud_sync_proveedores_lock__',
+        contenido: JSON.stringify({
+          isLocked: false,
+          userId: null,
+          userName: null,
+          timestamp: Date.now()
+        }),
+        emisor_nombre: 'Sistema Rodipack',
+        emisor_role: 'sistema'
+      }
+    };
+    pgHandlers.forEach(fn => fn(payload));
+  });
+  await page.waitForTimeout(100);
+
+  // El desbloqueo debe ser INMEDIATO (< 150ms), sin esperar los 10 segundos del heartbeat
+  await expect(bannerProv).toBeHidden();
+  await expect(btnEditProv).toContainText("Editar");
+  await expect(btnEditProv).toBeEnabled();
+});
+
+test("17. Visualización: Reflejo en tiempo real de Gastos Indirectos y Nóminas", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  // 1. Abrir la pestaña de Visualización
+  await page.evaluate(() => {
+    window.switchAdminFicha('visualizacion');
+  });
+  await page.waitForTimeout(200);
+
+  const kpiGastosInd = page.locator("#concept-gastos-ind-val");
+  const kpiNominas = page.locator("#concept-nominas-val");
+
+  // 2. Simular llegada de actualización de Gastos Indirectos desde la nube
+  await page.evaluate(() => {
+    window.appState.gastosIndirectos = [
+      { id: 'gi_1', concepto: 'Servicios de Internet', total: 4500, estatus: 'PAGADO' },
+      { id: 'gi_2', concepto: 'Mantenimiento de Unidades', total: 12300, estatus: 'PAGADO' }
+    ];
+    window.renderVisualizacion();
+  });
+  await page.waitForTimeout(100);
+
+  // Gastos Indirectos debe reflejar $16,800.00
+  await expect(kpiGastosInd).toContainText("$16,800.00");
+
+  // 3. Simular llegada de Nóminas desde la nube
+  await page.evaluate(() => {
+    window.appState.nominas = [
+      { id: 'nom_1', empleado: 'Juan Perez', total: 15000, estatus: 'PAGADO' },
+      { id: 'nom_2', empleado: 'Carlos Lopez', total: 18500, estatus: 'PAGADO' }
+    ];
+    window.renderVisualizacion();
+  });
+  await page.waitForTimeout(100);
+
+  // Nóminas debe reflejar $33,500.00
+  await expect(kpiNominas).toContainText("$33,500.00");
+});
+
+
 
 
