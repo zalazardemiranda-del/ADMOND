@@ -1,8 +1,0 @@
-﻿2026-10-15T19:22:43.8850589Z ##[group]Run npm run lint
-2026-10-15T19:22:43.8851078Z [36;1mnpm run lint[0m
-2026-10-15T19:22:43.8949432Z shell: /usr/bin/bash -e {0}
-2026-10-15T19:22:43.8949865Z ##[endgroup]
-2026-10-15T19:22:44.1159627Z 
-2026-10-15T19:22:44.1160748Z > central@1.0.0 lint
-2026-10-15T19:22:44.1194647Z > eslint app.js schema.js firebase_config.js consecutivo_data.js --quiet
-2026-10-15T19:22:44.1195713Z 
