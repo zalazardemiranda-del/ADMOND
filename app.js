@@ -8473,8 +8473,8 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_update' }, payload => {
         const data = payload.payload;
         if (!data || !Array.isArray(data.proveedores)) return;
+        if (data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
         if (appState.isEditingProveedores) return;
-        if (Date.now() - (window._lastLocalProveedoresSyncTime || 0) < 5000) return;
         const purgedIds = window.purgedProjectIds || new Set();
         const validProv = data.proveedores.filter(r => {
             if (!r) return false;
@@ -8496,6 +8496,7 @@ function setupRealtimeSubscriptions() {
                 if (typeof window.renderProveedoresTable === 'function') renderProveedoresTable();
                 if (typeof window.renderProveedores === 'function') renderProveedores();
             }
+            if (typeof window.renderVisualizacion === 'function') renderVisualizacion();
         }
     });
 
@@ -8563,11 +8564,10 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'consecutivo_update' }, payload => {
         const data = payload.payload;
         if (!data || !Array.isArray(data.consecutivo)) return;
-        if (data.sender && appState.currentUser?.email && data.sender === appState.currentUser.email) return;
+        if (data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
         if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
-        if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
         if (typeof window.mergeConsecutivoFromCloud === 'function') {
-            window.mergeConsecutivoFromCloud(data.consecutivo);
+            window.mergeConsecutivoFromCloud(data.consecutivo, true);
         }
     });
 
@@ -8616,14 +8616,18 @@ function setupRealtimeSubscriptions() {
         if (appState.isEditingNominas) return;
         const data = payload.payload;
         if (!data) return;
+        if (data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
         if (Array.isArray(data.nominas)) {
             appState.nominas = data.nominas;
             if (Array.isArray(data.archivosQuincenales)) {
                 appState.archivosQuincenales = data.archivosQuincenales;
             }
             saveToStorage();
+            try { localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas)); } catch (e) {}
             if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
                 renderNominas();
+            }
+            if (typeof window.renderVisualizacion === 'function') {
                 renderVisualizacion();
             }
         }
@@ -8659,6 +8663,7 @@ function setupRealtimeSubscriptions() {
         if (appState.isEditingGastosIndirectos) return;
         const data = payload.payload;
         if (!data || !Array.isArray(data.gastosIndirectos)) return;
+        if (data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
         appState.gastosIndirectos = data.gastosIndirectos.filter(item => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(item));
         saveToStorage();
         if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
@@ -8668,6 +8673,9 @@ function setupRealtimeSubscriptions() {
         }
         if (typeof window.recalculateGastosIndirectosTotals === 'function') {
             window.recalculateGastosIndirectosTotals();
+        }
+        if (typeof window.renderVisualizacion === 'function') {
+            window.renderVisualizacion();
         }
     });
 
@@ -8757,23 +8765,100 @@ function setupRealtimeSubscriptions() {
             if (channelKey === '__cloud_sync_system_release__' && typeof window.checkSystemReleaseFromCloud === 'function') {
                 window.checkSystemReleaseFromCloud();
             }
-            if (channelKey === '__cloud_sync_consecutivo__' && typeof window.fetchConsecutivoFromCloud === 'function') {
-                window.fetchConsecutivoFromCloud();
+            if (channelKey === '__cloud_sync_consecutivo__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (Array.isArray(parsed) && typeof window.mergeConsecutivoFromCloud === 'function') {
+                            window.mergeConsecutivoFromCloud(parsed, true);
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchConsecutivoFromCloud === 'function') {
+                    window.fetchConsecutivoFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_proveedores_catalog__' && typeof window.fetchProveedoresCatalogFromCloud === 'function') {
-                window.fetchProveedoresCatalogFromCloud();
+            if (channelKey === '__cloud_sync_proveedores_catalog__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (Array.isArray(parsed)) {
+                            appState.proveedorNamesList = parsed;
+                            try { localStorage.setItem('rp_proveedor_names', JSON.stringify(parsed)); } catch (e) {}
+                            if (typeof window.renderProveedorChips === 'function') window.renderProveedorChips();
+                            if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') renderProveedores();
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchProveedoresCatalogFromCloud === 'function') {
+                    window.fetchProveedoresCatalogFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_proveedores_data__' && typeof window.fetchProveedoresDataFromCloud === 'function') {
-                window.fetchProveedoresDataFromCloud();
+            if (channelKey === '__cloud_sync_proveedores_data__') {
+                if (row.contenido && !appState.isEditingProveedores) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            appState.proveedores = parsed;
+                            saveToStorage();
+                            try { localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores)); } catch (e) {}
+                            if (appState.currentAdminFicha === 'proveedores') {
+                                if (typeof window.updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
+                                if (typeof window.renderProveedoresTable === 'function') renderProveedoresTable();
+                                if (typeof window.renderProveedores === 'function') renderProveedores();
+                            }
+                            if (typeof window.renderVisualizacion === 'function') renderVisualizacion();
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchProveedoresDataFromCloud === 'function') {
+                    window.fetchProveedoresDataFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_nominas__' && typeof window.fetchNominasFromCloud === 'function') {
-                window.fetchNominasFromCloud();
+            if (channelKey === '__cloud_sync_nominas__') {
+                if (row.contenido && !appState.isEditingNominas) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (parsed && Array.isArray(parsed.nominas)) {
+                            appState.nominas = parsed.nominas;
+                            if (Array.isArray(parsed.archivosQuincenales)) {
+                                appState.archivosQuincenales = parsed.archivosQuincenales;
+                            }
+                            saveToStorage();
+                            try { localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas)); } catch (e) {}
+                            if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
+                                if (typeof renderNominas === 'function') renderNominas();
+                            }
+                            if (typeof renderVisualizacion === 'function') renderVisualizacion();
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchNominasFromCloud === 'function') {
+                    window.fetchNominasFromCloud();
+                }
             }
             if (channelKey === '__cloud_sync_nominas_lock__' && typeof window.fetchNominasLockFromCloud === 'function') {
                 window.fetchNominasLockFromCloud();
             }
-            if (channelKey === '__cloud_sync_gastos_indirectos__' && typeof window.fetchGastosIndirectosFromCloud === 'function') {
-                window.fetchGastosIndirectosFromCloud();
+            if (channelKey === '__cloud_sync_gastos_indirectos__') {
+                if (row.contenido && !appState.isEditingGastosIndirectos) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (parsed && Array.isArray(parsed.gastosIndirectos)) {
+                            appState.gastosIndirectos = parsed.gastosIndirectos.filter(item => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(item));
+                            saveToStorage();
+                            try { localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos)); } catch (e) {}
+                            if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
+                                if (typeof renderGastosIndirectos === 'function') renderGastosIndirectos();
+                            }
+                            if (typeof recalculateGastosIndirectosTotals === 'function') recalculateGastosIndirectosTotals();
+                            if (typeof renderVisualizacion === 'function') renderVisualizacion();
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchGastosIndirectosFromCloud === 'function') {
+                    window.fetchGastosIndirectosFromCloud();
+                }
             }
             if (channelKey === '__cloud_sync_gastos_indirectos_lock__' && typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
                 window.fetchGastosIndirectosLockFromCloud();
@@ -8862,6 +8947,20 @@ function setupRealtimeSubscriptions() {
                 }
             } catch (e) {}
         }, 400);
+    });
+
+    // 10. Actualización instantánea de perfiles de usuario por broadcast (0 ms / sub-100ms)
+    window.chatRealtimeChannel.on('broadcast', { event: 'profiles_update' }, async payload => {
+        const data = payload?.payload;
+        if (data && data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
+        try {
+            if (typeof loadProfilesList === 'function') await loadProfilesList();
+            if (Array.isArray(window.cachedProfilesList) && window.cachedProfilesList.length > 0) {
+                cloudProfilesCache = window.cachedProfilesList;
+                window.cloudProfilesCache = window.cachedProfilesList;
+            }
+            if (typeof updateUserSessionUI === 'function') updateUserSessionUI();
+        } catch (e) {}
     });
 
     let _reconnectRealtimeTimer = null;
@@ -9940,6 +10039,15 @@ async function handleFirebaseRegister(event) {
             successEl.style.display = "block";
         }
         if (regForm) regForm.reset();
+        if (window.chatRealtimeChannel) {
+            try {
+                window.chatRealtimeChannel.send({
+                    type: 'broadcast',
+                    event: 'profiles_update',
+                    payload: { email, nombre, rol, departamento: depto, senderClientId: window._myClientId, timestamp: Date.now() }
+                });
+            } catch (e) {}
+        }
         loadProfilesList();
         setTimeout(() => {
             toggleNewUserForm();
@@ -10012,6 +10120,16 @@ async function handleDeleteProfile(email, nombre) {
 
     if (window.cachedProfilesList) {
         window.cachedProfilesList = window.cachedProfilesList.filter(p => (p.email || '').toLowerCase() !== emailLower);
+    }
+
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'profiles_update',
+                payload: { deletedEmail: emailLower, senderClientId: window._myClientId, timestamp: Date.now() }
+            });
+        } catch (e) {}
     }
 
     loadProfilesList();
@@ -10110,6 +10228,15 @@ async function handleSaveProfileEdit(event) {
     }
     
     closeEditProfileModal();
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'profiles_update',
+                payload: { email, nombre, rol, departamento, senderClientId: window._myClientId, timestamp: Date.now() }
+            });
+        } catch (e) {}
+    }
     loadProfilesList();
 };
 
@@ -10634,6 +10761,15 @@ async function handleSaveMyProfile(event) {
     
     updateUserSessionUI();
     if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'profiles_update',
+                payload: { email, nombre: name, telefono: phone, senderClientId: window._myClientId, timestamp: Date.now() }
+            });
+        } catch (e) {}
+    }
     
     if (msgEl) {
         msgEl.className = "auth-success-badge";
@@ -12722,11 +12858,11 @@ async function fetchConsecutivoFromCloud() {
 }
 window.fetchConsecutivoFromCloud = fetchConsecutivoFromCloud;
 
-function mergeConsecutivoFromCloud(cloudList) {
+function mergeConsecutivoFromCloud(cloudList, force = false) {
     window.mergeConsecutivoFromCloud = mergeConsecutivoFromCloud;
     if (!Array.isArray(cloudList) || cloudList.length === 0) return;
     if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
-    if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
+    if (!force && Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
     const purgedIds = window.purgedProjectIds || new Set();
 
     const validList = cloudList.filter(row => {
