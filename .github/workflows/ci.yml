@@ -31,7 +31,7 @@ jobs:
       - name: Instalar Chromium para Playwright
         run: npx playwright install --with-deps chromium
 
-      - name: Pruebas (estaticas + navegador con Supabase simulado)
+      - name: Pruebas (estaticas + navegador con Firebase)
         run: npm test
 
       - name: Guardar reporte si falla
