@@ -2662,6 +2662,9 @@ async function fetchGastosIndirectosLockFromCloud() {
         if (msgs && msgs.length > 0 && msgs[0].contenido) {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
+                if (parsed.timestamp && appState.gastosIndirectosLockedBy?.timestamp && parsed.timestamp < appState.gastosIndirectosLockedBy.timestamp) {
+                    return;
+                }
                 const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
                 if (parsed.isLocked) {
                     const elapsed = Date.now() - (parsed.timestamp || 0);
