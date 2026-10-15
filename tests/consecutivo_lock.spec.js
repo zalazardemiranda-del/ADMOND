@@ -1180,5 +1180,67 @@ test("13. Persistencia de nombre de perfil y restauración sin bloqueo al refres
   expect(isEditingAfter).toBe(true);
 });
 
+test("15. Consecutivo: El usuario que da clic primero a Editar mantiene preferencia absoluta y no se bloquea si otro usuario edita después", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  // 1. Iniciar edición de Consecutivo como usuario local
+  await page.evaluate(() => {
+    window.startEditingConsecutivo();
+  });
+  await page.waitForTimeout(200);
+
+  // Comprobar que está en modo edición
+  const isEditing = await page.evaluate(() => window.appState.isEditingConsecutivo);
+  expect(isEditing).toBe(true);
+  const myLock = await page.evaluate(() => window.appState.consecutivoLockedBy);
+  expect(myLock).toBeTruthy();
+  const myTs = myLock.timestamp;
+
+  const btnEdit = page.locator("#btn-edit-consecutivo");
+  const btnSave = page.locator("#btn-save-consecutivo");
+  const banner = page.locator("#consecutivo-lock-banner");
+
+  await expect(btnEdit).toContainText("Editando...");
+  await expect(btnSave).toBeEnabled();
+  await expect(banner).toBeHidden();
+
+  // 2. Simular llegada de broadcast de otro usuario que dio clic DESPUÉS (timestamp mayor)
+  await page.evaluate((ts) => {
+    const channel = window.chatRealtimeChannel;
+    const broadcastHandlers = channel?._broadcastHandlers?.['consecutivo_lock_update'] || [];
+    const payload = {
+      payload: {
+        isLocked: true,
+        userId: 'other-late-user',
+        userName: 'Maria Perez',
+        timestamp: ts + 1000
+      }
+    };
+    broadcastHandlers.forEach(fn => fn(payload));
+  }, myTs);
+  await page.waitForTimeout(200);
+
+  // El usuario que dio clic PRIMERO debe seguir editando sin ser expulsado ni bloqueado
+  const isStillEditing = await page.evaluate(() => window.appState.isEditingConsecutivo);
+  expect(isStillEditing).toBe(true);
+  const currentLock = await page.evaluate(() => window.appState.consecutivoLockedBy);
+  expect(currentLock.userId).not.toBe('other-late-user');
+
+  await expect(btnEdit).toContainText("Editando...");
+  await expect(btnSave).toBeEnabled();
+  await expect(banner).toBeHidden();
+
+  // 3. Al dar clic en Guardar, se libera el bloqueo y los cambios se persisten
+  await btnSave.click();
+  await page.waitForTimeout(300);
+
+  const isEditingFinished = await page.evaluate(() => window.appState.isEditingConsecutivo);
+  expect(isEditingFinished).toBe(false);
+  const lockAfterSave = await page.evaluate(() => window.appState.consecutivoLockedBy);
+  expect(lockAfterSave).toBeNull();
+  await expect(btnEdit).toContainText("Editar");
+  await expect(btnSave).toBeDisabled();
+});
+
 
 
