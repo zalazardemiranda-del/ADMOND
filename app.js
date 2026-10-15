@@ -1826,7 +1826,7 @@ function updateNominasEditButtonsUI() {
 
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
-    const isLockedByOther = Boolean(appState.nominasLockedBy && appState.nominasLockedBy.userId !== currentUserId);
+    const isLockedByOther = Boolean(appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && appState.nominasLockedBy.userId !== currentUserId);
     const isQuincenasSubtab = (appState.adminSubSection || 'quincenas') === 'quincenas';
 
     const applyBtnState = (editEl, saveEl) => {
@@ -2505,7 +2505,7 @@ function updateGastosIndirectosEditButtonsUI() {
 
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
-    const isLockedByOther = Boolean(appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId);
+    const isLockedByOther = Boolean(appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.isLocked !== false && appState.gastosIndirectosLockedBy.userId !== currentUserId);
     const isGastosIndSubtab = appState.adminSubSection === 'gastos-indirectos';
 
     const applyBtnState = (editEl, saveEl) => {
