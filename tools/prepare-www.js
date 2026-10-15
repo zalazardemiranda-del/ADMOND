@@ -14,7 +14,6 @@ const files = [
     'styles.css',
     'schema.js',
     'firebase_config.js',
-    'supabase_config.js',
     'consecutivo_data.js',
     'backup_data.js',
     'Logo interno.png',
