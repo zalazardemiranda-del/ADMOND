@@ -568,10 +568,10 @@ const runInitialAppSetup = async () => {
                         changed = true;
                     }
                 }
-                const isManuel = (e === 'zalazardemiranda@gmail.com' || e === 'roberto@rodipack.com');
-                if (!isManuel) {
-                    if (p.nombre && (p.nombre.toLowerCase().includes('manuel') || p.nombre.toLowerCase().includes('miranda'))) {
-                        p.nombre = (e === 'info@rodipack.com.mx') ? 'Info Rodipack' : (e.split('@')[0].charAt(0).toUpperCase() + e.split('@')[0].slice(1));
+                const savedCustom = localStorage.getItem('rp_user_profile_name_' + e);
+                if (savedCustom) {
+                    if (p.nombre !== savedCustom) {
+                        p.nombre = savedCustom;
                         changed = true;
                     }
                 }
@@ -595,14 +595,10 @@ const runInitialAppSetup = async () => {
                 localStorage.removeItem("rp_logged_user");
             } else {
                 const userEmailBoot = (appState.currentUser.email || '').toLowerCase();
-                const isManuel = (userEmailBoot === 'zalazardemiranda@gmail.com' || userEmailBoot === 'roberto@rodipack.com');
-                if (!isManuel) {
-                    if (appState.currentUser.nombre && (appState.currentUser.nombre.toLowerCase().includes('manuel') || appState.currentUser.nombre.toLowerCase().includes('miranda'))) {
-                        const cleanPrefix = userEmailBoot.split('@')[0];
-                        const cleanName = (userEmailBoot === 'info@rodipack.com.mx') ? 'Info Rodipack' : (cleanPrefix.charAt(0).toUpperCase() + cleanPrefix.slice(1));
-                        appState.currentUser.nombre = cleanName;
-                        localStorage.setItem('rp_user_profile_name_' + userEmailBoot, cleanName);
-                        localStorage.removeItem('rp_custom_user_nombre');
+                const savedCustomBoot = localStorage.getItem('rp_user_profile_name_' + userEmailBoot);
+                if (savedCustomBoot) {
+                    if (appState.currentUser.nombre !== savedCustomBoot) {
+                        appState.currentUser.nombre = savedCustomBoot;
                         localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
                     }
                 }
@@ -8228,49 +8224,50 @@ async function handleUserSession(user) {
             }
         }
 
-        // Descontaminar perfiles creados por el administrador que heredaron erróneamente su nombre de Manuel
-        const isManuelAccount = (userEmail === 'zalazardemiranda@gmail.com' || userEmail === 'roberto@rodipack.com');
-        const hasContaminatedName = !isManuelAccount && (
-            (profile.nombre && (profile.nombre.toLowerCase().includes('manuel') || profile.nombre.toLowerCase().includes('miranda'))) ||
-            (!profile.nombre)
-        );
+        // Si el usuario guardó un nombre personalizado, prevalece siempre
+        if (savedCustomName) {
+            profile.nombre = savedCustomName;
+        } else {
+            // Descontaminar perfiles creados por el administrador que heredaron erróneamente su nombre de Manuel
+            const isManuelAccount = (userEmail === 'zalazardemiranda@gmail.com' || userEmail === 'roberto@rodipack.com');
+            const hasContaminatedName = !isManuelAccount && (
+                (profile.nombre && (profile.nombre.toLowerCase().includes('manuel') || profile.nombre.toLowerCase().includes('miranda'))) ||
+                (!profile.nombre)
+            );
 
-        if (hasContaminatedName) {
-            const cleanName = (savedCustomName && !savedCustomName.toLowerCase().includes('manuel'))
-                ? savedCustomName
-                : ((userEmail === 'info@rodipack.com.mx') 
-                    ? 'Info Rodipack' 
-                    : (emailPrefix ? (emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1)) : 'Usuario'));
-            profile.nombre = cleanName;
-            localStorage.setItem('rp_user_profile_name_' + userEmail, cleanName);
-            localStorage.removeItem('rp_custom_user_nombre');
+            if (hasContaminatedName) {
+                const cleanName = emailPrefix ? (emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1)) : 'Usuario';
+                profile.nombre = cleanName;
+                localStorage.setItem('rp_user_profile_name_' + userEmail, cleanName);
+                localStorage.removeItem('rp_custom_user_nombre');
 
-            // Reparar en Firestore para que quede corregido permanentemente
-            try {
-                await client.from('profiles').upsert({
-                    id: user.id || profile.id,
-                    email: userEmail,
-                    nombre: cleanName,
-                    rol: profile.rol || 'colaborador',
-                    departamento: profile.departamento || 'Operaciones',
-                    updated_at: new Date().toISOString()
-                });
-            } catch (e) {}
+                // Reparar en Firestore para que quede corregido permanentemente
+                try {
+                    await client.from('profiles').upsert({
+                        id: user.id || profile.id,
+                        email: userEmail,
+                        nombre: cleanName,
+                        rol: profile.rol || 'colaborador',
+                        departamento: profile.departamento || 'Operaciones',
+                        updated_at: new Date().toISOString()
+                    });
+                } catch (e) {}
 
-            // Reparar también en rp_local_profiles
-            try {
-                let localProfilesFix = JSON.parse(localStorage.getItem('rp_local_profiles') || '[]');
-                let modified = false;
-                localProfilesFix.forEach(lp => {
-                    if (lp && lp.email && lp.email.toLowerCase() === userEmail) {
-                        lp.nombre = cleanName;
-                        modified = true;
+                // Reparar también en rp_local_profiles
+                try {
+                    let localProfilesFix = JSON.parse(localStorage.getItem('rp_local_profiles') || '[]');
+                    let modified = false;
+                    localProfilesFix.forEach(lp => {
+                        if (lp && lp.email && lp.email.toLowerCase() === userEmail) {
+                            lp.nombre = cleanName;
+                            modified = true;
+                        }
+                    });
+                    if (modified) {
+                        localStorage.setItem('rp_local_profiles', JSON.stringify(localProfilesFix));
                     }
-                });
-                if (modified) {
-                    localStorage.setItem('rp_local_profiles', JSON.stringify(localProfilesFix));
-                }
-            } catch (e) {}
+                } catch (e) {}
+            }
         }
 
         // Garantizar rol de Gerente para el administrador y administrativo para Diego
@@ -8954,6 +8951,17 @@ function setupRealtimeSubscriptions() {
         const data = payload?.payload;
         if (data && data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
         try {
+            if (data && data.email && data.nombre) {
+                const eLower = data.email.toLowerCase();
+                localStorage.setItem('rp_user_profile_name_' + eLower, data.nombre);
+                if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === eLower) {
+                    appState.currentUser.nombre = data.nombre;
+                    if (data.rol) appState.currentUser.rol = data.rol;
+                    if (data.departamento) appState.currentUser.departamento = data.departamento;
+                    localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
+                    if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
+                }
+            }
             if (typeof loadProfilesList === 'function') await loadProfilesList();
             if (Array.isArray(window.cachedProfilesList) && window.cachedProfilesList.length > 0) {
                 cloudProfilesCache = window.cachedProfilesList;
@@ -9613,8 +9621,7 @@ async function loadProfilesList() {
     let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
     const deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
 
-    // Filtrar perfiles eliminados y no deseados, y descontaminar nombres
-    let localModified = false;
+    // Filtrar perfiles eliminados y no deseados, y preservar nombres personalizados
     localProfiles = localProfiles.filter(p => {
         if (!p || !p.email) return false;
         const e = p.email.toLowerCase();
@@ -9623,19 +9630,12 @@ async function loadProfilesList() {
         return true;
     }).map(p => {
         const e = (p.email || '').toLowerCase();
-        const isManuel = (e === 'zalazardemiranda@gmail.com' || e === 'roberto@rodipack.com');
-        if (!isManuel) {
-            if (p.nombre && (p.nombre.toLowerCase().includes('manuel') || p.nombre.toLowerCase().includes('miranda'))) {
-                const prefix = e.split('@')[0];
-                p.nombre = (e === 'info@rodipack.com.mx') ? 'Info Rodipack' : (prefix.charAt(0).toUpperCase() + prefix.slice(1));
-                localModified = true;
-            }
+        const savedCustom = localStorage.getItem('rp_user_profile_name_' + e);
+        if (savedCustom) {
+            p.nombre = savedCustom;
         }
         return p;
     });
-    if (localModified) {
-        localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
-    }
     
     let mergedProfiles = [...localProfiles];
     
@@ -9655,21 +9655,9 @@ async function loadProfilesList() {
                     if (e === 'jennifer@rodipack.online' || e === 'diego.miranda@rodipack.com') continue;
                     if (deletedProfiles.includes(e)) continue;
 
-                    const isManuel = (e === 'zalazardemiranda@gmail.com' || e === 'roberto@rodipack.com');
-                    if (!isManuel && p.nombre && (p.nombre.toLowerCase().includes('manuel') || p.nombre.toLowerCase().includes('miranda'))) {
-                        const correctName = (e === 'info@rodipack.com.mx') ? 'Info Rodipack' : (e.split('@')[0].charAt(0).toUpperCase() + e.split('@')[0].slice(1));
-                        p.nombre = correctName;
-                        // Reparar silenciosamente en Firestore
-                        try {
-                            await client.from('profiles').upsert({
-                                id: p.id,
-                                email: p.email,
-                                nombre: correctName,
-                                rol: p.rol || 'colaborador',
-                                departamento: p.departamento || 'Operaciones',
-                                updated_at: new Date().toISOString()
-                            });
-                        } catch (err) {}
+                    const savedCustom = localStorage.getItem('rp_user_profile_name_' + e);
+                    if (savedCustom) {
+                        p.nombre = savedCustom;
                     }
                     cleanDbProfiles.push(p);
                 }
@@ -9691,20 +9679,22 @@ async function loadProfilesList() {
                         console.log(`🧹 Perfil duplicado unificado para ${k}`);
                     } catch (err) {}
                 }
-                mergedProfiles = [...cleanDbProfiles];
-                localProfiles.forEach(lp => {
-                    if (lp.email && !mergedProfiles.some(p => p.email && p.email.toLowerCase() === lp.email.toLowerCase())) {
-                        mergedProfiles.unshift(lp);
-                    }
-                });
+                mergedProfiles = dedupeProfilesByEmail([...localProfiles, ...cleanDbProfiles]);
             }
         } catch (err) {
             console.warn("Error loading profiles from Firebase:", err);
         }
     }
     
-    // Unificar perfiles duplicados por correo (un mismo usuario puede tener varios documentos en Firestore)
-    mergedProfiles = dedupeProfilesByEmail(mergedProfiles);
+    // Unificar perfiles duplicados por correo y asegurar que prevalezcan nombres personalizados guardados
+    mergedProfiles = dedupeProfilesByEmail(mergedProfiles).map(p => {
+        if (!p || !p.email) return p;
+        const savedCustom = localStorage.getItem('rp_user_profile_name_' + String(p.email).trim().toLowerCase());
+        if (savedCustom) {
+            p.nombre = savedCustom;
+        }
+        return p;
+    });
 
     window.cachedProfilesList = mergedProfiles;
     
@@ -9922,8 +9912,9 @@ async function handleFirebaseRegister(event) {
     const emailLower = email.toLowerCase();
     const isManuel = (emailLower === 'zalazardemiranda@gmail.com' || emailLower === 'roberto@rodipack.com');
     if (!isManuel) {
-        if (emailLower === 'info@rodipack.com.mx' && (!nombre || nombre.toLowerCase().includes('manuel'))) {
-            nombre = 'Info Rodipack';
+        if (!nombre) {
+            const prefix = emailLower.split('@')[0];
+            nombre = prefix.charAt(0).toUpperCase() + prefix.slice(1);
         } else if (nombre.toLowerCase().includes('manuel')) {
             const prefix = emailLower.split('@')[0];
             nombre = prefix.charAt(0).toUpperCase() + prefix.slice(1);
@@ -9956,6 +9947,7 @@ async function handleFirebaseRegister(event) {
     localStorage.setItem('rp_deleted_profiles', JSON.stringify(deletedProfiles));
 
     // 2. Guardar localmente
+    localStorage.setItem('rp_user_profile_name_' + emailLower, nombre);
     const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
     const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
     if (existingIdx >= 0) {
@@ -10191,39 +10183,96 @@ async function handleSaveProfileEdit(event) {
     const departamento = deptInput ? deptInput.value.trim() : "";
     
     if (!email) return;
+    const emailLower = email.toLowerCase();
+    const updatedAt = new Date().toISOString();
     
-    // 1. Guardar en localStorage
+    // 1. Guardar de forma permanente en localStorage
+    localStorage.setItem('rp_user_profile_name_' + emailLower, nombre);
+    
     let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
     let found = false;
     localProfiles = localProfiles.map(p => {
-        if (p.email && p.email.toLowerCase() === email.toLowerCase()) {
+        if (p.email && p.email.toLowerCase() === emailLower) {
             found = true;
-            return { ...p, nombre, rol, departamento };
+            return { ...p, nombre, rol, departamento, email: emailLower, updated_at: updatedAt };
         }
         return p;
     });
     if (!found) {
-        localProfiles.push({ nombre, email, rol, departamento });
+        localProfiles.push({ nombre, email: emailLower, rol, departamento, updated_at: updatedAt });
     }
     localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
     
-    // 2. Actualizar en Supabase si la conexión está activa
-    if (window.isSupabaseActive()) {
+    // Si el usuario editado es el que tiene la sesión activa actual, actualizar inmediatamente appState y UI
+    if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === emailLower) {
+        appState.currentUser.nombre = nombre;
+        appState.currentUser.rol = rol;
+        appState.currentUser.departamento = departamento;
+        localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
+        if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
+        if (typeof updateUserSessionUI === 'function') updateUserSessionUI();
+    }
+    
+    // 2. Guardar en Firebase / Firestore (entorno en producción)
+    if (window.isFirebaseActive && window.isFirebaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG.client;
-            await client.from('profiles').update({ nombre, rol, departamento }).eq('email', email);
+            const client = window.FIREBASE_CONFIG?.client;
+            if (client) {
+                await client.from('profiles').update({
+                    nombre,
+                    rol,
+                    departamento,
+                    updated_at: updatedAt
+                }).eq('email', emailLower);
+            }
+            const db = (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.db) || (window.firebase && firebase.firestore && firebase.firestore());
+            if (db) {
+                const snap = await db.collection('profiles').where('email', '==', emailLower).get();
+                if (!snap.empty) {
+                    snap.forEach(doc => {
+                        doc.ref.set({
+                            nombre,
+                            rol,
+                            departamento,
+                            updated_at: updatedAt
+                        }, { merge: true }).catch(() => {});
+                    });
+                }
+            }
+        } catch (err) {
+            console.warn("Firebase profile update warning:", err);
+        }
+    }
+    
+    // 3. Actualizar en Supabase si la conexión está activa
+    if (window.isSupabaseActive && window.isSupabaseActive()) {
+        try {
+            const client = window.SUPABASE_CONFIG?.client;
+            if (client) {
+                await client.from('profiles').update({ nombre, rol, departamento, updated_at: updatedAt }).eq('email', emailLower);
+            }
         } catch (err) {
             console.warn("Supabase profile update warning:", err);
         }
     }
     
-    // 3. Actualizar caché en memoria para renderizado inmediato
+    // 4. Actualizar cachés en memoria para renderizado instantáneo
     if (window.cachedProfilesList) {
         window.cachedProfilesList = window.cachedProfilesList.map(p => {
-            if (p.email && p.email.toLowerCase() === email.toLowerCase()) {
-                return { ...p, nombre, rol, departamento };
+            if (p.email && p.email.toLowerCase() === emailLower) {
+                return { ...p, nombre, rol, departamento, updated_at: updatedAt };
             }
             return p;
+        });
+    }
+    if (window.cloudProfilesCache) {
+        window.cloudProfilesCache.forEach(p => {
+            if (p && p.email && p.email.toLowerCase() === emailLower) {
+                p.nombre = nombre;
+                p.rol = rol;
+                p.departamento = departamento;
+                p.updated_at = updatedAt;
+            }
         });
     }
     
@@ -10233,7 +10282,7 @@ async function handleSaveProfileEdit(event) {
             window.chatRealtimeChannel.send({
                 type: 'broadcast',
                 event: 'profiles_update',
-                payload: { email, nombre, rol, departamento, senderClientId: window._myClientId, timestamp: Date.now() }
+                payload: { email: emailLower, nombre, rol, departamento, senderClientId: window._myClientId, timestamp: Date.now() }
             });
         } catch (e) {}
     }
@@ -10687,7 +10736,25 @@ async function handleSaveMyProfile(event) {
         localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
     } catch (e) {}
 
-    // 3. Guardar en Supabase / Firestore wrapper
+    // 3. Guardar en Firebase / Supabase wrapper
+    if (window.isFirebaseActive && window.isFirebaseActive()) {
+        try {
+            const client = window.FIREBASE_CONFIG?.client;
+            if (client) {
+                await client.from('profiles').upsert({
+                    id: uid,
+                    email: email,
+                    nombre: name,
+                    telefono: phone,
+                    rol: appState.currentUser.rol || 'gerente',
+                    departamento: appState.currentUser.departamento || 'Administración',
+                    updated_at: new Date().toISOString()
+                });
+            }
+        } catch (err) {
+            console.warn("Firebase profile update error:", err);
+        }
+    }
     if (window.isSupabaseActive && window.isSupabaseActive()) {
         try {
             const client = window.SUPABASE_CONFIG?.client;
@@ -10708,17 +10775,16 @@ async function handleSaveMyProfile(event) {
     }
 
     // 4. Guardar directamente en Firebase Auth y Firestore si están disponibles
-    if (window.firebase) {
-        try {
-            if (firebase.auth && firebase.auth().currentUser) {
-                await firebase.auth().currentUser.updateProfile({ displayName: name });
-            }
-        } catch(e) {}
-        try {
-            if (firebase.firestore) {
-                const db = firebase.firestore();
-                const fUid = (firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.uid) || uid;
-                await db.collection('profiles').doc(String(fUid)).set({
+    try {
+        if (window.firebase && firebase.auth && firebase.auth().currentUser) {
+            await firebase.auth().currentUser.updateProfile({ displayName: name });
+        }
+    } catch(e) {}
+    try {
+        const db = (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.db) || (window.firebase && firebase.firestore && firebase.firestore());
+        if (db) {
+            const fUid = (window.firebase && firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.uid) || uid;
+            await db.collection('profiles').doc(String(fUid)).set({
                     id: String(fUid),
                     email: email,
                     nombre: name,
@@ -10740,7 +10806,6 @@ async function handleSaveMyProfile(event) {
                 }
             }
         } catch(e) {}
-    }
 
     if (window.cloudProfilesCache) {
         window.cloudProfilesCache.forEach(p => {
