@@ -6,14 +6,13 @@ module.exports = [
     ignores: ["node_modules/**", "*.min.js", "test-results/**", "playwright-report/**"],
   },
   {
-    files: ["app.js", "schema.js", "firebase_config.js", "supabase_config.js", "consecutivo_data.js"],
+    files: ["app.js", "schema.js", "firebase_config.js", "consecutivo_data.js"],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: "script",
       globals: {
         ...globals.browser,
         firebase: "readonly",
-        supabase: "readonly",
         Chart: "readonly",
         CONSECUTIVO_DATA: "writable",
         initSchemaEngine: "readonly",
