@@ -983,9 +983,6 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
   });
 
   const giStoredBeforeSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_gastos_indirectos') || '[]'));
-  if (giStoredBeforeSave.length !== 0) {
-    console.error("FAIL_DETAIL_GI:", JSON.stringify(giStoredBeforeSave));
-  }
   expect(giStoredBeforeSave.length).toBe(0);
 
   // Dar clic en Guardar en Gastos Indirectos (barra superior)
