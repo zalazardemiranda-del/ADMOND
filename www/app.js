@@ -961,6 +961,169 @@ function handleAuthNavItemClick(e) {
 const CURRENT_AUTH_EPOCH = '20261015_SEC_EPOCH_V1';
 window.CURRENT_AUTH_EPOCH = CURRENT_AUTH_EPOCH;
 
+// ==============================================================================
+// SEGURIDAD: LÍMITE DE 3 INTENTOS DE CONTRASEÑA Y BLOQUEO TEMPORAL DE 5 MINUTOS
+// ==============================================================================
+const MAX_LOGIN_ATTEMPTS = 3;
+const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutos exactos
+let _lockoutCountdownInterval = null;
+
+function getLoginLockoutRemainingMs() {
+    const lockoutUntil = parseInt(localStorage.getItem('rp_login_lockout_until') || '0', 10);
+    const now = Date.now();
+    return (lockoutUntil > now) ? (lockoutUntil - now) : 0;
+}
+
+function getLoginFailedAttempts() {
+    return parseInt(localStorage.getItem('rp_login_failed_attempts') || '0', 10);
+}
+
+function recordLoginFailure() {
+    const fails = getLoginFailedAttempts() + 1;
+    localStorage.setItem('rp_login_failed_attempts', String(fails));
+
+    if (fails >= MAX_LOGIN_ATTEMPTS) {
+        const lockoutUntil = Date.now() + LOCKOUT_DURATION_MS;
+        localStorage.setItem('rp_login_lockout_until', String(lockoutUntil));
+        startLockoutCountdown();
+        return { locked: true, remainingAttempts: 0 };
+    }
+    return { locked: false, remainingAttempts: MAX_LOGIN_ATTEMPTS - fails };
+}
+
+function clearLoginFailures() {
+    localStorage.removeItem('rp_login_failed_attempts');
+    localStorage.removeItem('rp_login_lockout_until');
+    if (_lockoutCountdownInterval) {
+        clearInterval(_lockoutCountdownInterval);
+        _lockoutCountdownInterval = null;
+    }
+    const btnSubmit = document.getElementById("btn-global-login-submit");
+    const emailInput = document.getElementById("login-global-email");
+    const passInput = document.getElementById("login-global-pass");
+    const errorEl = document.getElementById("global-login-error");
+    if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = "<span>Iniciar Sesión</span> <span class='material-symbols-outlined' style='font-size: 18px;'>arrow_forward</span>";
+    }
+    if (emailInput) emailInput.disabled = false;
+    if (passInput) passInput.disabled = false;
+    if (errorEl && errorEl.getAttribute('data-is-lockout') === 'true') {
+        errorEl.style.display = 'none';
+        errorEl.removeAttribute('data-is-lockout');
+    }
+}
+
+function startLockoutCountdown() {
+    if (_lockoutCountdownInterval) {
+        clearInterval(_lockoutCountdownInterval);
+        _lockoutCountdownInterval = null;
+    }
+
+    const renderTick = () => {
+        const remMs = getLoginLockoutRemainingMs();
+        const btnSubmit = document.getElementById("btn-global-login-submit");
+        const emailInput = document.getElementById("login-global-email");
+        const passInput = document.getElementById("login-global-pass");
+        const errorEl = document.getElementById("global-login-error");
+
+        if (remMs <= 0) {
+            clearLoginFailures();
+            if (errorEl) {
+                errorEl.style.display = 'block';
+                errorEl.style.background = '#ECFDF5';
+                errorEl.style.color = '#065F46';
+                errorEl.style.borderColor = '#A7F3D0';
+                errorEl.innerHTML = "<div style='display:flex;align-items:center;gap:6px;'><span class='material-symbols-outlined' style='font-size:18px;'>check_circle</span><span>Tiempo cumplido. Tienes 3 intentos disponibles nuevamente.</span></div>";
+                setTimeout(() => {
+                    if (errorEl && errorEl.style.background && errorEl.style.background.includes('ECFDF5')) {
+                        errorEl.style.display = 'none';
+                    }
+                }, 4000);
+            }
+            return;
+        }
+
+        const totalSec = Math.ceil(remMs / 1000);
+        const mins = String(Math.floor(totalSec / 60)).padStart(2, '0');
+        const secs = String(totalSec % 60).padStart(2, '0');
+
+        if (btnSubmit) {
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = `<span class='material-symbols-outlined' style='font-size: 18px;'>lock_clock</span> Bloqueado (${mins}:${secs})`;
+        }
+        if (emailInput) emailInput.disabled = true;
+        if (passInput) passInput.disabled = true;
+
+        if (errorEl) {
+            errorEl.setAttribute('data-is-lockout', 'true');
+            errorEl.style.display = 'block';
+            errorEl.style.background = '#FEF2F2';
+            errorEl.style.color = '#991B1B';
+            errorEl.style.borderColor = '#FCA5A5';
+            errorEl.innerHTML = `<div style="display:flex; align-items:flex-start; gap:8px;">
+                <span class="material-symbols-outlined" style="font-size: 20px; color: #DC2626; margin-top: 1px;">lock</span>
+                <div>
+                    <strong>Límite de 3 intentos alcanzado.</strong><br>
+                    Por seguridad, el sistema se ha bloqueado temporalmente por 5 minutos.<br>
+                    Podrás intentar de nuevo en: <span style="font-weight: 800; font-size: 14px; color: #B91C1C;">${mins}:${secs}</span>
+                </div>
+            </div>`;
+        }
+    };
+
+    renderTick();
+    _lockoutCountdownInterval = setInterval(renderTick, 1000);
+}
+
+function handleFailedLoginAttempt(customMsg) {
+    const errorEl = document.getElementById("global-login-error");
+    const btnSubmit = document.getElementById("btn-global-login-submit");
+    const failRes = recordLoginFailure();
+    if (failRes.locked) {
+        startLockoutCountdown();
+    } else {
+        if (errorEl) {
+            errorEl.removeAttribute('data-is-lockout');
+            errorEl.style.background = '#FEF2F2';
+            errorEl.style.color = '#991B1B';
+            errorEl.style.borderColor = '#FCA5A5';
+            errorEl.innerHTML = `<div style="display:flex; align-items:center; gap:6px;">
+                <span class="material-symbols-outlined" style="font-size: 18px; color: #DC2626;">error</span>
+                <span>${customMsg || "Contraseña o correo incorrectos."} Te queda(n) <strong>${failRes.remainingAttempts}</strong> intento(s) antes del bloqueo de 5 minutos.</span>
+            </div>`;
+            errorEl.style.display = "block";
+        }
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = "<span>Iniciar Sesión</span> <span class='material-symbols-outlined' style='font-size: 18px;'>arrow_forward</span>";
+        }
+    }
+}
+
+function initLoginLockoutSystem() {
+    window.initLoginLockoutSystem = initLoginLockoutSystem;
+    const emailEl = document.getElementById("login-global-email");
+    if (emailEl) {
+        emailEl.addEventListener("input", (e) => {
+            sessionStorage.setItem("rp_draft_login_email", e.target.value);
+        });
+        const draft = sessionStorage.getItem("rp_draft_login_email");
+        if (draft && !emailEl.value) {
+            emailEl.value = draft;
+        }
+    }
+    if (getLoginLockoutRemainingMs() > 0) {
+        startLockoutCountdown();
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLoginLockoutSystem);
+} else {
+    initLoginLockoutSystem();
+}
+
 // Guardián continuo de autenticación: Expulsa inmediatamente cualquier sesión falsa o no autenticada
 function enforceAuthenticationGuard() {
     window.enforceAuthenticationGuard = enforceAuthenticationGuard;
@@ -976,24 +1139,35 @@ function enforceAuthenticationGuard() {
         appState.currentUser.email
     );
 
-    if (!isFirebaseAuthed && !hasValidStoredUser) {
-        const overlay = document.getElementById("global-login-overlay");
-        const isOverlayAlreadyVisible = overlay && overlay.style.display !== "none";
+    if (isFirebaseAuthed || hasValidStoredUser) {
+        return true;
+    }
 
-        appState.currentUser = null;
-        appState.currentRole = 'colaborador';
-        localStorage.setItem("rp_session_active", "false");
-        localStorage.removeItem("rp_logged_user");
-        localStorage.removeItem("rp_user_pass");
-        localStorage.removeItem("rp_current_role");
-        localStorage.removeItem("rp_auth_epoch");
-        sessionStorage.clear();
+    const overlay = document.getElementById("global-login-overlay");
+    const isOverlayAlreadyVisible = overlay && overlay.style.display !== "none";
+
+    // Si ya está deslogueado y en pantalla de login, no purgar ni tocar storage
+    if (!isSessionActive && !storedUser && !appState.currentUser) {
         if (!isOverlayAlreadyVisible && typeof showGlobalLoginOverlay === 'function') {
             showGlobalLoginOverlay();
         }
         return false;
     }
-    return true;
+
+    // Purgar una sola vez si había una sesión falsa o vieja
+    appState.currentUser = null;
+    appState.currentRole = 'colaborador';
+    localStorage.setItem("rp_session_active", "false");
+    localStorage.removeItem("rp_logged_user");
+    localStorage.removeItem("rp_user_pass");
+    localStorage.removeItem("rp_current_role");
+    localStorage.removeItem("rp_auth_epoch");
+    sessionStorage.removeItem("rp_session_pass");
+
+    if (!isOverlayAlreadyVisible && typeof showGlobalLoginOverlay === 'function') {
+        showGlobalLoginOverlay();
+    }
+    return false;
 }
 window.enforceAuthenticationGuard = enforceAuthenticationGuard;
 
@@ -9687,6 +9861,12 @@ async function handleSaveProfileEdit(event) {
 async function handleGlobalLoginSubmit(event) {
     window.handleGlobalLoginSubmit = handleGlobalLoginSubmit;
     event.preventDefault();
+
+    if (getLoginLockoutRemainingMs() > 0) {
+        startLockoutCountdown();
+        return;
+    }
+
     const roleSelect = document.getElementById("login-global-role").value;
     const email = document.getElementById("login-global-email").value.trim();
     const password = document.getElementById("login-global-pass").value;
@@ -9712,12 +9892,7 @@ async function handleGlobalLoginSubmit(event) {
                 
                 if (matchedProfile) {
                     if (matchedProfile.password !== password) {
-                        if (errorEl) {
-                            errorEl.innerText = "Error de autenticación: Contraseña incorrecta. Por favor verifica tus datos.";
-                            errorEl.style.display = "block";
-                        }
-                        btnSubmit.disabled = false;
-                        btnSubmit.innerHTML = "<span>Iniciar Sesión</span> <span class='material-symbols-outlined' style='font-size: 18px;'>arrow_forward</span>";
+                        handleFailedLoginAttempt("Contraseña incorrecta.");
                         return;
                     }
                     
@@ -9780,16 +9955,11 @@ async function handleGlobalLoginSubmit(event) {
                     return;
                 }
 
-                if (errorEl) {
-                    let userMsg = error.message;
-                    if (userMsg.includes("Invalid login credentials")) {
-                        userMsg = "Correo electrónico o contraseña incorrectos.";
-                    }
-                    errorEl.innerText = `Error de autenticación: ${userMsg}`;
-                    errorEl.style.display = "block";
+                let userMsg = error.message;
+                if (userMsg.includes("Invalid login credentials") || userMsg.includes("invalid-credential") || userMsg.includes("wrong-password") || userMsg.includes("user-not-found")) {
+                    userMsg = "Correo electrónico o contraseña incorrectos.";
                 }
-                btnSubmit.disabled = false;
-                btnSubmit.innerHTML = "<span>Iniciar Sesión</span> <span class='material-symbols-outlined' style='font-size: 18px;'>arrow_forward</span>";
+                handleFailedLoginAttempt(userMsg);
                 return;
             }
             
@@ -9798,18 +9968,14 @@ async function handleGlobalLoginSubmit(event) {
                 sessionStorage.setItem("rp_session_pass", password);
                 localStorage.setItem("rp_user_pass", password);
             }
+            clearLoginFailures();
             await handleUserSession(data.user);
         } else {
             const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
             const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
             
             if (!matchedProfile || matchedProfile.password !== password) {
-                if (errorEl) {
-                    errorEl.innerText = "Error de autenticación: Correo o contraseña incorrectos. Por favor verifica tus datos.";
-                    errorEl.style.display = "block";
-                }
-                btnSubmit.disabled = false;
-                btnSubmit.innerHTML = "<span>Iniciar Sesión</span> <span class='material-symbols-outlined' style='font-size: 18px;'>arrow_forward</span>";
+                handleFailedLoginAttempt("Correo o contraseña incorrectos.");
                 return;
             }
 
@@ -9817,7 +9983,7 @@ async function handleGlobalLoginSubmit(event) {
             const userObj = {
                 id: matchedProfile?.id || (isDiego ? 'usr-diego-miranda' : `usr-${Date.now()}`),
                 email: email || 'zalazardemiranda@gmail.com',
-                nombre: isDiego ? 'Diego Miranda' : (matchedProfile?.nombre || (isManager ? 'Gerente Principal' : 'Colaborador')),
+                nombre: isDiego ? 'Diego Miranda' : (matchedProfile?.nombre || (isManager ? 'Gerente' : 'Colaborador')),
                 rol: isDiego ? 'administrativo' : (matchedProfile?.rol || (isManager ? 'gerente' : 'colaborador')),
                 departamento: isDiego ? 'Administración' : (matchedProfile?.departamento || 'Operaciones'),
                 password: password || ''
@@ -9829,6 +9995,7 @@ async function handleGlobalLoginSubmit(event) {
             setRole(userObj.rol);
         }
         
+        clearLoginFailures();
         localStorage.setItem("rp_session_active", "true");
         localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
         hideGlobalLoginOverlay();
@@ -9840,8 +10007,10 @@ async function handleGlobalLoginSubmit(event) {
             errorEl.style.display = "block";
         }
     } finally {
-        btnSubmit.disabled = false;
-        btnSubmit.innerHTML = "<span>Iniciar Sesión</span> <span class='material-symbols-outlined' style='font-size: 18px;'>arrow_forward</span>";
+        if (getLoginLockoutRemainingMs() <= 0) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = "<span>Iniciar Sesión</span> <span class='material-symbols-outlined' style='font-size: 18px;'>arrow_forward</span>";
+        }
     }
 };
 
