@@ -116,6 +116,30 @@
     <!-- ========================================== -->
 
     <script>
+        (function() {
+            try {
+                var CURRENT_AUTH_EPOCH = '20261015_SEC_EPOCH_V1';
+                var storedEpoch = localStorage.getItem('rp_auth_epoch');
+                if (storedEpoch !== CURRENT_AUTH_EPOCH) {
+                    // Purgar inmediatamente todas las sesiones heredadas o previas a la seguridad
+                    localStorage.removeItem('rp_session_active');
+                    localStorage.removeItem('rp_logged_user');
+                    localStorage.removeItem('rp_user_pass');
+                    localStorage.removeItem('rp_current_role');
+                    localStorage.removeItem('rp_auth_epoch');
+                    sessionStorage.clear();
+                }
+                var active = localStorage.getItem('rp_session_active') === 'true';
+                var user = localStorage.getItem('rp_logged_user');
+                var epochOk = localStorage.getItem('rp_auth_epoch') === CURRENT_AUTH_EPOCH;
+                if (active && user && user !== 'null' && user !== 'undefined' && epochOk) {
+                    var style = document.createElement('style');
+                    style.id = 'early-auth-hide';
+                    style.innerHTML = '#global-login-overlay { display: none !important; }';
+                    document.head.appendChild(style);
+                }
+            } catch (e) {}
+        })();
         // Failsafe inmediato: Forzar eliminación del loader tras máximo 1.5s
         setTimeout(function() {
             var el = document.getElementById('app-loading-screen');
@@ -3764,7 +3788,7 @@
 
                                 <div>
 
-                                    <h3 id="modal-gerente-name" style="margin: 0 0 4px 0; font-size: 20px; font-weight: 800; color: #0F172A; letter-spacing: -0.3px;">Gerente Principal</h3>
+                                    <h3 id="modal-gerente-name" style="margin: 0 0 4px 0; font-size: 20px; font-weight: 800; color: #0F172A; letter-spacing: -0.3px;">Mi Perfil</h3>
 
                                     <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
 
@@ -3774,7 +3798,7 @@
 
                                         </span>
 
-                                        <span style="background: #ECFDF5; color: #059669; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid #A7F3D0;">
+                                        <span id="modal-session-status-tag" style="background: #ECFDF5; color: #059669; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid #A7F3D0;">
 
                                             <span class="material-symbols-outlined" style="font-size: 14px; color: #10B981;">check_circle</span> Sesión Activa
 
@@ -3802,7 +3826,7 @@
 
                         <!-- DATOS DE MI PERFIL PERSONAL -->
 
-                        <div id="gerente-logged-in-view" style="display: block;">
+                        <div id="gerente-logged-in-view" style="display: none;">
 
                             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);">
 
@@ -3832,7 +3856,7 @@
 
                                             </label>
 
-                                            <input type="text" id="myprofile-edit-name" value="Gerente Principal" required style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 10px; font-size: 14px; font-weight: 500;">
+                                            <input type="text" id="myprofile-edit-name" value="" placeholder="Nombre del usuario" required style="width: 100%; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 10px; font-size: 14px; font-weight: 500;">
 
                                         </div>
 
@@ -3856,7 +3880,7 @@
 
                                             </label>
 
-                                            <input type="email" id="myprofile-edit-email" value="zalazardemiranda@gmail.com" readonly style="width: 100%; padding: 10px 14px; border: 1px solid #E2E8F0; background: #F8FAFC; border-radius: 10px; font-size: 14px; color: #64748B; font-weight: 500;">
+                                            <input type="email" id="myprofile-edit-email" value="" placeholder="correo@rodipack.com" readonly style="width: 100%; padding: 10px 14px; border: 1px solid #E2E8F0; background: #F8FAFC; border-radius: 10px; font-size: 14px; color: #64748B; font-weight: 500;">
 
                                         </div>
 
@@ -3992,7 +4016,7 @@
 
 
 
-                        <div id="gerente-login-view" style="max-width: 480px; display: none;">
+                        <div id="gerente-login-view" style="max-width: 480px; display: block;">
 
                             <div class="auth-header" style="margin-bottom: 16px;">
 
@@ -4175,7 +4199,7 @@
 
     <!-- ========================================== -->
 
-    <div id="global-login-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 999999; align-items: center; justify-content: center; overflow: hidden;">
+    <div id="global-login-overlay" style="display: flex; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 999999; align-items: center; justify-content: center; overflow: hidden;">
 
         <div style="position: absolute; top: -5%; left: -5%; width: 110vw; height: 110vh; background: #EEF2F6 url('fondo sistema.png') no-repeat center center; background-size: cover; filter: blur(24px) brightness(1.02); -webkit-filter: blur(24px) brightness(1.02); z-index: -1; pointer-events: none;"></div>
 
@@ -5474,12 +5498,12 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="firebase_config.js?v=ecea74ec"></script>
     <script src="supabase_config.js?v=323c6595"></script>
-    <script src="backup_data.js"></script>
+    <script src="backup_data.js?v=authsec_20261015"></script>
 
     <script src="consecutivo_data.js?v=285df872"></script>
 
     <script src="schema.js?v=8d95842f"></script>
-    <script src="app.js?v=4d1f7228"></script>
+    <script src="app.js?v=authsec_20261015"></script>
 
 </body>
 

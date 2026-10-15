@@ -118,9 +118,21 @@
     <script>
         (function() {
             try {
+                var CURRENT_AUTH_EPOCH = '20261015_SEC_EPOCH_V1';
+                var storedEpoch = localStorage.getItem('rp_auth_epoch');
+                if (storedEpoch !== CURRENT_AUTH_EPOCH) {
+                    // Purgar inmediatamente todas las sesiones heredadas o previas a la seguridad
+                    localStorage.removeItem('rp_session_active');
+                    localStorage.removeItem('rp_logged_user');
+                    localStorage.removeItem('rp_user_pass');
+                    localStorage.removeItem('rp_current_role');
+                    localStorage.removeItem('rp_auth_epoch');
+                    sessionStorage.clear();
+                }
                 var active = localStorage.getItem('rp_session_active') === 'true';
                 var user = localStorage.getItem('rp_logged_user');
-                if (active && user && user !== 'null' && user !== 'undefined') {
+                var epochOk = localStorage.getItem('rp_auth_epoch') === CURRENT_AUTH_EPOCH;
+                if (active && user && user !== 'null' && user !== 'undefined' && epochOk) {
                     var style = document.createElement('style');
                     style.id = 'early-auth-hide';
                     style.innerHTML = '#global-login-overlay { display: none !important; }';

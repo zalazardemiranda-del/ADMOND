@@ -958,14 +958,19 @@ function handleAuthNavItemClick(e) {
     }
 };
 
+const CURRENT_AUTH_EPOCH = '20261015_SEC_EPOCH_V1';
+window.CURRENT_AUTH_EPOCH = CURRENT_AUTH_EPOCH;
+
 // Guardián continuo de autenticación: Expulsa inmediatamente cualquier sesión falsa o no autenticada
 function enforceAuthenticationGuard() {
     window.enforceAuthenticationGuard = enforceAuthenticationGuard;
     const isFirebaseAuthed = Boolean(window.firebase?.auth && window.firebase.auth().currentUser);
     const isSessionActive = localStorage.getItem("rp_session_active") === "true";
+    const isEpochValid = localStorage.getItem("rp_auth_epoch") === CURRENT_AUTH_EPOCH;
     const storedUser = localStorage.getItem("rp_logged_user");
     const hasValidStoredUser = Boolean(
         isSessionActive &&
+        isEpochValid &&
         storedUser &&
         appState.currentUser && 
         appState.currentUser.email
@@ -977,7 +982,9 @@ function enforceAuthenticationGuard() {
         localStorage.setItem("rp_session_active", "false");
         localStorage.removeItem("rp_logged_user");
         localStorage.removeItem("rp_user_pass");
-        sessionStorage.removeItem("rp_session_pass");
+        localStorage.removeItem("rp_current_role");
+        localStorage.removeItem("rp_auth_epoch");
+        sessionStorage.clear();
         if (typeof showGlobalLoginOverlay === 'function') {
             showGlobalLoginOverlay();
         }
@@ -9348,6 +9355,7 @@ async function handleFirebaseLogin(event) {
         localStorage.setItem("rp_user_pass", password);
         localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
         localStorage.setItem("rp_session_active", "true");
+        localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
         setRole(userObj.rol);
         hideGlobalLoginOverlay();
         updateUserSessionUI();
@@ -9727,6 +9735,7 @@ async function handleGlobalLoginSubmit(event) {
                     localStorage.setItem("rp_user_pass", password);
                     localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
                     localStorage.setItem("rp_session_active", "true");
+                    localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
                     setRole(userObj.rol);
                     hideGlobalLoginOverlay();
                     updateUserSessionUI();
@@ -9764,6 +9773,7 @@ async function handleGlobalLoginSubmit(event) {
                     localStorage.setItem("rp_user_pass", password);
                     localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
                     localStorage.setItem("rp_session_active", "true");
+                    localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
                     setRole(userObj.rol);
                     hideGlobalLoginOverlay();
                     updateUserSessionUI();
@@ -9794,7 +9804,7 @@ async function handleGlobalLoginSubmit(event) {
             const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
             const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
             
-            if (!isDiegoValidPass && (!matchedProfile || matchedProfile.password !== password)) {
+            if (!matchedProfile || matchedProfile.password !== password) {
                 if (errorEl) {
                     errorEl.innerText = "Error de autenticación: Correo o contraseña incorrectos. Por favor verifica tus datos.";
                     errorEl.style.display = "block";
@@ -9821,31 +9831,11 @@ async function handleGlobalLoginSubmit(event) {
         }
         
         localStorage.setItem("rp_session_active", "true");
+        localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
         hideGlobalLoginOverlay();
         updateUserSessionUI();
         if (typeof openAuthModal === 'function') openAuthModal();
     } catch (err) {
-        if (isDiegoValidPass) {
-            const userObj = {
-                id: 'usr-diego-miranda',
-                email: 'diego@rodipack.com',
-                nombre: 'Diego Miranda',
-                rol: 'administrativo',
-                departamento: 'Administración',
-                password: password
-            };
-            appState.currentUser = userObj;
-            sessionStorage.setItem("rp_session_pass", password);
-            localStorage.setItem("rp_user_pass", password);
-            localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
-            localStorage.setItem("rp_session_active", "true");
-            setRole('administrativo');
-            hideGlobalLoginOverlay();
-            updateUserSessionUI();
-            if (typeof openAuthModal === 'function') openAuthModal();
-            return;
-        }
-
         if (errorEl) {
             errorEl.innerText = `Error: ${err.message}`;
             errorEl.style.display = "block";

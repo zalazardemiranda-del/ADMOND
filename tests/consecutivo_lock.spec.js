@@ -84,6 +84,7 @@ async function openAppAsAdmin(page) {
   await page.evaluate(() => {
     const adminUser = { id: 'admin-user-1', email: 'admin@rodipack.com', nombre: 'Roberto Miranda', rol: 'gerente' };
     localStorage.setItem('rp_session_active', 'true');
+    localStorage.setItem('rp_auth_epoch', '20261015_SEC_EPOCH_V1');
     localStorage.setItem('rp_logged_user', JSON.stringify(adminUser));
     window.appState.currentUser = adminUser;
     window.appState.currentRole = 'gerente';
@@ -1013,6 +1014,7 @@ test("11. Reconocimiento de propio bloqueo zalazardemiranda y carga/descarga de 
     const userZ = { id: 'user-zalazar', email: 'zalazardemiranda@gmail.com', nombre: 'Roberto Miranda', rol: 'gerente' };
     localStorage.setItem('rp_logged_user', JSON.stringify(userZ));
     localStorage.setItem('rp_session_active', 'true');
+    localStorage.setItem('rp_auth_epoch', '20261015_SEC_EPOCH_V1');
     window.appState.currentUser = userZ;
     window.switchAdminFicha('operaciones');
     const testProj = {
