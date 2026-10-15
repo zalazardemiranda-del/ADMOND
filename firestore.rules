@@ -2,11 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Perfiles de usuario: accesibles por autenticados, editables por el propio usuario o gerentes
+    // Perfiles de usuario: sincronización completa entre todos los dispositivos
     match /profiles/{userId} {
-      allow read: if true;
-      allow create, update: if request.auth != null;
-      allow delete: if request.auth != null;
+      allow read, write: if true;
+    }
+
+    // Instant snapshots de sincronización (Nóminas, Consecutivo, Gastos, etc.)
+    match /sync_snapshots/{snapshotId} {
+      allow read, write: if true;
     }
 
     // Tareas del equipo

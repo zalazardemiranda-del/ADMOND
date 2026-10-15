@@ -570,12 +570,8 @@ const runInitialAppSetup = async () => {
                 }
                 const isManuel = (e === 'zalazardemiranda@gmail.com' || e === 'roberto@rodipack.com');
                 if (!isManuel) {
-                    if (e === 'info@rodipack.com.mx' && (!p.nombre || p.nombre.toLowerCase().includes('manuel'))) {
-                        p.nombre = 'Info Rodipack';
-                        changed = true;
-                    } else if (p.nombre && p.nombre.toLowerCase().includes('manuel')) {
-                        const prefix = e.split('@')[0];
-                        p.nombre = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                    if (p.nombre && (p.nombre.toLowerCase().includes('manuel') || p.nombre.toLowerCase().includes('miranda'))) {
+                        p.nombre = (e === 'info@rodipack.com.mx') ? 'Info Rodipack' : (e.split('@')[0].charAt(0).toUpperCase() + e.split('@')[0].slice(1));
                         changed = true;
                     }
                 }
@@ -601,14 +597,9 @@ const runInitialAppSetup = async () => {
                 const userEmailBoot = (appState.currentUser.email || '').toLowerCase();
                 const isManuel = (userEmailBoot === 'zalazardemiranda@gmail.com' || userEmailBoot === 'roberto@rodipack.com');
                 if (!isManuel) {
-                    if (userEmailBoot === 'info@rodipack.com.mx' && (!appState.currentUser.nombre || appState.currentUser.nombre.toLowerCase().includes('manuel'))) {
-                        appState.currentUser.nombre = 'Info Rodipack';
-                        localStorage.setItem('rp_user_profile_name_' + userEmailBoot, 'Info Rodipack');
-                        localStorage.removeItem('rp_custom_user_nombre');
-                        localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
-                    } else if (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('manuel')) {
+                    if (appState.currentUser.nombre && (appState.currentUser.nombre.toLowerCase().includes('manuel') || appState.currentUser.nombre.toLowerCase().includes('miranda'))) {
                         const cleanPrefix = userEmailBoot.split('@')[0];
-                        const cleanName = cleanPrefix.charAt(0).toUpperCase() + cleanPrefix.slice(1);
+                        const cleanName = (userEmailBoot === 'info@rodipack.com.mx') ? 'Info Rodipack' : (cleanPrefix.charAt(0).toUpperCase() + cleanPrefix.slice(1));
                         appState.currentUser.nombre = cleanName;
                         localStorage.setItem('rp_user_profile_name_' + userEmailBoot, cleanName);
                         localStorage.removeItem('rp_custom_user_nombre');
@@ -1390,6 +1381,12 @@ function renderAdministracion() {
         }
         if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
             window.fetchGastosIndirectosLockFromCloud();
+        }
+        if (typeof window.fetchNominasFromCloud === 'function' && !appState.isEditingNominas) {
+            window.fetchNominasFromCloud();
+        }
+        if (typeof window.fetchGastosIndirectosFromCloud === 'function' && !appState.isEditingGastosIndirectos) {
+            window.fetchGastosIndirectosFromCloud();
         }
         if (typeof window.switchAdminSubSection === 'function') {
             window.switchAdminSubSection(appState.adminSubSection || 'quincenas');
@@ -2415,8 +2412,13 @@ async function fetchNominasFromCloud() {
                     if (Array.isArray(parsed.archivosQuincenales)) {
                         appState.archivosQuincenales = parsed.archivosQuincenales;
                     }
-                    if (changed) {
-                        saveToStorage();
+                    saveToStorage();
+                    try {
+                        localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
+                    } catch (e) {}
+                    const tbody = document.getElementById("tbody-nominas");
+                    const tableNeedsRender = !tbody || tbody.children.length === 0;
+                    if (changed || tableNeedsRender) {
                         if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
                             renderNominas();
                             renderVisualizacion();
@@ -2854,6 +2856,9 @@ function switchAdminSubSection(subSec) {
             btnGastosInd.style.borderColor = '#2563EB';
             btnGastosInd.style.boxShadow = '0 2px 6px rgba(37,99,235,0.25)';
         }
+        if (typeof window.fetchGastosIndirectosFromCloud === 'function' && !appState.isEditingGastosIndirectos) {
+            window.fetchGastosIndirectosFromCloud();
+        }
         renderGastosIndirectos();
         updateGastosIndirectosEditButtonsUI();
     } else {
@@ -2873,6 +2878,9 @@ function switchAdminSubSection(subSec) {
             btnGastosInd.style.color = '#475569';
             btnGastosInd.style.borderColor = 'rgba(15,23,42,0.15)';
             btnGastosInd.style.boxShadow = 'none';
+        }
+        if (typeof window.fetchNominasFromCloud === 'function' && !appState.isEditingNominas) {
+            window.fetchNominasFromCloud();
         }
         renderNominas();
         updateNominasEditButtonsUI();
@@ -8220,17 +8228,19 @@ async function handleUserSession(user) {
             }
         }
 
-        // Descontaminar perfiles creados por el administrador que heredaron erróneamente su nombre
+        // Descontaminar perfiles creados por el administrador que heredaron erróneamente su nombre de Manuel
         const isManuelAccount = (userEmail === 'zalazardemiranda@gmail.com' || userEmail === 'roberto@rodipack.com');
         const hasContaminatedName = !isManuelAccount && (
-            (profile.nombre && profile.nombre.toLowerCase().includes('manuel')) ||
-            (userEmail === 'info@rodipack.com.mx' && (!profile.nombre || profile.nombre.toLowerCase().includes('manuel') || profile.nombre !== 'Info Rodipack'))
+            (profile.nombre && (profile.nombre.toLowerCase().includes('manuel') || profile.nombre.toLowerCase().includes('miranda'))) ||
+            (!profile.nombre)
         );
 
         if (hasContaminatedName) {
-            const cleanName = (userEmail === 'info@rodipack.com.mx') 
-                ? 'Info Rodipack' 
-                : (emailPrefix ? (emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1)) : 'Usuario');
+            const cleanName = (savedCustomName && !savedCustomName.toLowerCase().includes('manuel'))
+                ? savedCustomName
+                : ((userEmail === 'info@rodipack.com.mx') 
+                    ? 'Info Rodipack' 
+                    : (emailPrefix ? (emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1)) : 'Usuario'));
             profile.nombre = cleanName;
             localStorage.setItem('rp_user_profile_name_' + userEmail, cleanName);
             localStorage.removeItem('rp_custom_user_nombre');
@@ -9456,12 +9466,9 @@ async function loadProfilesList() {
         const e = (p.email || '').toLowerCase();
         const isManuel = (e === 'zalazardemiranda@gmail.com' || e === 'roberto@rodipack.com');
         if (!isManuel) {
-            if (e === 'info@rodipack.com.mx' && (!p.nombre || p.nombre.toLowerCase().includes('manuel') || p.nombre !== 'Info Rodipack')) {
-                p.nombre = 'Info Rodipack';
-                localModified = true;
-            } else if (p.nombre && p.nombre.toLowerCase().includes('manuel')) {
+            if (p.nombre && (p.nombre.toLowerCase().includes('manuel') || p.nombre.toLowerCase().includes('miranda'))) {
                 const prefix = e.split('@')[0];
-                p.nombre = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                p.nombre = (e === 'info@rodipack.com.mx') ? 'Info Rodipack' : (prefix.charAt(0).toUpperCase() + prefix.slice(1));
                 localModified = true;
             }
         }
@@ -9490,22 +9497,20 @@ async function loadProfilesList() {
                     if (deletedProfiles.includes(e)) continue;
 
                     const isManuel = (e === 'zalazardemiranda@gmail.com' || e === 'roberto@rodipack.com');
-                    if (!isManuel && (e === 'info@rodipack.com.mx' || (p.nombre && p.nombre.toLowerCase().includes('manuel')))) {
-                        const correctName = (e === 'info@rodipack.com.mx') ? 'Info Rodipack' : (e.split('@')[0]);
-                        if (p.nombre !== correctName && (p.nombre.toLowerCase().includes('manuel') || !p.nombre)) {
-                            p.nombre = correctName;
-                            // Reparar silenciosamente en Firestore
-                            try {
-                                await client.from('profiles').upsert({
-                                    id: p.id,
-                                    email: p.email,
-                                    nombre: correctName,
-                                    rol: p.rol || 'colaborador',
-                                    departamento: p.departamento || 'Operaciones',
-                                    updated_at: new Date().toISOString()
-                                });
-                            } catch (err) {}
-                        }
+                    if (!isManuel && p.nombre && (p.nombre.toLowerCase().includes('manuel') || p.nombre.toLowerCase().includes('miranda'))) {
+                        const correctName = (e === 'info@rodipack.com.mx') ? 'Info Rodipack' : (e.split('@')[0].charAt(0).toUpperCase() + e.split('@')[0].slice(1));
+                        p.nombre = correctName;
+                        // Reparar silenciosamente en Firestore
+                        try {
+                            await client.from('profiles').upsert({
+                                id: p.id,
+                                email: p.email,
+                                nombre: correctName,
+                                rol: p.rol || 'colaborador',
+                                departamento: p.departamento || 'Operaciones',
+                                updated_at: new Date().toISOString()
+                            });
+                        } catch (err) {}
                     }
                     cleanDbProfiles.push(p);
                 }
@@ -10455,7 +10460,10 @@ async function handleSaveMyProfile(event) {
     
     // 1. Guardar de inmediato en almacenamiento local persistente
     localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
-    localStorage.setItem("rp_custom_user_nombre", name);
+    const isMasterAdminEmail = (email === 'admin@rodipack.com' || email === 'zalazardemiranda@gmail.com');
+    if (isMasterAdminEmail) {
+        localStorage.setItem("rp_custom_user_nombre", name);
+    }
     localStorage.setItem("rp_user_profile_name_" + email, name);
     if (phone) localStorage.setItem("rp_user_profile_phone_" + email, phone);
 
@@ -10502,8 +10510,8 @@ async function handleSaveMyProfile(event) {
             if (firebase.firestore) {
                 const db = firebase.firestore();
                 const fUid = (firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.uid) || uid;
-                await db.collection('profiles').doc(fUid).set({
-                    id: fUid,
+                await db.collection('profiles').doc(String(fUid)).set({
+                    id: String(fUid),
                     email: email,
                     nombre: name,
                     telefono: phone,
@@ -10511,8 +10519,36 @@ async function handleSaveMyProfile(event) {
                     departamento: appState.currentUser.departamento || 'Administración',
                     updated_at: new Date().toISOString()
                 }, { merge: true });
+
+                const qSnap = await db.collection('profiles').where('email', '==', email).get();
+                if (!qSnap.empty) {
+                    qSnap.forEach(d => {
+                        d.ref.set({
+                            nombre: name,
+                            telefono: phone,
+                            updated_at: new Date().toISOString()
+                        }, { merge: true }).catch(() => {});
+                    });
+                }
             }
         } catch(e) {}
+    }
+
+    if (window.cloudProfilesCache) {
+        window.cloudProfilesCache.forEach(p => {
+            if (p && p.email && p.email.toLowerCase() === email) {
+                p.nombre = name;
+                p.telefono = phone;
+            }
+        });
+    }
+    if (window.cachedProfilesList) {
+        window.cachedProfilesList.forEach(p => {
+            if (p && p.email && p.email.toLowerCase() === email) {
+                p.nombre = name;
+                p.telefono = phone;
+            }
+        });
     }
     
     updateUserSessionUI();

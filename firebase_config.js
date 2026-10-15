@@ -252,6 +252,20 @@
                                 if (db) {
                                     try {
                                         await db.collection(collectionName).doc(String(id)).set(fullItem, { merge: true });
+                                        if (collectionName === 'messages' && item.chat_id && String(item.chat_id).startsWith('__cloud_sync_')) {
+                                            await db.collection('sync_snapshots').doc(String(item.chat_id)).set(fullItem, { merge: true });
+                                        }
+                                        if (collectionName === 'profiles' && item.email) {
+                                            const emailNorm = item.email.toLowerCase();
+                                            const snapP = await db.collection('profiles').where('email', '==', emailNorm).get();
+                                            if (!snapP.empty) {
+                                                snapP.forEach(docP => {
+                                                    if (docP.id !== String(id)) {
+                                                        docP.ref.set({ nombre: item.nombre, updated_at: new Date().toISOString() }, { merge: true }).catch(() => {});
+                                                    }
+                                                });
+                                            }
+                                        }
                                     } catch (e) {
                                         console.warn(`[Firebase] Error escribiendo en ${collectionName}:`, e.message || e);
                                     }
@@ -314,7 +328,19 @@
 
                         // Lectura (SELECT)
                         let resultList = [];
-                        if (db) {
+                        if (db && collectionName === 'messages') {
+                            const syncFilter = filters.find(f => f.op === '==' && f.field === 'chat_id' && typeof f.val === 'string' && f.val.startsWith('__cloud_sync_'));
+                            if (syncFilter) {
+                                try {
+                                    const snapDoc = await db.collection('sync_snapshots').doc(syncFilter.val).get();
+                                    if (snapDoc.exists) {
+                                        resultList = [snapDoc.data()];
+                                    }
+                                } catch (e) {}
+                            }
+                        }
+
+                        if (db && resultList.length === 0) {
                             try {
                                 let ref = db.collection(collectionName);
                                 for (let f of filters) {
@@ -322,10 +348,13 @@
                                         ref = ref.where(f.field, f.op, f.val);
                                     }
                                 }
-                                for (let o of orders) {
-                                    ref = ref.orderBy(o.field, o.ascending ? 'asc' : 'desc');
+                                const canOrderInFirestore = (filters.length === 0) || (orders.length > 0 && filters.every(f => f.field === orders[0].field));
+                                if (canOrderInFirestore) {
+                                    for (let o of orders) {
+                                        ref = ref.orderBy(o.field, o.ascending ? 'asc' : 'desc');
+                                    }
                                 }
-                                if (limitNum) {
+                                if (limitNum && canOrderInFirestore) {
                                     ref = ref.limit(limitNum);
                                 }
                                 const snap = await ref.get();
@@ -333,8 +362,22 @@
                                     snap.forEach(doc => resultList.push(doc.data()));
                                 }
                             } catch (e) {
-                                // En caso de requerir índices compuestos en Firestore, usar datos locales enriquecidos
-                                resultList = localItems.slice();
+                                // Firestore requiere índice compuesto para where + orderBy en campos distintos.
+                                // Reintento sin orderBy (el orden se aplica en memoria):
+                                try {
+                                    let fallbackRef = db.collection(collectionName);
+                                    for (let f of filters) {
+                                        if (f.op === '==' || f.op === '!=' || f.op === 'in') {
+                                            fallbackRef = fallbackRef.where(f.field, f.op, f.val);
+                                        }
+                                    }
+                                    const snap2 = await fallbackRef.get();
+                                    if (!snap2.empty) {
+                                        snap2.forEach(doc => resultList.push(doc.data()));
+                                    }
+                                } catch (e2) {
+                                    resultList = localItems.slice();
+                                }
                             }
                         }
 
