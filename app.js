@@ -957,9 +957,69 @@ function handleAuthNavItemClick(e) {
     }
 };
 
+// Guardián continuo de autenticación: Expulsa inmediatamente cualquier sesión falsa o no autenticada
+function enforceAuthenticationGuard() {
+    window.enforceAuthenticationGuard = enforceAuthenticationGuard;
+    const isFirebaseAuthed = Boolean(window.firebase?.auth && window.firebase.auth().currentUser);
+    const isSessionActive = localStorage.getItem("rp_session_active") === "true";
+    const storedUser = localStorage.getItem("rp_logged_user");
+    const hasValidStoredUser = Boolean(
+        isSessionActive &&
+        storedUser &&
+        appState.currentUser && 
+        appState.currentUser.email
+    );
+
+    if (!isFirebaseAuthed && !hasValidStoredUser) {
+        appState.currentUser = null;
+        appState.currentRole = 'colaborador';
+        localStorage.setItem("rp_session_active", "false");
+        localStorage.removeItem("rp_logged_user");
+        localStorage.removeItem("rp_user_pass");
+        sessionStorage.removeItem("rp_session_pass");
+        if (typeof showGlobalLoginOverlay === 'function') {
+            showGlobalLoginOverlay();
+        }
+        return false;
+    }
+    return true;
+}
+window.enforceAuthenticationGuard = enforceAuthenticationGuard;
+
+function handleSecuritySessionPurge(payload) {
+    window.handleSecuritySessionPurge = handleSecuritySessionPurge;
+    const isAuthed = enforceAuthenticationGuard();
+    if (!isAuthed) {
+        console.warn("🔒 [Seguridad Rodipack] Expulsión forzada de cliente no autenticado.");
+    }
+}
+window.handleSecuritySessionPurge = handleSecuritySessionPurge;
+
+// Monitoreo continuo de sesión cada 3 segundos y al regresar a la ventana
+setInterval(() => {
+    if (typeof enforceAuthenticationGuard === 'function') {
+        enforceAuthenticationGuard();
+    }
+}, 3000);
+
+window.addEventListener('focus', () => {
+    if (typeof enforceAuthenticationGuard === 'function') {
+        enforceAuthenticationGuard();
+    }
+});
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && typeof enforceAuthenticationGuard === 'function') {
+        enforceAuthenticationGuard();
+    }
+});
+
 // 2. Tab Switcher
 function switchTab(tabName) {
     window.switchTab = switchTab;
+    if (typeof enforceAuthenticationGuard === 'function' && !enforceAuthenticationGuard()) {
+        return;
+    }
     // Redirigir emails a schema
     if (tabName === 'emails') {
         tabName = 'schema';
@@ -8121,6 +8181,13 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 4a4. Expulsión inmediata de sesiones no autenticadas en tiempo real
+    window.chatRealtimeChannel.on('broadcast', { event: 'security_session_purge' }, payload => {
+        if (typeof window.handleSecuritySessionPurge === 'function') {
+            window.handleSecuritySessionPurge(payload.payload);
+        }
+    });
+
     // 4b. Recibir Actualizaciones de Proveedores por Broadcast en tiempo real (instantáneo entre usuarios)
     window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_update' }, payload => {
         const data = payload.payload;
@@ -13543,6 +13610,23 @@ async function triggerSystemReleaseEviction(customReleaseId = null) {
         }
     }
     return payload;
+}
+
+async function triggerSecuritySessionPurge() {
+    window.triggerSecuritySessionPurge = triggerSecuritySessionPurge;
+    if (window.chatRealtimeChannel) {
+        try {
+            await window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'security_session_purge',
+                payload: {
+                    action: 'purge_unauthenticated_sessions',
+                    timestamp: Date.now()
+                }
+            });
+            console.log("🔒 [Seguridad Rodipack] Señal de expulsión enviada a todos los clientes.");
+        } catch (e) {}
+    }
 }
 
 async function checkSystemReleaseFromCloud() {
