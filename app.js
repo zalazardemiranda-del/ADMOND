@@ -8849,6 +8849,21 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 9. Cambios en perfiles de usuario (alta, edición, baja) desde otra computadora
+    let _profilesRealtimeTimer = null;
+    window.chatRealtimeChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        if (_profilesRealtimeTimer) clearTimeout(_profilesRealtimeTimer);
+        _profilesRealtimeTimer = setTimeout(async () => {
+            try {
+                if (typeof loadProfilesList === 'function') await loadProfilesList();
+                if (Array.isArray(window.cachedProfilesList) && window.cachedProfilesList.length > 0) {
+                    cloudProfilesCache = window.cachedProfilesList;
+                    window.cloudProfilesCache = window.cachedProfilesList;
+                }
+            } catch (e) {}
+        }, 400);
+    });
+
     let _reconnectRealtimeTimer = null;
     window.chatRealtimeChannel.subscribe((status) => {
         console.log("⚡ [Realtime Hub Subscripción]:", status);
@@ -8937,6 +8952,24 @@ function setupRealtimeSubscriptions() {
                         if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
                             await window.fetchConsecutivoLockFromCloud();
                         }
+                    } else if (appState.currentAdminFicha === 'visualizacion') {
+                        window._visualizacionHeartbeatTick = (window._visualizacionHeartbeatTick || 0) + 1;
+                        if (window._visualizacionHeartbeatTick % 3 === 0) {
+                            const visSig = () => {
+                                try { return JSON.stringify([appState.nominas, appState.gastosIndirectos, appState.consecutivo, appState.proveedores]); } catch (e) { return String(Date.now()); }
+                            };
+                            const before = visSig();
+                            const fetchers = ['fetchNominasFromCloud', 'fetchGastosIndirectosFromCloud', 'fetchConsecutivoFromCloud', 'fetchProveedoresDataFromCloud'];
+                            for (const fn of fetchers) {
+                                if (typeof window[fn] === 'function') { try { await window[fn](); } catch (e) {} }
+                            }
+                            if (before !== visSig() && typeof window.renderVisualizacion === 'function') window.renderVisualizacion();
+                        }
+                    }
+                } else if (appState.currentTab === 'users' || appState.currentTab === 'profile') {
+                    window._usersHeartbeatTick = (window._usersHeartbeatTick || 0) + 1;
+                    if (window._usersHeartbeatTick % 5 === 0 && typeof loadProfilesList === 'function') {
+                        await loadProfilesList();
                     }
                 }
             } catch (e) {}
@@ -9062,7 +9095,8 @@ async function fetchCloudData() {
     
     try {
         // Cargar perfiles desde Supabase
-        const { data: profiles, error: pError } = await client.from('profiles').select('*');
+        const { data: profilesRaw } = await client.from('profiles').select('*');
+        const profiles = dedupeProfilesByEmail(profilesRaw || []);
         if (profiles && profiles.length > 0) {
             cloudProfilesCache = profiles;
             window.cloudProfilesCache = profiles;
@@ -9447,6 +9481,32 @@ function toggleNewUserForm() {
     }
 };
 
+function dedupeProfilesByEmail(list) {
+    const byEmail = new Map();
+    const order = [];
+    const ts = p => new Date(p.updated_at || p.created_at || 0).getTime() || 0;
+    (list || []).forEach(p => {
+        if (!p || !p.email) return;
+        const key = String(p.email).trim().toLowerCase();
+        const prev = byEmail.get(key);
+        if (!prev) {
+            byEmail.set(key, p);
+            order.push(key);
+            return;
+        }
+        // Conservar los datos más recientes, rellenando campos vacíos con los del otro documento
+        const newer = ts(p) >= ts(prev) ? p : prev;
+        const older = newer === p ? prev : p;
+        const merged = Object.assign({}, older, newer);
+        Object.keys(older).forEach(k => {
+            if ((merged[k] === undefined || merged[k] === null || merged[k] === '') && older[k]) merged[k] = older[k];
+        });
+        byEmail.set(key, merged);
+    });
+    return order.map(k => byEmail.get(k));
+}
+window.dedupeProfilesByEmail = dedupeProfilesByEmail;
+
 async function loadProfilesList() {
     window.loadProfilesList = loadProfilesList;
     const container = document.getElementById("profiles-list-container");
@@ -9514,6 +9574,24 @@ async function loadProfilesList() {
                     }
                     cleanDbProfiles.push(p);
                 }
+
+                // Reparar duplicados existentes en Firestore (mismo correo en varios documentos)
+                const groups = {};
+                cleanDbProfiles.forEach(p => {
+                    const k = String(p.email).trim().toLowerCase();
+                    (groups[k] = groups[k] || []).push(p);
+                });
+                for (const k of Object.keys(groups)) {
+                    const g = groups[k];
+                    if (g.length < 2) continue;
+                    const uidDoc = g.find(p => /^[A-Za-z0-9]{28}$/.test(String(p.id || '')));
+                    if (!uidDoc) continue;
+                    const mergedOne = dedupeProfilesByEmail(g)[0];
+                    try {
+                        await client.from('profiles').upsert(Object.assign({}, mergedOne, { id: uidDoc.id, email: k }));
+                        console.log(`🧹 Perfil duplicado unificado para ${k}`);
+                    } catch (err) {}
+                }
                 mergedProfiles = [...cleanDbProfiles];
                 localProfiles.forEach(lp => {
                     if (lp.email && !mergedProfiles.some(p => p.email && p.email.toLowerCase() === lp.email.toLowerCase())) {
@@ -9526,6 +9604,9 @@ async function loadProfilesList() {
         }
     }
     
+    // Unificar perfiles duplicados por correo (un mismo usuario puede tener varios documentos en Firestore)
+    mergedProfiles = dedupeProfilesByEmail(mergedProfiles);
+
     window.cachedProfilesList = mergedProfiles;
     
     if (container) {
