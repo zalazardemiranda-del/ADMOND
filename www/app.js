@@ -977,6 +977,9 @@ function enforceAuthenticationGuard() {
     );
 
     if (!isFirebaseAuthed && !hasValidStoredUser) {
+        const overlay = document.getElementById("global-login-overlay");
+        const isOverlayAlreadyVisible = overlay && overlay.style.display !== "none";
+
         appState.currentUser = null;
         appState.currentRole = 'colaborador';
         localStorage.setItem("rp_session_active", "false");
@@ -985,7 +988,7 @@ function enforceAuthenticationGuard() {
         localStorage.removeItem("rp_current_role");
         localStorage.removeItem("rp_auth_epoch");
         sessionStorage.clear();
-        if (typeof showGlobalLoginOverlay === 'function') {
+        if (!isOverlayAlreadyVisible && typeof showGlobalLoginOverlay === 'function') {
             showGlobalLoginOverlay();
         }
         return false;
@@ -9546,10 +9549,6 @@ function showGlobalLoginOverlay() {
         earlyStyle.parentNode.removeChild(earlyStyle);
     }
     const overlay = document.getElementById("global-login-overlay");
-    const emailInput = document.getElementById("login-global-email");
-    const passInput = document.getElementById("login-global-pass");
-    if (emailInput) emailInput.value = "";
-    if (passInput) passInput.value = "";
     if (overlay) overlay.style.display = "flex";
 };
 

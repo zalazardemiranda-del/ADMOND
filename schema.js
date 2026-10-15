@@ -2625,9 +2625,8 @@
             }
         } catch (e) {}
 
-        // 5. Garantizar exactamente los usuarios corporativos de la Imagen 2
+        // 5. Garantizar exactamente los usuarios corporativos
         const systemUsers = [
-            { nombre: 'Gerente Principal', rol: 'gerente', departamento: 'Gerencia General' },
             { nombre: 'Roberto Miranda', rol: 'gerente', departamento: 'Operaciones' },
             { nombre: 'Manuel Morales', rol: 'colaborador', departamento: 'Logística' },
             { nombre: 'Maria Perez', rol: 'administrador', departamento: 'Finanzas' }
