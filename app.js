@@ -146,7 +146,7 @@ const runInitialAppSetup = async () => {
         const sig = `${(task.title || '').trim().toLowerCase()}____${(task.desc || '').trim().toLowerCase()}`;
         return (appState.deletedTaskIds || []).some(d => d === task.id || (sig && d === sig));
     };
-    const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
+    const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal', 'roberto miranda perez', 'roberto miranda pérez', 'manuel morales']);
     storedTasks = storedTasks.filter(t => {
         if (!t || !t.title || t.id === 'task-1' || t.id === 'task-2' || isTaskDeleted(t)) return false;
         const assignee = (t.assignee || '').trim().toLowerCase();
@@ -193,7 +193,7 @@ const runInitialAppSetup = async () => {
     }
     let storedChats = JSON.parse(localStorage.getItem('rp_chats'));
     if (storedChats && typeof storedChats === 'object') {
-        const fakeNames = new Set(["Juan Pérez", "Juan Perez", "María Gómez", "Maria Gomez", "Gerente Principal"]);
+        const fakeNames = new Set(["Juan Pérez", "Juan Perez", "María Gómez", "Maria Gomez", "Gerente Principal", "Roberto Miranda Perez", "Roberto Miranda Pérez", "Manuel Morales"]);
         Object.keys(storedChats).forEach(k => {
             if (k === 'cubicacion-ayuda' || k === 'tracking-status') {
                 delete storedChats[k];
@@ -554,31 +554,41 @@ const runInitialAppSetup = async () => {
         }
     }
     
-    // Garantizar que las credenciales locales tengan roles y nombres válidos (evitar contaminación cruzada de perfiles)
+    // Garantizar que las credenciales locales tengan roles y nombres válidos y eliminar perfiles falsos
     try {
+        localStorage.removeItem('rp_user_profile_name_zalazardemiranda@gmail.com');
+        const rawInfoCustom = localStorage.getItem('rp_user_profile_name_info@rodipack.com.mx');
+        if (rawInfoCustom && rawInfoCustom.trim().toLowerCase() === 'info') {
+            localStorage.setItem('rp_user_profile_name_info@rodipack.com.mx', 'Roberto Miranda');
+        }
         let localProfilesInit = JSON.parse(localStorage.getItem('rp_local_profiles'));
         if (Array.isArray(localProfilesInit)) {
-            let changed = false;
-            localProfilesInit.forEach(p => {
-                if (!p || !p.email) return;
+            const fakeEmails = new Set(['zalazardemiranda@gmail.com', 'jennifer@rodipack.online', 'diego.miranda@rodipack.com']);
+            const fakeNamesSet = new Set(['roberto miranda perez', 'roberto miranda pérez', 'manuel morales', 'sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
+            const cleanedLocal = localProfilesInit.filter(p => {
+                if (!p || !p.email) return false;
+                const e = String(p.email).trim().toLowerCase();
+                const n = String(p.nombre || '').trim().toLowerCase();
+                if (fakeEmails.has(e) || fakeNamesSet.has(n)) return false;
+                return true;
+            });
+            cleanedLocal.forEach(p => {
                 const e = p.email.toLowerCase();
                 if (e === 'diego@rodipack.com') {
-                    if (p.rol !== 'administrativo') {
-                        p.rol = 'administrativo';
-                        changed = true;
-                    }
+                    if (p.rol !== 'administrativo') p.rol = 'administrativo';
+                    if (p.nombre === 'Diego Miranda') p.nombre = 'Diego';
+                }
+                if (e === 'info@rodipack.com.mx' && (!p.nombre || p.nombre.trim().toLowerCase() === 'info')) {
+                    p.nombre = localStorage.getItem('rp_user_profile_name_info@rodipack.com.mx') || 'Roberto Miranda';
                 }
                 const savedCustom = localStorage.getItem('rp_user_profile_name_' + e);
-                if (savedCustom) {
+                if (savedCustom && !(e === 'info@rodipack.com.mx' && savedCustom.trim().toLowerCase() === 'info')) {
                     if (p.nombre !== savedCustom) {
                         p.nombre = savedCustom;
-                        changed = true;
                     }
                 }
             });
-            if (changed) {
-                localStorage.setItem('rp_local_profiles', JSON.stringify(localProfilesInit));
-            }
+            localStorage.setItem('rp_local_profiles', JSON.stringify(cleanedLocal));
         }
     } catch (e) {}
 
@@ -595,7 +605,16 @@ const runInitialAppSetup = async () => {
                 localStorage.removeItem("rp_logged_user");
             } else {
                 const userEmailBoot = (appState.currentUser.email || '').toLowerCase();
-                const savedCustomBoot = localStorage.getItem('rp_user_profile_name_' + userEmailBoot);
+                let savedCustomBoot = localStorage.getItem('rp_user_profile_name_' + userEmailBoot);
+                if (userEmailBoot === 'info@rodipack.com.mx' && (!savedCustomBoot || savedCustomBoot.trim().toLowerCase() === 'info')) {
+                    if (!appState.currentUser.nombre || appState.currentUser.nombre.trim().toLowerCase() === 'info') {
+                        savedCustomBoot = 'Roberto Miranda';
+                        localStorage.setItem('rp_user_profile_name_info@rodipack.com.mx', savedCustomBoot);
+                    } else {
+                        savedCustomBoot = appState.currentUser.nombre;
+                        localStorage.setItem('rp_user_profile_name_info@rodipack.com.mx', savedCustomBoot);
+                    }
+                }
                 if (savedCustomBoot) {
                     if (appState.currentUser.nombre !== savedCustomBoot) {
                         appState.currentUser.nombre = savedCustomBoot;
@@ -647,8 +666,10 @@ const runInitialAppSetup = async () => {
     let storedTab = localStorage.getItem("rp_current_tab");
     if (hashTab === 'emails') hashTab = 'schema';
     if (storedTab === 'emails') storedTab = 'schema';
+    if (hashTab === 'meetings') hashTab = 'tasks';
+    if (storedTab === 'meetings') storedTab = 'tasks';
 
-    if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'meetings', 'users', 'profile'].includes(hashTab)) {
+    if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'users', 'profile'].includes(hashTab)) {
         appState.currentTab = hashTab;
     } else if (storedTab) {
         appState.currentTab = storedTab;
@@ -677,7 +698,6 @@ const runInitialAppSetup = async () => {
 
     renderTasks();
     renderChatMessages(true);
-    renderMeetings();
     renderAdministracion();
     updateGlobalStats();
     updateUserSessionUI();
@@ -804,25 +824,23 @@ function setRole(role) {
         (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
         (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('diego'))
     );
-    if (isDiego) {
-        role = 'administrativo';
-    }
-    appState.currentRole = role || 'gerente';
-    localStorage.setItem("rp_current_role", appState.currentRole);
+    const rawRole = (role || 'gerente').toLowerCase().trim();
+    const isGerente = (rawRole === 'gerente' || rawRole === 'manager' || rawRole === 'director') && !isDiego;
 
-    const r = (appState.currentRole || '').toLowerCase().trim();
-    const isGerente = (r === 'gerente' || r === 'manager' || r === 'director') && !isDiego;
-    const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo' || r === 'administracion' || isDiego;
+    // Solo existen dos roles en el sistema: Manager ('gerente') y Administrativo ('administrativo')
+    appState.currentRole = isGerente ? 'gerente' : 'administrativo';
+    if (appState.currentUser && !isGerente) {
+        appState.currentUser.rol = 'administrador';
+    }
+    localStorage.setItem("rp_current_role", appState.currentRole);
 
     // Manejar clases en el body para control de estilos CSS inmediato e irrevocable
     if (typeof document !== 'undefined' && document.body) {
         document.body.classList.remove('role-gerente', 'role-administrativo', 'role-administrador', 'role-admin', 'role-colaborador');
         if (isGerente) {
             document.body.classList.add('role-gerente');
-        } else if (isAdmin) {
-            document.body.classList.add('role-administrativo');
         } else {
-            document.body.classList.add('role-colaborador');
+            document.body.classList.add('role-administrativo');
         }
     }
 
@@ -844,8 +862,11 @@ function setRole(role) {
         if (adminWorkspace) adminWorkspace.style.display = "block";
         if (adminLockScreen) adminLockScreen.style.display = "none";
         if (btnCreateGroup) btnCreateGroup.style.display = "inline-flex";
-    } else if (isAdmin) {
-        // Administrador / Administrativo: Acceso completo a Finanzas & Administración, SIN acceso a usuarios
+    } else {
+        // Usuario / Administrativo:
+        // - Acceso total en la sección administrativa
+        // - Sin acceso a "Administración de Usuarios"
+        // - En Tareas solo puede ver sus tareas y marcarlas como completadas (no crear, editar ni eliminar)
         if (newTaskCard) newTaskCard.style.display = "none";
         if (tasksControlPanel) tasksControlPanel.style.display = "none";
         if (tasksLayout) tasksLayout.classList.add("full-width-tasks");
@@ -855,34 +876,18 @@ function setRole(role) {
         if (adminLockScreen) adminLockScreen.style.display = "none";
         if (btnCreateGroup) btnCreateGroup.style.display = "none";
         
-        // Si estaba en la pestaña de usuarios (solo gerentes), redirigir a administración
+        // Si estaba en la pestaña de usuarios (solo Managers), redirigir a administración
         if (appState.currentTab === 'users') {
             switchTab('administracion');
             return;
         }
-    } else {
-        // Colaborador de Operaciones
-        if (newTaskCard) newTaskCard.style.display = "none";
-        if (tasksControlPanel) tasksControlPanel.style.display = "none";
-        if (tasksLayout) tasksLayout.classList.add("full-width-tasks");
-        if (sidebarAdminItem) sidebarAdminItem.style.setProperty("display", "none", "important");
-        if (sidebarUsersItem) sidebarUsersItem.style.setProperty("display", "none", "important");
-        if (adminWorkspace) adminWorkspace.style.display = "none";
-        if (adminLockScreen) adminLockScreen.style.display = "block";
-        if (btnCreateGroup) btnCreateGroup.style.display = "none";
-        
-        // Si estaba en administración o usuarios, redirigir a tareas
-        if (appState.currentTab === 'administracion' || appState.currentTab === 'users') {
-            switchTab('tasks');
-            return;
-        }
     }
     
-    // Ajustar encabezado y selector de colaborador según el rol
+    // Ajustar encabezado y selector de usuario según el rol
     const userFilterHeading = document.getElementById("user-filter-heading");
     const userFilterWrap = document.querySelector(".user-filter-select-wrap");
     if (isGerente) {
-        if (userFilterHeading) userFilterHeading.innerText = "Filtrar por Colaborador:";
+        if (userFilterHeading) userFilterHeading.innerText = "Filtrar por Usuario:";
         if (userFilterWrap) userFilterWrap.style.display = "block";
         if (typeof window.populateTaskUserFilterOptions === 'function') {
             window.populateTaskUserFilterOptions();
@@ -919,18 +924,16 @@ function updateUserSessionUI() {
         const u = appState.currentUser;
         const r = (u.rol || '').toLowerCase();
         const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
-        const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
 
         const realName = u.nombre || (u.email ? u.email.split('@')[0] : 'Usuario');
         if (userNameEl) userNameEl.innerText = realName;
         if (userRoleEl) {
-            if (isGerente) userRoleEl.innerText = 'Rango: Gerente / Director';
-            else if (isAdmin) userRoleEl.innerText = 'Rango: Administrativo';
-            else userRoleEl.innerText = `Rango: Colaborador (${u.departamento || 'Operaciones'})`;
+            if (isGerente) userRoleEl.innerText = 'Rango: Manager / Director';
+            else userRoleEl.innerText = 'Rango: Administrativo';
         }
         if (userAvatarEl) {
             const initial = realName.charAt(0).toUpperCase();
-            const avatarColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
+            const avatarColor = isGerente ? '#2563EB' : '#10B981';
             userAvatarEl.innerText = initial;
             userAvatarEl.style.borderColor = avatarColor;
             userAvatarEl.style.color = avatarColor;
@@ -940,12 +943,11 @@ function updateUserSessionUI() {
     } else {
         const r = (appState.currentRole || '').toLowerCase();
         const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
-        const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
         
         const roleName = 'Sin sesión';
-        const roleLabel = isGerente ? 'Rango: Gerente / Director' : (isAdmin ? 'Rango: Administrativo' : 'Rango: Colaborador');
+        const roleLabel = isGerente ? 'Rango: Manager / Director' : 'Rango: Administrativo';
         const avatarLetter = '?';
-        const avatarColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
+        const avatarColor = isGerente ? '#2563EB' : '#10B981';
 
         if (userNameEl) userNameEl.innerText = roleName;
         if (userRoleEl) userRoleEl.innerText = roleLabel;
@@ -1226,6 +1228,9 @@ function switchTab(tabName) {
     if (tabName === 'emails' || tabName === 'schema' || tabName === 'chat') {
         tabName = 'tasks';
     }
+    if (tabName === 'meetings') {
+        tabName = 'tasks';
+    }
 
     const r = (appState.currentRole || '').toLowerCase();
     const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
@@ -1286,9 +1291,6 @@ function switchTab(tabName) {
             renderChatChannels();
             renderChatMessages(true);
         }
-    } else if (tabName === 'meetings') {
-        titleEl.innerText = "Calendario de Reuniones";
-        subtitleEl.innerText = "Planifica y agenda llamadas de coordinación del equipo";
     } else if (tabName === 'administracion') {
         titleEl.innerText = "Administración General";
         subtitleEl.innerText = "Control financiero, estadísticas por departamento, nóminas quincenales y proveedores";
@@ -1326,6 +1328,16 @@ function switchAdminFicha(fichaName) {
     } else if (fichaName === 'archivo-digital') {
         const btnQ = document.getElementById('ficha-btn-quincenal');
         if (btnQ) btnQ.classList.add("active");
+    }
+    if (fichaName === 'proveedores' || fichaName === 'consecutivo') {
+        const btnOp = document.getElementById('ficha-btn-operaciones');
+        if (btnOp) btnOp.classList.add("active");
+    }
+
+    const opKpisRow = document.getElementById('operaciones-kpis-row');
+    if (opKpisRow) {
+        const showOpRow = (fichaName === 'operaciones' || fichaName === 'proveedores' || fichaName === 'consecutivo');
+        opKpisRow.style.display = showOpRow ? "grid" : "none";
     }
     
     // Update active subpane
@@ -1399,6 +1411,7 @@ function renderAdministracion() {
             renderNominas();
         }
     } else if (appState.currentAdminFicha === 'proveedores') {
+        if (typeof window.renderOperacionesList === 'function') window.renderOperacionesList();
         if (typeof window.fetchProveedoresLockFromCloud === 'function') {
             window.fetchProveedoresLockFromCloud();
         }
@@ -1411,6 +1424,7 @@ function renderAdministracion() {
             window.updateProveedoresEditButtonsUI();
         }
     } else if (appState.currentAdminFicha === 'consecutivo') {
+        if (typeof window.renderOperacionesList === 'function') window.renderOperacionesList();
         if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
             window.fetchConsecutivoLockFromCloud();
         }
@@ -1888,13 +1902,27 @@ window.handleAdminQuincenalTopSave = handleAdminQuincenalTopSave;
 
 let _editNominasTimeout = null;
 
+function isLockOwnedByCurrentUser(lockObj) {
+    if (!lockObj) return false;
+    const currentUserId = (appState.currentUser?.id || appState.currentUser?.email || 'admin').toLowerCase();
+    const currentUserEmail = (appState.currentUser?.email || '').toLowerCase();
+    const currentUserName = (appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador').toLowerCase();
+    const lockId = (lockObj.userId || '').toLowerCase();
+    const lockName = (lockObj.userName || '').toLowerCase();
+    return Boolean(
+        (lockId && (lockId === currentUserId || (currentUserEmail && lockId === currentUserEmail))) ||
+        (lockName && lockName === currentUserName)
+    );
+}
+window.isLockOwnedByCurrentUser = isLockOwnedByCurrentUser;
+
 async function startEditingNominas() {
     window.startEditingNominas = startEditingNominas;
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
 
     // 1. Verificar si localmente está bloqueado por otro usuario (< 5 min)
-    if (appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && appState.nominasLockedBy.userId !== currentUserId) {
+    if (appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.nominasLockedBy)) {
         const elapsed = Date.now() - (appState.nominasLockedBy.timestamp || 0);
         if (elapsed < 5 * 60 * 1000) {
             alert(`⚠️ Esta tabla está siendo editada por ${appState.nominasLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
@@ -1906,6 +1934,26 @@ async function startEditingNominas() {
     // Respaldar estado previo a la edición para que los cambios NO se guarden hasta dar clic en 'Guardar'
     appState._nominasSnapshot = JSON.parse(JSON.stringify(appState.nominas || []));
     appState._archivosQuincenalesSnapshot = JSON.parse(JSON.stringify(appState.archivosQuincenales || []));
+
+    // Garantizar al menos 1 fila editable cuando la lista esté vacía
+    const activeList = window.getActiveNominasList();
+    if (activeList && activeList.length === 0) {
+        activeList.push({
+            folio: "1",
+            empleado: "",
+            fecha: new Date().toISOString().split('T')[0],
+            nomina: 0,
+            servicio: 0,
+            ivaPct: 0,
+            iva: 0,
+            retPct: 0,
+            ret4Pct: 0,
+            ret4: 0,
+            retIsrPct: 0,
+            retIsr: 0,
+            total: 0
+        });
+    }
 
     const lockTime = Date.now();
     appState.isEditingNominas = true;
@@ -1922,7 +1970,7 @@ async function startEditingNominas() {
     // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
     try {
         const activeCloudLock = await checkCloudLockActive('__cloud_sync_nominas_lock__', currentUserId);
-        if (activeCloudLock && activeCloudLock.isLocked && activeCloudLock.userId !== currentUserId) {
+        if (activeCloudLock && activeCloudLock.isLocked && !isLockOwnedByCurrentUser(activeCloudLock)) {
             appState.isEditingNominas = false;
             appState.nominasLockedBy = activeCloudLock;
             if (appState._nominasSnapshot) {
@@ -2024,9 +2072,8 @@ function updateNominasEditButtonsUI() {
     const bannerText = document.getElementById("nominas-lock-banner-text");
     const tableContainer = document.getElementById("nominas-table-container");
 
-    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
-    const isLockedByOther = !appState.isEditingNominas && Boolean(appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && appState.nominasLockedBy.userId !== currentUserId);
+    const isLockedByOther = !appState.isEditingNominas && Boolean(appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.nominasLockedBy));
     const isQuincenasSubtab = (appState.adminSubSection || 'quincenas') === 'quincenas';
 
     const applyBtnState = (editEl, saveEl) => {
@@ -2083,9 +2130,9 @@ function updateNominasEditButtonsUI() {
     }
 
     if (btnAddRow) {
-        btnAddRow.disabled = !appState.isEditingNominas || isLockedByOther;
-        btnAddRow.style.opacity = (!appState.isEditingNominas || isLockedByOther) ? "0.55" : "1";
-        btnAddRow.style.cursor = (!appState.isEditingNominas || isLockedByOther) ? "not-allowed" : "pointer";
+        btnAddRow.disabled = Boolean(isLockedByOther);
+        btnAddRow.style.opacity = isLockedByOther ? "0.55" : "1";
+        btnAddRow.style.cursor = isLockedByOther ? "not-allowed" : "pointer";
     }
 
     if (isLockedByOther) {
@@ -2186,7 +2233,7 @@ async function fetchNominasLockFromCloud() {
                 if (parsed.isLocked) {
                     const elapsed = Date.now() - (parsed.timestamp || 0);
                     if (elapsed < 5 * 60 * 1000) {
-                        if (parsed.userId !== currentUserId) {
+                        if (!isLockOwnedByCurrentUser(parsed)) {
                             if (appState.isEditingNominas) {
                                 // Preferencia absoluta: mantener mi sesión activa hasta que yo de clic en Guardar
                                 const myLockTime = appState.nominasLockedBy?.timestamp || Date.now();
@@ -2215,6 +2262,20 @@ async function fetchNominasLockFromCloud() {
 }
 window.fetchNominasLockFromCloud = fetchNominasLockFromCloud;
 
+async function handleNominaCellClick(index, fieldId) {
+    window.handleNominaCellClick = handleNominaCellClick;
+    if (!appState.isEditingNominas) {
+        await startEditingNominas();
+        if (appState.isEditingNominas && fieldId) {
+            setTimeout(() => {
+                const el = document.getElementById(fieldId);
+                if (el && !el.disabled) el.focus();
+            }, 30);
+        }
+    }
+}
+window.handleNominaCellClick = handleNominaCellClick;
+
 function renderNominas() {
     const tbody = document.getElementById("tbody-nominas");
     if (!tbody) return;
@@ -2229,6 +2290,23 @@ function renderNominas() {
 
     const frag = document.createDocumentFragment();
     const list = window.getActiveNominasList();
+    if (!appState.viewingArchiveId && Array.isArray(list) && list.length === 0) {
+        list.push({
+            folio: "1",
+            empleado: "",
+            fecha: new Date().toISOString().split('T')[0],
+            nomina: 0,
+            servicio: 0,
+            ivaPct: 0,
+            iva: 0,
+            retPct: 0,
+            ret4Pct: 0,
+            ret4: 0,
+            retIsrPct: 0,
+            retIsr: 0,
+            total: 0
+        });
+    }
     
     list.forEach((item, index) => {
         let nominaVal = 0;
@@ -2268,36 +2346,36 @@ function renderNominas() {
         const tr = document.createElement("tr");
         tr.setAttribute("data-row-key", `nom_${index}`);
         tr.setAttribute("oncontextmenu", `if(appState.isEditingNominas && confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
-        tr.title = isEditable ? "Clic derecho para eliminar fila" : "Haz clic en 'Editar' para modificar esta tabla";
+        tr.title = isEditable ? "Clic derecho para eliminar fila" : "Haz clic en 'Editar' o en una celda para modificar esta tabla";
         tr.innerHTML = `
-            <td>
-                <input type="text" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
+            <td onclick="handleNominaCellClick(${index}, 'nom-folio-input-${index}')">
+                <input type="text" id="nom-folio-input-${index}" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
             </td>
-            <td>
-                <input type="text" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" placeholder="Empleado..." ${disabledAttr} style="font-weight: 700;">
+            <td onclick="handleNominaCellClick(${index}, 'nom-empleado-input-${index}')">
+                <input type="text" id="nom-empleado-input-${index}" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" placeholder="Empleado..." ${disabledAttr} style="font-weight: 700;">
             </td>
-            <td>
-                <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)" ${disabledAttr}>
+            <td onclick="handleNominaCellClick(${index}, 'nom-fecha-input-${index}')">
+                <input type="date" id="nom-fecha-input-${index}" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)" ${disabledAttr}>
             </td>
-            <td>
+            <td onclick="handleNominaCellClick(${index}, 'nom-nomina-input-${index}')">
                 <div class="excel-currency-wrap">
                     <span class="currency-symbol">$</span>
                     <input type="number" id="nom-nomina-input-${index}" class="excel-input number-input" value="${nominaVal || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 700;">
                 </div>
             </td>
-            <td>
+            <td onclick="handleNominaCellClick(${index}, 'nom-iva-input-${index}')">
                 <div class="excel-percent-wrap">
                     <input type="number" id="nom-iva-input-${index}" class="excel-input number-input" value="${ivaPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
                 </div>
             </td>
-            <td>
+            <td onclick="handleNominaCellClick(${index}, 'nom-ret4-input-${index}')">
                 <div class="excel-percent-wrap">
                     <input type="number" id="nom-ret4-input-${index}" class="excel-input number-input" value="${retPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
                 </div>
             </td>
-            <td>
+            <td onclick="handleNominaCellClick(${index}, 'nom-retisr-input-${index}')">
                 <div class="excel-percent-wrap">
                     <input type="number" id="nom-retisr-input-${index}" class="excel-input number-input" value="${retIsrPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
@@ -2467,13 +2545,11 @@ function recalculateNominasTableTotals() {
     }
 };
 
-function addNewNominaRow() {
+async function addNewNominaRow() {
     window.addNewNominaRow = addNewNominaRow;
     if (!appState.isEditingNominas) {
-        if (typeof showCustomNotification === 'function') {
-            showCustomNotification("Haz clic en 'Editar' para agregar o modificar registros de Nómina.", "info");
-        }
-        return;
+        await startEditingNominas();
+        if (!appState.isEditingNominas) return;
     }
     const nextNum = window.getActiveNominasList().length + 1;
     window.getActiveNominasList().push({
@@ -4348,7 +4424,7 @@ async function checkCloudLockActive(lockChatId, currentUserId) {
             const parsed = JSON.parse(msgs[0].contenido);
             if (parsed && parsed.isLocked) {
                 const elapsed = Date.now() - (parsed.timestamp || 0);
-                if (elapsed < 5 * 60 * 1000 && parsed.userId !== currentUserId) {
+                if (elapsed < 5 * 60 * 1000 && parsed.userId !== currentUserId && !isLockOwnedByCurrentUser(parsed)) {
                     return parsed;
                 }
             }
@@ -5131,14 +5207,32 @@ function deleteProveedorRecord(index) {
 function handleCreateTask(event) {
     window.handleCreateTask = handleCreateTask;
     event.preventDefault();
+    if (typeof isManagerUser === 'function' && !isManagerUser()) {
+        alert("Solo los usuarios con rol de Manager pueden crear y asignar tareas.");
+        return;
+    }
     const title = document.getElementById("task-title").value.trim();
     const desc = document.getElementById("task-desc").value.trim();
     const assigneeInput = document.getElementById("task-assignee");
-    const assignee = assigneeInput ? assigneeInput.value.trim() : '';
+    let assignee = assigneeInput ? assigneeInput.value.trim() : '';
     const rawPriority = document.getElementById("task-priority").value || 'alta';
     const priority = rawPriority.trim().toLowerCase();
     
     if (!title) return;
+
+    if (assignee && assignee.toLowerCase() !== 'sin asignar') {
+        const validAssignees = typeof getAvailableAssignees === 'function' ? getAvailableAssignees() : [];
+        const matchedUser = validAssignees.find(u =>
+            (u.nombre && u.nombre.trim().toLowerCase() === assignee.toLowerCase()) ||
+            (u.email && u.email.trim().toLowerCase() === assignee.toLowerCase())
+        );
+        if (!matchedUser) {
+            alert("Solo puedes asignar tareas a colaboradores registrados en el sistema. Selecciona uno de la lista.");
+            if (assigneeInput) assigneeInput.focus();
+            return;
+        }
+        assignee = matchedUser.nombre;
+    }
     
     const newTask = {
         id: `task-${Date.now()}`,
@@ -5321,10 +5415,25 @@ function handleSaveTaskEdit(event) {
     const taskId = document.getElementById("edit-task-id").value;
     const title = document.getElementById("edit-task-title").value.trim();
     const desc = document.getElementById("edit-task-desc").value.trim();
-    const assignee = document.getElementById("edit-task-assignee").value.trim();
+    const assigneeInput = document.getElementById("edit-task-assignee");
+    let assignee = assigneeInput ? assigneeInput.value.trim() : '';
     const priority = document.getElementById("edit-task-priority").value || 'alta';
 
     if (!title || !taskId) return;
+
+    if (assignee && assignee.toLowerCase() !== 'sin asignar') {
+        const validAssignees = typeof getAvailableAssignees === 'function' ? getAvailableAssignees() : [];
+        const matchedUser = validAssignees.find(u =>
+            (u.nombre && u.nombre.trim().toLowerCase() === assignee.toLowerCase()) ||
+            (u.email && u.email.trim().toLowerCase() === assignee.toLowerCase())
+        );
+        if (!matchedUser) {
+            alert("Solo puedes asignar tareas a colaboradores registrados en el sistema. Selecciona uno válido.");
+            if (assigneeInput) assigneeInput.focus();
+            return;
+        }
+        assignee = matchedUser.nombre;
+    }
 
     const taskIndex = appState.tasks.findIndex(t => t.id === taskId);
     if (taskIndex !== -1) {
@@ -5521,7 +5630,7 @@ function populateTaskUserFilterOptions() {
     const assignees = typeof getAvailableAssignees === 'function' ? getAvailableAssignees() : [];
     const usersMap = new Map();
 
-    // 1. Agregar colaboradores conocidos del sistema
+    // 1. Agregar colaboradores registrados del sistema
     assignees.forEach(u => {
         if (u && u.nombre && !usersMap.has(u.nombre)) {
             usersMap.set(u.nombre, {
@@ -5534,32 +5643,7 @@ function populateTaskUserFilterOptions() {
         }
     });
 
-    // 2. Agregar asignados de tareas existentes si no estaban registrados
-    (appState.tasks || []).forEach(t => {
-        const a = (t.assignee || '').trim();
-        const fakeUsers = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
-        if (a && a !== 'Sin asignar' && !fakeUsers.has(a.toLowerCase())) {
-            let matchedKey = null;
-            for (const [key, val] of usersMap.entries()) {
-                if (key.toLowerCase() === a.toLowerCase() || 
-                    (val.userObj && isTaskAssignedToUser(t, val.userObj))) {
-                    matchedKey = key;
-                    break;
-                }
-            }
-            if (!matchedKey) {
-                usersMap.set(a, {
-                    displayName: a,
-                    userObj: { nombre: a },
-                    pending: 0,
-                    completed: 0,
-                    total: 0
-                });
-            }
-        }
-    });
-
-    // 3. Contar tareas por usuario (pendientes y completadas)
+    // 2. Contar tareas por usuario (pendientes y completadas)
     (appState.tasks || []).forEach(t => {
         const st = (t.status || '').toLowerCase();
         const isComp = st === 'completed' || st === 'completada';
@@ -6415,7 +6499,7 @@ function handleSendChatMessage(event) {
     
     if (!text && !attachment) return;
     
-    const senderName = appState.currentUser ? appState.currentUser.nombre : (appState.currentRole === 'gerente' ? 'Roberto Miranda Perez' : 'Roberto Miranda Perez');
+    const senderName = appState.currentUser ? appState.currentUser.nombre : (appState.currentRole === 'gerente' ? 'Roberto Miranda' : 'Colaborador');
     const senderRole = appState.currentUser ? appState.currentUser.rol : appState.currentRole;
     const currentChan = appState.currentChannel || 'general';
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -7980,45 +8064,63 @@ function selectStOption(index, value, event) {
 // TASK ASSIGNEE AUTOCOMPLETE & DROPDOWN LOGIC
 // ==============================================================================
 function getAvailableAssignees() {
+    window.getAvailableAssignees = getAvailableAssignees;
     const list = [];
     const seenEmails = new Set();
     const seenNames = new Set();
 
+    const fakeEmails = new Set(['zalazardemiranda@gmail.com', 'jennifer@rodipack.online', 'diego.miranda@rodipack.com']);
+    const fakeNames = new Set([
+        'roberto miranda perez',
+        'roberto miranda pérez',
+        'manuel morales',
+        'sofía castro',
+        'sofia castro',
+        'carlos ruiz',
+        'juan pérez',
+        'juan perez',
+        'maría gómez',
+        'maria gomez',
+        'gerente principal',
+        'sin asignar'
+    ]);
+
+    let deletedProfiles = [];
+    try {
+        deletedProfiles = (JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]') || []).map(e => String(e).toLowerCase());
+    } catch (e) {
+        deletedProfiles = [];
+    }
+    const deletedEmails = new Set(deletedProfiles);
+
     // 1. Usuario actual en sesión ("Tú / Asignarme a mí") destacado en 1er lugar
     const current = appState.currentUser;
     if (current && (current.nombre || current.email)) {
-        const selfName = current.nombre || (current.email ? current.email.split('@')[0] : 'Mi Usuario');
-        list.push({
-            id: current.id || 'self-user',
-            nombre: selfName,
-            email: current.email || '',
-            rol: current.rol || appState.currentRole || 'gerente',
-            departamento: current.departamento || 'General',
-            isSelf: true
-        });
-        if (current.email) seenEmails.add(current.email.toLowerCase().trim());
-        if (selfName) seenNames.add(selfName.toLowerCase().trim());
-    } else {
-        const defaultName = appState.currentUser?.nombre || (appState.currentRole === 'gerente' ? 'Gerente' : 'Colaborador');
-        list.push({
-            id: 'self-user',
-            nombre: defaultName,
-            email: '',
-            rol: appState.currentRole || 'gerente',
-            departamento: 'General',
-            isSelf: true
-        });
-        seenNames.add(defaultName.toLowerCase());
+        const curEmail = (current.email || '').toLowerCase().trim();
+        let selfName = (current.nombre || (current.email ? current.email.split('@')[0] : 'Mi Usuario')).trim();
+        if (selfName.toLowerCase() === 'roberto miranda perez' || selfName.toLowerCase() === 'roberto miranda pérez' || (curEmail === 'info@rodipack.com.mx' && selfName.toLowerCase() === 'info')) {
+            selfName = 'Roberto Miranda';
+        }
+        if (!fakeNames.has(selfName.toLowerCase())) {
+            list.push({
+                id: current.id || 'self-user',
+                nombre: selfName,
+                email: current.email || '',
+                rol: current.rol || appState.currentRole || 'gerente',
+                departamento: current.departamento || 'General',
+                isSelf: true
+            });
+            if (curEmail) seenEmails.add(curEmail);
+            if (selfName) seenNames.add(selfName.toLowerCase());
+        }
     }
 
-    // 2. Equipo base garantizado de Rodipack (todos los perfiles clave)
+    // 2. Equipo corporativo real de Rodipack
     const defaultTeam = [
-        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración" },
-        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT" },
-        { nombre: "Roberto Miranda", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Operaciones" },
+        { nombre: "Roberto Miranda", email: "info@rodipack.com.mx", rol: "gerente", departamento: "IT" },
+        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "Administración" },
         { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas" },
-        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO" },
-        { nombre: "Manuel Morales", email: "", rol: "colaborador", departamento: "Logística" }
+        { nombre: "Diego", email: "diego@rodipack.com", rol: "administrativo", departamento: "Logística" }
     ];
 
     // 3. Colaboradores registrados en el sistema, nube y almacenamiento local
@@ -8037,68 +8139,33 @@ function getAvailableAssignees() {
     ];
 
     allProfiles.forEach(p => {
-        if (!p || (!p.nombre && !p.email)) return;
-        const pName = (p.nombre || (p.email ? p.email.split('@')[0] : '')).trim();
+        if (!p || !p.email) return;
         const pEmail = (p.email || '').trim().toLowerCase();
-        const nameLower = pName.toLowerCase();
+        if (!pEmail || fakeEmails.has(pEmail) || deletedEmails.has(pEmail)) return;
 
-        if (pEmail && seenEmails.has(pEmail)) return;
-        if (nameLower && seenNames.has(nameLower)) return;
-        if (pEmail) seenEmails.add(pEmail);
-        if (nameLower) seenNames.add(nameLower);
+        let pName = (p.nombre || pEmail.split('@')[0]).trim();
+        if (pEmail === 'diego@rodipack.com' && pName.toLowerCase() === 'diego miranda') {
+            pName = 'Diego';
+        }
+        if (pEmail === 'info@rodipack.com.mx' && (!pName || pName.toLowerCase() === 'info')) {
+            pName = 'Roberto Miranda';
+        }
+        const nameLower = pName.toLowerCase();
+        if (!nameLower || fakeNames.has(nameLower)) return;
+
+        if (seenEmails.has(pEmail) || seenNames.has(nameLower)) return;
+        seenEmails.add(pEmail);
+        seenNames.add(nameLower);
 
         list.push({
             id: p.id || ('profile-' + list.length),
-            nombre: pName || 'Colaborador',
+            nombre: pName,
             email: p.email || '',
             rol: p.rol || 'colaborador',
             departamento: p.departamento || 'Operaciones',
             isSelf: false
         });
     });
-
-    // 4. Incorporar cualquier colaborador asignado en tareas existentes de appState.tasks
-    const ignoredNames = new Set(['sin asignar', 'sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
-    (appState.tasks || []).forEach(t => {
-        const a = (t.assignee || '').trim();
-        if (a && !ignoredNames.has(a.toLowerCase())) {
-            const aLower = a.toLowerCase();
-            if (!seenNames.has(aLower)) {
-                seenNames.add(aLower);
-                list.push({
-                    id: 'task-assignee-' + list.length,
-                    nombre: a,
-                    email: '',
-                    rol: 'colaborador',
-                    departamento: 'Equipo Rodipack',
-                    isSelf: false
-                });
-            }
-        }
-    });
-
-    // 5. Incorporar colaboradores de Esquematización si están definidos
-    if (window.schemaEngine && typeof window.schemaEngine.getSchemaCollaborators === 'function') {
-        try {
-            const schemaCollabs = window.schemaEngine.getSchemaCollaborators();
-            if (Array.isArray(schemaCollabs)) {
-                schemaCollabs.forEach(u => {
-                    const scName = (u.nombre || '').trim();
-                    if (scName && !seenNames.has(scName.toLowerCase())) {
-                        seenNames.add(scName.toLowerCase());
-                        list.push({
-                            id: u.id || ('schema-collab-' + list.length),
-                            nombre: scName,
-                            email: u.email || '',
-                            rol: u.rol || 'colaborador',
-                            departamento: u.departamento || 'General',
-                            isSelf: false
-                        });
-                    }
-                });
-            }
-        } catch (e) {}
-    }
 
     return list;
 }
@@ -8156,16 +8223,9 @@ function filterAssigneeDropdown(query) {
     let itemsHtml = '';
 
     if (filtered.length === 0) {
-        const cleanQuery = (query || '').trim();
         itemsHtml = `
-            <li class="assignee-dropdown-item custom-add" onmousedown="event.preventDefault(); selectTaskAssignee('${cleanQuery.replace(/'/g, "\\'")}')">
-                <div class="assignee-item-user">
-                    <div class="assignee-item-avatar" style="background: rgba(37, 99, 235, 0.1); color: #2563EB;">➕</div>
-                    <div class="assignee-item-details">
-                        <span class="assignee-item-name">Asignar a "${cleanQuery.replace(/'/g, "\\'")}"</span>
-                        <span class="assignee-item-sub">Usar este colaborador</span>
-                    </div>
-                </div>
+            <li class="assignee-dropdown-item" style="cursor: default; pointer-events: none; justify-content: center; padding: 12px; color: #94A3B8; font-size: 12.5px;">
+                Sin colaboradores registrados coincidentes
             </li>
         `;
     } else {
@@ -8198,21 +8258,6 @@ function filterAssigneeDropdown(query) {
                 </li>
             `;
         }).join('');
-
-        if (q && !assignees.some(u => (u.nombre || '').toLowerCase() === q)) {
-            const cleanQuery = (query || '').trim();
-            itemsHtml += `
-                <li class="assignee-dropdown-item custom-add" onmousedown="event.preventDefault(); selectTaskAssignee('${cleanQuery.replace(/'/g, "\\'")}')" style="border-top: 1px dashed #E2E8F0; margin-top: 4px; padding-top: 8px;">
-                    <div class="assignee-item-user">
-                        <div class="assignee-item-avatar" style="background: rgba(37, 99, 235, 0.1); color: #2563EB;">➕</div>
-                        <div class="assignee-item-details">
-                            <span class="assignee-item-name">Asignar a "${cleanQuery.replace(/'/g, "\\'")}"</span>
-                            <span class="assignee-item-sub">Usar nuevo colaborador personalizado</span>
-                        </div>
-                    </div>
-                </li>
-            `;
-        }
     }
 
     menu.innerHTML = itemsHtml;
@@ -8470,33 +8515,47 @@ async function handleUserSession(user) {
     if (!window.isSupabaseActive() || !user) return;
     const client = window.SUPABASE_CONFIG.client;
     const userEmail = (user.email || '').toLowerCase();
+    const userId = user.id || user.uid || '';
     
     try {
         let profile = null;
-        try {
-            const { data: profById } = await client
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .maybeSingle();
-            if (profById) profile = profById;
-        } catch (e) {}
-
-        if (!profile && userEmail) {
+        const candidates = [];
+        if (userId) {
             try {
-                const { data: profByEmail } = await client
+                const { data: profById } = await client
                     .from('profiles')
                     .select('*')
-                    .eq('email', userEmail)
+                    .eq('id', userId)
                     .maybeSingle();
-                if (profByEmail) profile = profByEmail;
+                if (profById) candidates.push(profById);
             } catch (e) {}
+        }
+
+        if (userEmail) {
+            try {
+                const { data: profsByEmail } = await client
+                    .from('profiles')
+                    .select('*')
+                    .eq('email', userEmail);
+                if (Array.isArray(profsByEmail) && profsByEmail.length > 0) {
+                    candidates.push(...profsByEmail);
+                }
+            } catch (e) {}
+        }
+
+        if (candidates.length > 0) {
+            const deduped = typeof dedupeProfilesByEmail === 'function' ? dedupeProfilesByEmail(candidates) : candidates;
+            profile = deduped[0] || candidates[0];
         }
 
         // Cargar datos personalizados locales (aislados por correo para evitar contaminar otros usuarios)
         const isMasterAdminEmail = (userEmail === 'admin@rodipack.com' || userEmail === 'zalazardemiranda@gmail.com');
-        const savedCustomName = (userEmail ? localStorage.getItem('rp_user_profile_name_' + userEmail) : null) ||
+        const emailPrefix = userEmail ? userEmail.split('@')[0] : '';
+        let savedCustomName = (userEmail ? localStorage.getItem('rp_user_profile_name_' + userEmail) : null) ||
             (isMasterAdminEmail ? localStorage.getItem('rp_custom_user_nombre') : null);
+        if (savedCustomName && emailPrefix && savedCustomName.trim().toLowerCase() === emailPrefix.toLowerCase()) {
+            savedCustomName = null;
+        }
         const savedCustomPhone = userEmail ? localStorage.getItem('rp_user_profile_phone_' + userEmail) : null;
         let localLoggedUser = null;
         try {
@@ -8510,13 +8569,16 @@ async function handleUserSession(user) {
             localProfileMatch = allLocal.find(p => p.email && p.email.toLowerCase() === userEmail);
         } catch (e) {}
 
-        const emailPrefix = userEmail ? userEmail.split('@')[0] : '';
-        const fallbackDefaultName = (userEmail === 'diego@rodipack.com') ? 'Diego Miranda' : (localProfileMatch?.nombre || emailPrefix || 'Usuario');
+        const fallbackDefaultName = (userEmail === 'diego@rodipack.com')
+            ? 'Diego Miranda'
+            : (userEmail === 'info@rodipack.com.mx'
+                ? 'Roberto Miranda'
+                : (localProfileMatch?.nombre || emailPrefix || 'Usuario'));
 
         if (!profile) {
             // Profile fallback
             profile = {
-                id: user.id,
+                id: userId,
                 email: user.email,
                 nombre: savedCustomName || localProfileMatch?.nombre || localLoggedUser?.nombre || user.displayName || user.user_metadata?.nombre || fallbackDefaultName,
                 telefono: savedCustomPhone || localProfileMatch?.telefono || localLoggedUser?.telefono || '',
@@ -8524,11 +8586,13 @@ async function handleUserSession(user) {
                 departamento: localProfileMatch?.departamento || user.user_metadata?.departamento || localLoggedUser?.departamento || 'Administración'
             };
         } else {
-            // Si el perfil remoto tiene el nombre vacío o coincide exactamente con el prefijo plano del email ("zalazardemiranda")
-            // y el usuario guardó un nombre personalizado, preservar siempre el personalizado
+            if (!profile.id && userId) profile.id = userId;
+            const remoteHasCustomName = profile.nombre && (!emailPrefix || profile.nombre.trim().toLowerCase() !== emailPrefix.toLowerCase());
             if (savedCustomName) {
                 profile.nombre = savedCustomName;
-            } else if (localLoggedUser?.nombre && (!profile.nombre || profile.nombre.toLowerCase() === emailPrefix.toLowerCase())) {
+            } else if (remoteHasCustomName) {
+                localStorage.setItem('rp_user_profile_name_' + userEmail, profile.nombre);
+            } else if (localLoggedUser?.nombre && (!emailPrefix || localLoggedUser.nombre.trim().toLowerCase() !== emailPrefix.toLowerCase())) {
                 profile.nombre = localLoggedUser.nombre;
             }
             if (savedCustomPhone && !profile.telefono) {
@@ -8538,50 +8602,11 @@ async function handleUserSession(user) {
             }
         }
 
-        // Si el usuario guardó un nombre personalizado, prevalece siempre
-        if (savedCustomName) {
-            profile.nombre = savedCustomName;
-        } else {
-            // Descontaminar perfiles creados por el administrador que heredaron erróneamente su nombre de Manuel
-            const isManuelAccount = (userEmail === 'zalazardemiranda@gmail.com' || userEmail === 'roberto@rodipack.com');
-            const hasContaminatedName = !isManuelAccount && (
-                (profile.nombre && (profile.nombre.toLowerCase().includes('manuel') || profile.nombre.toLowerCase().includes('miranda'))) ||
-                (!profile.nombre)
-            );
-
-            if (hasContaminatedName) {
-                const cleanName = emailPrefix ? (emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1)) : 'Usuario';
-                profile.nombre = cleanName;
-                localStorage.setItem('rp_user_profile_name_' + userEmail, cleanName);
-                localStorage.removeItem('rp_custom_user_nombre');
-
-                // Reparar en Firestore para que quede corregido permanentemente
-                try {
-                    await client.from('profiles').upsert({
-                        id: user.id || profile.id,
-                        email: userEmail,
-                        nombre: cleanName,
-                        rol: profile.rol || 'colaborador',
-                        departamento: profile.departamento || 'Operaciones',
-                        updated_at: new Date().toISOString()
-                    });
-                } catch (e) {}
-
-                // Reparar también en rp_local_profiles
-                try {
-                    let localProfilesFix = JSON.parse(localStorage.getItem('rp_local_profiles') || '[]');
-                    let modified = false;
-                    localProfilesFix.forEach(lp => {
-                        if (lp && lp.email && lp.email.toLowerCase() === userEmail) {
-                            lp.nombre = cleanName;
-                            modified = true;
-                        }
-                    });
-                    if (modified) {
-                        localStorage.setItem('rp_local_profiles', JSON.stringify(localProfilesFix));
-                    }
-                } catch (e) {}
-            }
+        if (userEmail === 'info@rodipack.com.mx' && (!profile.nombre || profile.nombre.trim().toLowerCase() === 'info')) {
+            profile.nombre = savedCustomName || 'Roberto Miranda';
+        }
+        if (profile.nombre && userEmail) {
+            localStorage.setItem('rp_user_profile_name_' + userEmail, profile.nombre);
         }
 
         // Garantizar rol de Gerente para el administrador y administrativo para Diego
@@ -9854,7 +9879,7 @@ async function fetchTasksFromCloud() {
         });
 
         // Filtrar tareas que hayan sido eliminadas o asignadas a usuarios inventados
-        const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
+        const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal', 'roberto miranda perez', 'roberto miranda pérez', 'manuel morales']);
         const filteredCloudTasks = cloudTasks.filter(ct => {
             if (!ct || !ct.title) return false;
             const sig = `${(ct.title || '').trim().toLowerCase()}____${(ct.desc || '').trim().toLowerCase()}`;
@@ -9959,6 +9984,7 @@ function updateAssigneeDropdown(profiles) {
     if (profiles && profiles.length > 0) {
         cloudProfilesCache = profiles;
         window.cloudProfilesCache = profiles;
+        if (typeof populateTaskUserFilterOptions === 'function') populateTaskUserFilterOptions();
     }
 }
 
@@ -10130,22 +10156,26 @@ async function loadProfilesList() {
     
     let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
     const deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
+    const fakeEmails = new Set(['zalazardemiranda@gmail.com', 'jennifer@rodipack.online', 'diego.miranda@rodipack.com']);
+    const fakeNames = new Set(['roberto miranda perez', 'roberto miranda pérez', 'manuel morales', 'sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
 
-    // Filtrar perfiles eliminados y no deseados, y preservar nombres personalizados
+    // Filtrar perfiles eliminados y falsos, y preservar nombres personalizados
     localProfiles = localProfiles.filter(p => {
         if (!p || !p.email) return false;
-        const e = p.email.toLowerCase();
-        if (e === 'jennifer@rodipack.online' || e === 'diego.miranda@rodipack.com') return false;
+        const e = String(p.email).trim().toLowerCase();
+        const n = String(p.nombre || '').trim().toLowerCase();
+        if (fakeEmails.has(e) || fakeNames.has(n)) return false;
         if (deletedProfiles.includes(e)) return false;
         return true;
     }).map(p => {
         const e = (p.email || '').toLowerCase();
         const savedCustom = localStorage.getItem('rp_user_profile_name_' + e);
-        if (savedCustom) {
+        if (savedCustom && !(e === 'info@rodipack.com.mx' && savedCustom.trim().toLowerCase() === 'info') && !fakeNames.has(savedCustom.trim().toLowerCase())) {
             p.nombre = savedCustom;
         }
         return p;
     });
+    localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
     
     let mergedProfiles = [...localProfiles];
     
@@ -10161,12 +10191,13 @@ async function loadProfilesList() {
                 const cleanDbProfiles = [];
                 for (const p of dbProfiles) {
                     if (!p || !p.email) continue;
-                    const e = p.email.toLowerCase();
-                    if (e === 'jennifer@rodipack.online' || e === 'diego.miranda@rodipack.com') continue;
+                    const e = String(p.email).trim().toLowerCase();
+                    const n = String(p.nombre || '').trim().toLowerCase();
+                    if (fakeEmails.has(e) || fakeNames.has(n)) continue;
                     if (deletedProfiles.includes(e)) continue;
 
                     const savedCustom = localStorage.getItem('rp_user_profile_name_' + e);
-                    if (savedCustom) {
+                    if (savedCustom && !(e === 'info@rodipack.com.mx' && savedCustom.trim().toLowerCase() === 'info') && !fakeNames.has(savedCustom.trim().toLowerCase())) {
                         p.nombre = savedCustom;
                     }
                     cleanDbProfiles.push(p);
@@ -10199,14 +10230,29 @@ async function loadProfilesList() {
     // Unificar perfiles duplicados por correo y asegurar que prevalezcan nombres personalizados guardados
     mergedProfiles = dedupeProfilesByEmail(mergedProfiles).map(p => {
         if (!p || !p.email) return p;
-        const savedCustom = localStorage.getItem('rp_user_profile_name_' + String(p.email).trim().toLowerCase());
-        if (savedCustom) {
+        const eLower = String(p.email).trim().toLowerCase();
+        const savedCustom = localStorage.getItem('rp_user_profile_name_' + eLower);
+        if (savedCustom && !(eLower === 'info@rodipack.com.mx' && savedCustom.trim().toLowerCase() === 'info') && !fakeNames.has(savedCustom.trim().toLowerCase())) {
             p.nombre = savedCustom;
+        } else if (eLower === 'info@rodipack.com.mx' && (!p.nombre || p.nombre.trim().toLowerCase() === 'info')) {
+            p.nombre = 'Roberto Miranda';
         }
         return p;
     });
 
     window.cachedProfilesList = mergedProfiles;
+    if (typeof populateTaskUserFilterOptions === 'function') populateTaskUserFilterOptions();
+
+    if (appState.currentUser && appState.currentUser.email) {
+        const curEmail = appState.currentUser.email.toLowerCase();
+        const activeMatch = mergedProfiles.find(p => p && p.email && p.email.toLowerCase() === curEmail);
+        if (activeMatch && activeMatch.nombre && activeMatch.nombre !== appState.currentUser.nombre) {
+            appState.currentUser.nombre = activeMatch.nombre;
+            localStorage.setItem('rp_logged_user', JSON.stringify(appState.currentUser));
+            localStorage.setItem('rp_user_profile_name_' + curEmail, activeMatch.nombre);
+            if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
+        }
+    }
     
     if (container) {
         renderProfiles(mergedProfiles);
@@ -10217,21 +10263,16 @@ async function loadProfilesList() {
             const r = (p.rol || '').toLowerCase();
             return r === 'gerente' || r === 'manager' || r === 'director';
         });
-        const admins = list.filter(p => {
-            const r = (p.rol || '').toLowerCase();
-            return r === 'administrador' || r === 'admin' || r === 'administrativo';
-        });
-        const colaboradores = list.filter(p => !managers.includes(p) && !admins.includes(p));
+        const admins = list.filter(p => !managers.includes(p));
 
         const renderCard = (p) => {
             const initial = (p.nombre || p.email || 'U').charAt(0).toUpperCase();
             const r = (p.rol || '').toLowerCase();
             const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
-            const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
             
-            const roleColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
-            const roleBg = isGerente ? 'rgba(37, 99, 235, 0.1)' : (isAdmin ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)');
-            const roleLabel = isGerente ? 'Manager' : (isAdmin ? 'Administrativo' : 'Colaborador');
+            const roleColor = isGerente ? '#2563EB' : '#10B981';
+            const roleBg = isGerente ? 'rgba(37, 99, 235, 0.1)' : 'rgba(16, 185, 129, 0.1)';
+            const roleLabel = isGerente ? 'Manager' : 'Administrativo';
 
             const editBtnHtml = `
                 <button type="button" onclick="openEditProfileModal('${p.email}')" style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #2563EB; border-radius: 8px; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease;" title="Editar Perfil y Rol de ${p.nombre || p.email}">
@@ -10303,7 +10344,6 @@ async function loadProfilesList() {
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; align-items: start; width: 100%;">
                 ${renderColumn("Managers", "star", "#2563EB", "rgba(37, 99, 235, 0.12)", managers, "Sin perfiles de Manager")}
                 ${renderColumn("Administrativos", "admin_panel_settings", "#10B981", "rgba(16, 185, 129, 0.12)", admins, "Sin perfiles de Administrativo")}
-                ${renderColumn("Colaboradores", "group", "#64748B", "rgba(100, 116, 139, 0.12)", colaboradores, "Sin colaboradores registrados")}
             </div>
         `;
     }
@@ -10420,15 +10460,9 @@ async function handleFirebaseRegister(event) {
     const depto = document.getElementById("reg-depto").value.trim() || "Operaciones";
     
     const emailLower = email.toLowerCase();
-    const isManuel = (emailLower === 'zalazardemiranda@gmail.com' || emailLower === 'roberto@rodipack.com');
-    if (!isManuel) {
-        if (!nombre) {
-            const prefix = emailLower.split('@')[0];
-            nombre = prefix.charAt(0).toUpperCase() + prefix.slice(1);
-        } else if (nombre.toLowerCase().includes('manuel')) {
-            const prefix = emailLower.split('@')[0];
-            nombre = prefix.charAt(0).toUpperCase() + prefix.slice(1);
-        }
+    if (!nombre) {
+        const prefix = emailLower.split('@')[0];
+        nombre = prefix.charAt(0).toUpperCase() + prefix.slice(1);
     }
     
     const errorEl = document.getElementById("reg-error-msg");
@@ -10449,34 +10483,13 @@ async function handleFirebaseRegister(event) {
     }
 
     let newId = generateUUID();
-    const newProfileObj = { id: newId, nombre, email, rol, departamento: depto, password };
-
-    // 1. Desmarcar de eliminados si se vuelve a dar de alta
-    let deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
-    deletedProfiles = deletedProfiles.filter(e => e !== emailLower);
-    localStorage.setItem('rp_deleted_profiles', JSON.stringify(deletedProfiles));
-
-    // 2. Guardar localmente
-    localStorage.setItem('rp_user_profile_name_' + emailLower, nombre);
-    const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-    const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
-    if (existingIdx >= 0) {
-        localProfiles[existingIdx] = { ...localProfiles[existingIdx], ...newProfileObj };
-    } else {
-        localProfiles.unshift(newProfileObj);
-    }
-    localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
-
     const regForm = document.getElementById("form-firebase-register") || document.getElementById("form-supabase-register");
 
     if (!window.isFirebaseActive()) {
-        if (successEl) {
-            successEl.innerText = `¡Perfil de "${nombre}" (${email}) registrado exitosamente!`;
-            successEl.style.display = "block";
+        if (errorEl) {
+            errorEl.innerText = "Error: Se requiere conexión activa a Firebase Authentication para registrar usuarios.";
+            errorEl.style.display = "block";
         }
-        if (regForm) regForm.reset();
-        loadProfilesList();
-        setTimeout(() => { toggleNewUserForm(); }, 1200);
         return;
     }
     
@@ -10485,43 +10498,49 @@ async function handleFirebaseRegister(event) {
     
     try {
         const client = window.FIREBASE_CONFIG.client;
-        
-        try {
-            const signUpRes = await client.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: { nombre, rol, departamento: depto }
-                }
-            });
-            if (signUpRes && signUpRes.error) {
-                let userMsg = signUpRes.error.message || "Error al registrar en Firebase";
-                if (userMsg.includes("ADMIN_ONLY_OPERATION") || signUpRes.error.code === 'auth/admin-restricted-operation') {
-                    userMsg = "Firebase tiene deshabilitado el autoregistro (ADMIN_ONLY_OPERATION). Para habilitar el acceso a este usuario, créalo en la consola de Firebase con el botón 'Agregar usuario' o activa 'Permitir a los usuarios crear cuentas' en la pestaña Configuración de Firebase Authentication.";
-                } else if (userMsg.includes("email-already-in-use")) {
-                    userMsg = "Este correo electrónico ya está registrado en Firebase.";
-                } else if (userMsg.includes("weak-password")) {
-                    userMsg = "La contraseña debe tener al menos 6 caracteres.";
-                }
-                if (errorEl) {
-                    errorEl.innerText = userMsg;
-                    errorEl.style.display = "block";
-                }
-                return;
+        const signUpRes = await client.auth.signUp({
+            email,
+            password,
+            options: {
+                data: { nombre, rol, departamento: depto }
             }
-            if (signUpRes && signUpRes.data && signUpRes.data.user && signUpRes.data.user.id) {
-                newId = signUpRes.data.user.id;
-                newProfileObj.id = newId;
-                const updatedLocal = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-                const idx = updatedLocal.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
-                if (idx >= 0) {
-                    updatedLocal[idx].id = newId;
-                    localStorage.setItem('rp_local_profiles', JSON.stringify(updatedLocal));
-                }
+        });
+        if (signUpRes && signUpRes.error) {
+            let userMsg = signUpRes.error.message || "Error al registrar en Firebase";
+            if (userMsg.includes("ADMIN_ONLY_OPERATION") || signUpRes.error.code === 'auth/admin-restricted-operation') {
+                userMsg = "Firebase tiene deshabilitado el autoregistro (ADMIN_ONLY_OPERATION). Para habilitar el acceso a este usuario, créalo en la consola de Firebase con el botón 'Agregar usuario' o activa 'Permitir a los usuarios crear cuentas' en la pestaña Configuración de Firebase Authentication.";
+            } else if (userMsg.includes("email-already-in-use")) {
+                userMsg = "Este correo electrónico ya está registrado en Firebase.";
+            } else if (userMsg.includes("weak-password")) {
+                userMsg = "La contraseña debe tener al menos 6 caracteres.";
             }
-        } catch (e) {
-            console.warn("Firebase signUp warning:", e);
+            if (errorEl) {
+                errorEl.innerText = userMsg;
+                errorEl.style.display = "block";
+            }
+            return;
         }
+        if (signUpRes && signUpRes.data && signUpRes.data.user && signUpRes.data.user.id) {
+            newId = signUpRes.data.user.id;
+        }
+
+        const newProfileObj = { id: newId, nombre, email, rol, departamento: depto, password };
+
+        // 1. Desmarcar de eliminados si se vuelve a dar de alta
+        let deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
+        deletedProfiles = deletedProfiles.filter(e => e !== emailLower);
+        localStorage.setItem('rp_deleted_profiles', JSON.stringify(deletedProfiles));
+
+        // 2. Guardar localmente solo tras validación en Firebase Auth
+        localStorage.setItem('rp_user_profile_name_' + emailLower, nombre);
+        const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
+        const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
+        if (existingIdx >= 0) {
+            localProfiles[existingIdx] = { ...localProfiles[existingIdx], ...newProfileObj };
+        } else {
+            localProfiles.unshift(newProfileObj);
+        }
+        localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
 
         try {
             await client.from('profiles').upsert({
@@ -10556,7 +10575,7 @@ async function handleFirebaseRegister(event) {
         }, 1200);
     } catch (err) {
         if (errorEl) {
-            errorEl.innerText = `Guardado localmente. Error en nube: ${err.message}`;
+            errorEl.innerText = `Error al registrar en nube: ${err.message}`;
             errorEl.style.display = "block";
         }
     } finally {
@@ -10661,11 +10680,9 @@ function openEditProfileModal(email) {
     if (nameInput) nameInput.value = profile.nombre || "";
     
     const r = (profile.rol || '').toLowerCase();
-    let normalizedRole = 'colaborador';
+    let normalizedRole = 'administrador';
     if (r === 'gerente' || r === 'manager' || r === 'director') {
         normalizedRole = 'gerente';
-    } else if (r === 'administrador' || r === 'admin' || r === 'administrativo') {
-        normalizedRole = 'administrador';
     }
     if (roleSelect) roleSelect.value = normalizedRole;
     if (deptInput) deptInput.value = profile.departamento || "";
@@ -10689,7 +10706,7 @@ async function handleSaveProfileEdit(event) {
     
     const email = emailInput ? emailInput.value.trim() : "";
     const nombre = nameInput ? nameInput.value.trim() : "";
-    const rol = roleSelect ? roleSelect.value : "colaborador";
+    const rol = roleSelect ? roleSelect.value : "administrador";
     const departamento = deptInput ? deptInput.value.trim() : "";
     
     if (!email) return;
@@ -11209,7 +11226,9 @@ function handleRecoverPasswordByEmail() {
 async function handleSaveMyProfile(event) {
     window.handleSaveMyProfile = handleSaveMyProfile;
     event.preventDefault();
-    const name = document.getElementById("myprofile-edit-name").value.trim();
+    const isGerente = typeof isManagerUser === 'function' ? isManagerUser() : false;
+    const rawName = document.getElementById("myprofile-edit-name").value.trim();
+    const name = isGerente ? rawName : (appState.currentUser?.nombre || rawName);
     const phone = document.getElementById("myprofile-edit-phone").value.trim();
     const msgEl = document.getElementById("myprofile-update-msg");
     
@@ -11228,10 +11247,12 @@ async function handleSaveMyProfile(event) {
     // 1. Guardar de inmediato en almacenamiento local persistente
     localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
     const isMasterAdminEmail = (email === 'admin@rodipack.com' || email === 'zalazardemiranda@gmail.com');
-    if (isMasterAdminEmail) {
+    if (isMasterAdminEmail && isGerente) {
         localStorage.setItem("rp_custom_user_nombre", name);
     }
-    localStorage.setItem("rp_user_profile_name_" + email, name);
+    if (isGerente) {
+        localStorage.setItem("rp_user_profile_name_" + email, name);
+    }
     if (phone) localStorage.setItem("rp_user_profile_phone_" + email, phone);
 
     // 2. Actualizar en lista de perfiles locales
@@ -11286,7 +11307,7 @@ async function handleSaveMyProfile(event) {
 
     // 4. Guardar directamente en Firebase Auth y Firestore si están disponibles
     try {
-        if (window.firebase && firebase.auth && firebase.auth().currentUser) {
+        if (isGerente && window.firebase && firebase.auth && firebase.auth().currentUser) {
             await firebase.auth().currentUser.updateProfile({ displayName: name });
         }
     } catch(e) {}
@@ -11394,29 +11415,43 @@ function updateUserProfileUI() {
         }
     }
 
+    if (isAuth && appState.currentUser && (appState.currentUser.email || '').toLowerCase() === 'info@rodipack.com.mx') {
+        const curName = (appState.currentUser.nombre || '').trim().toLowerCase();
+        if (!curName || curName === 'info') {
+            appState.currentUser.nombre = 'Roberto Miranda';
+            try {
+                localStorage.setItem('rp_user_profile_name_info@rodipack.com.mx', 'Roberto Miranda');
+                localStorage.setItem('rp_logged_user', JSON.stringify(appState.currentUser));
+            } catch (e) {}
+        }
+    }
+
     const resolvedName = isAuth ? ((appState.currentUser && appState.currentUser.nombre) || (appState.currentUser && appState.currentUser.email ? appState.currentUser.email.split('@')[0] : "Usuario")) : "Iniciar Sesión";
     const resolvedEmail = isAuth ? ((appState.currentUser && appState.currentUser.email) || "") : "";
 
-    const user = isAuth ? (appState.currentUser || { nombre: resolvedName, email: resolvedEmail, rol: appState.currentRole || "colaborador" }) : { nombre: "Iniciar Sesión", email: "", rol: "colaborador" };
+    const user = isAuth ? (appState.currentUser || { nombre: resolvedName, email: resolvedEmail, rol: appState.currentRole || "administrador" }) : { nombre: "Iniciar Sesión", email: "", rol: "administrador" };
     const userEmailKey = (user && user.email) ? user.email.toLowerCase() : "";
     const currentPass = isAuth ? ((user && user.password) || (userEmailKey && localStorage.getItem("rp_user_pass_" + userEmailKey)) || sessionStorage.getItem("rp_session_pass") || "") : "";
+
+    const r = (user.rol || appState.currentRole || '').toLowerCase();
+    const isGerente = (r === 'gerente' || r === 'manager' || r === 'director') && (typeof isManagerUser === 'function' ? isManagerUser() : true);
 
     const displayName = isAuth ? (user.nombre || (user.email ? user.email.split('@')[0] : "Usuario")) : "Iniciar Sesión";
     const displayInitial = isAuth ? displayName.charAt(0).toUpperCase() : "?";
 
     if (footerName) footerName.innerText = displayName;
-    if (footerRole) footerRole.innerText = isAuth ? ((user.rol === 'gerente') ? "Rango: Gerente / Director" : ((user.rol === 'administrador') ? "Rango: Administrativo" : "Rango: Colaborador")) : "Sin autenticar";
+    if (footerRole) footerRole.innerText = isAuth ? (isGerente ? "Rango: Manager / Director" : "Rango: Administrativo") : "Sin autenticar";
     if (footerAvatar) {
         footerAvatar.innerText = displayInitial;
-        footerAvatar.style.borderColor = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#CBD5E1';
-        footerAvatar.style.color = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#94A3B8';
+        footerAvatar.style.borderColor = isAuth ? (isGerente ? '#2563EB' : '#10B981') : '#CBD5E1';
+        footerAvatar.style.color = isAuth ? (isGerente ? '#2563EB' : '#10B981') : '#94A3B8';
     }
 
     if (headerName) headerName.innerText = displayName;
     if (headerAvatar) {
         headerAvatar.innerText = displayInitial;
-        headerAvatar.style.borderColor = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#CBD5E1';
-        headerAvatar.style.color = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#94A3B8';
+        headerAvatar.style.borderColor = isAuth ? (isGerente ? '#2563EB' : '#10B981') : '#CBD5E1';
+        headerAvatar.style.color = isAuth ? (isGerente ? '#2563EB' : '#10B981') : '#94A3B8';
     }
 
     const headerRoleTag = document.getElementById("modal-gerente-role-tag");
@@ -11425,29 +11460,37 @@ function updateUserProfileUI() {
             headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">no_accounts</span> No Autenticado`;
             headerRoleTag.style.background = 'rgba(100, 116, 139, 0.1)';
             headerRoleTag.style.color = '#64748B';
+        } else if (isGerente) {
+            headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">star</span> Manager / Director`;
+            headerRoleTag.style.background = 'rgba(37, 99, 235, 0.1)';
+            headerRoleTag.style.color = '#2563EB';
         } else {
-            const r = (user.rol || '').toLowerCase();
-            if (r === 'gerente' || r === 'manager') {
-                headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">star</span> Manager / Gerente`;
-                headerRoleTag.style.background = 'rgba(37, 99, 235, 0.1)';
-                headerRoleTag.style.color = '#2563EB';
-            } else if (r === 'administrador' || r === 'admin') {
-                headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">admin_panel_settings</span> Administrativo`;
-                headerRoleTag.style.background = 'rgba(16, 185, 129, 0.1)';
-                headerRoleTag.style.color = '#10B981';
-            } else {
-                headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">group</span> Colaborador`;
-                headerRoleTag.style.background = 'rgba(100, 116, 139, 0.1)';
-                headerRoleTag.style.color = '#475569';
-            }
+            headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">admin_panel_settings</span> Administrativo`;
+            headerRoleTag.style.background = 'rgba(16, 185, 129, 0.1)';
+            headerRoleTag.style.color = '#10B981';
         }
     }
 
-    if (editNameInput) editNameInput.value = isAuth ? (user.nombre || "") : "";
-    if (editPhoneInput) editPhoneInput.value = isAuth ? (user.telefono || "") : "";
+    if (editNameInput) {
+        if (document.activeElement !== editNameInput) editNameInput.value = isAuth ? (user.nombre || "") : "";
+        if (!isGerente) {
+            editNameInput.readOnly = true;
+            editNameInput.style.background = '#F8FAFC';
+            editNameInput.style.color = '#64748B';
+            editNameInput.style.cursor = 'not-allowed';
+            editNameInput.title = 'Solo un Manager puede modificar el nombre de usuario';
+        } else {
+            editNameInput.readOnly = false;
+            editNameInput.style.background = '#FFFFFF';
+            editNameInput.style.color = '#0F172A';
+            editNameInput.style.cursor = 'text';
+            editNameInput.title = '';
+        }
+    }
+    if (editPhoneInput && document.activeElement !== editPhoneInput) editPhoneInput.value = isAuth ? (user.telefono || "") : "";
     if (editEmailInput) editEmailInput.value = isAuth ? (user.email || "") : "";
 
-    if (editPassInput) {
+    if (editPassInput && document.activeElement !== editPassInput) {
         if (isAuth && currentPass) {
             editPassInput.value = currentPass;
         } else {
@@ -11457,7 +11500,7 @@ function updateUserProfileUI() {
     }
 
     if (loggedEmailText) loggedEmailText.innerText = isAuth ? (user.email || "") : "Sin sesión activa";
-    if (loggedRoleText) loggedRoleText.innerText = isAuth ? (user.rol === 'gerente' ? "Gerente / Administrador" : "Colaborador de Operaciones") : "Debes autenticarte";
+    if (loggedRoleText) loggedRoleText.innerText = isAuth ? (isGerente ? "Manager / Director" : "Administrativo") : "Debes autenticarte";
 };
 
 // ==============================================================================
@@ -13494,13 +13537,14 @@ async function fetchOperacionesFromCloud() {
     if (!client) return;
 
     try {
-        let cloudProjects = null;
+        let dbProjects = [];
+        let snapProjects = [];
 
-        // 1. Intentar leer desde tabla dedicada operaciones
+        // 1. Leer desde tabla dedicada operaciones
         try {
-            const { data: dbOps, error: opErr } = await client.from('operaciones').select('*').order('updated_at', { ascending: false });
+            const { data: dbOps } = await client.from('operaciones').select('*').order('updated_at', { ascending: false });
             if (dbOps && dbOps.length > 0) {
-                cloudProjects = dbOps.map(row => {
+                dbProjects = dbOps.map(row => {
                     let d = row.datos;
                     if (typeof d === 'string') {
                         try { d = JSON.parse(d); } catch (e) { d = null; }
@@ -13525,34 +13569,52 @@ async function fetchOperacionesFromCloud() {
             }
         } catch (e) {}
 
-        // 2. Si no hay registros en operaciones, recuperar el snapshot más reciente de messages
-        if (!cloudProjects || cloudProjects.length === 0) {
-            const { data: snapMsgs, error: snapErr } = await client.from('messages')
+        // 2. Leer SIEMPRE los snapshots recientes de messages (__cloud_sync_operaciones__) para no perder proyectos nuevos
+        try {
+            const { data: snapMsgs } = await client.from('messages')
                 .select('contenido, created_at')
                 .eq('chat_id', '__cloud_sync_operaciones__')
                 .order('created_at', { ascending: false })
-                .limit(1);
+                .limit(5);
 
-            if (snapMsgs && snapMsgs.length > 0 && snapMsgs[0].contenido) {
-                try {
-                    let parsed = JSON.parse(snapMsgs[0].contenido);
-                    if (typeof parsed === 'string') {
-                        try { parsed = JSON.parse(parsed); } catch (e) {}
-                    }
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        cloudProjects = parsed.map(p => {
-                            if (p && typeof p === 'object' && p.generado === undefined) {
-                                p.generado = true;
-                            }
-                            return p;
-                        });
-                    }
-                } catch (e) {}
+            if (snapMsgs && snapMsgs.length > 0) {
+                for (const msg of snapMsgs) {
+                    if (!msg || !msg.contenido) continue;
+                    try {
+                        let parsed = JSON.parse(msg.contenido);
+                        if (typeof parsed === 'string') {
+                            try { parsed = JSON.parse(parsed); } catch (e) {}
+                        }
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            parsed.forEach(p => {
+                                if (p && typeof p === 'object') {
+                                    if (p.generado === undefined) p.generado = true;
+                                    const pConsec = String(p.consecutivo || p.numProyecto || p.id || '').trim().toUpperCase();
+                                    const alreadyInSnap = snapProjects.some(sp => {
+                                        const spConsec = String(sp.consecutivo || sp.numProyecto || sp.id || '').trim().toUpperCase();
+                                        return spConsec === pConsec;
+                                    });
+                                    if (!alreadyInSnap) {
+                                        snapProjects.push(p);
+                                    }
+                                }
+                            });
+                        }
+                    } catch (e) {}
+                }
             }
-        }
+        } catch (e) {}
 
-        if (cloudProjects && Array.isArray(cloudProjects)) {
-            window.mergeOperacionesProjects(cloudProjects);
+        const combinedCloud = [...snapProjects];
+        dbProjects.forEach(dp => {
+            const dpConsec = String(dp.consecutivo || dp.numProyecto || dp.id || '').trim().toUpperCase();
+            if (!combinedCloud.some(cp => String(cp.consecutivo || cp.numProyecto || cp.id || '').trim().toUpperCase() === dpConsec)) {
+                combinedCloud.push(dp);
+            }
+        });
+
+        if (combinedCloud.length > 0) {
+            window.mergeOperacionesProjects(combinedCloud);
             if (!appState.isEditingOperacionesDetail) {
                 try {
                     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
@@ -14174,7 +14236,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutos de respaldo ante cierre inesperado
-const SYSTEM_RELEASE_VERSION = 'release_2026_10_12_op_locks_v1';
+const SYSTEM_RELEASE_VERSION = 'release_2026_10_19_roles_v2';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -15590,7 +15652,9 @@ function openOperacionesDetail(projectId, clickTimestamp = null) {
         const listPane = document.getElementById("operaciones-view-list");
         const detailPane = document.getElementById("operaciones-view-detail");
         const topbarBack = document.getElementById("op-detail-topbar");
+        const opKpisRow = document.getElementById("operaciones-kpis-row");
 
+        if (opKpisRow) opKpisRow.style.display = "none";
         if (listPane) {
             listPane.style.display = "none";
             listPane.classList.remove("active");
@@ -15877,7 +15941,12 @@ function closeOperacionesDetail(options = {}) {
     const listPane = document.getElementById("operaciones-view-list");
     const detailPane = document.getElementById("operaciones-view-detail");
     const topbarBack = document.getElementById("op-detail-topbar");
+    const opKpisRow = document.getElementById("operaciones-kpis-row");
+    const curFicha = appState.currentAdminFicha || 'operaciones';
 
+    if (opKpisRow && (curFicha === 'operaciones' || curFicha === 'proveedores' || curFicha === 'consecutivo')) {
+        opKpisRow.style.display = "grid";
+    }
     if (listPane) {
         listPane.style.display = "block";
         listPane.classList.add("active");

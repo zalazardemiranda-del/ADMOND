@@ -407,31 +407,7 @@
             }
         });
 
-        const fakeUsers = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
-
-        taskPool.forEach(t => {
-            const a = (t.assignee || '').trim();
-            if (a && a !== 'Sin asignar' && !fakeUsers.has(a.toLowerCase())) {
-                let matchedKey = null;
-                for (const [key, val] of usersMap.entries()) {
-                    if (key.toLowerCase() === a.toLowerCase() || checkTaskMatchesUser(t, key)) {
-                        matchedKey = key;
-                        break;
-                    }
-                }
-                if (!matchedKey) {
-                    usersMap.set(a, {
-                        displayName: a,
-                        userObj: { nombre: a },
-                        pending: 0,
-                        completed: 0,
-                        total: 0
-                    });
-                }
-            }
-        });
-
-        // 3. Contar tareas por usuario
+        // 2. Contar tareas por usuario
         taskPool.forEach(t => {
             const st = (t.status || '').toLowerCase();
             const isComp = st === 'completed' || st === 'completada';
@@ -2542,8 +2518,22 @@
     function getSchemaCollaborators() {
         const collabs = [];
         const seenNames = new Set();
+        const fakeNames = new Set([
+            'roberto miranda perez',
+            'roberto miranda pérez',
+            'manuel morales',
+            'sofía castro',
+            'sofia castro',
+            'carlos ruiz',
+            'juan pérez',
+            'juan perez',
+            'maría gómez',
+            'maria gomez',
+            'gerente principal',
+            'sin asignar'
+        ]);
 
-        // 1. Obtener de getAvailableAssignees() de app.js (Sección 2) si está disponible
+        // 1. Obtener de getAvailableAssignees() de app.js (Sección 2)
         if (typeof window.getAvailableAssignees === 'function') {
             try {
                 const appAssignees = window.getAvailableAssignees();
@@ -2551,8 +2541,9 @@
                     appAssignees.forEach(u => {
                         if (!u || !u.nombre) return;
                         const name = u.nombre.trim();
-                        if (name && !seenNames.has(name.toLowerCase())) {
-                            seenNames.add(name.toLowerCase());
+                        const nameLower = name.toLowerCase();
+                        if (name && !fakeNames.has(nameLower) && !seenNames.has(nameLower)) {
+                            seenNames.add(nameLower);
                             collabs.push(u);
                         }
                     });
@@ -2562,89 +2553,29 @@
             }
         }
 
-        // 2. Extraer de las tareas de la Sección 2 (Tablero de Tareas - appState.tasks)
-        if (window.appState && Array.isArray(window.appState.tasks)) {
-            window.appState.tasks.forEach(t => {
-                const a = (t.assignee || '').trim();
-                if (a && a !== 'Sin asignar' && !seenNames.has(a.toLowerCase())) {
-                    seenNames.add(a.toLowerCase());
+        // 2. Respaldo corporativo real únicamente si getAvailableAssignees aún no está disponible
+        if (collabs.length === 0) {
+            const systemUsers = [
+                { nombre: 'Roberto Miranda', email: 'info@rodipack.com.mx', rol: 'gerente', departamento: 'IT' },
+                { nombre: 'Manuel Miranda', email: 'roberto@rodipack.com', rol: 'gerente', departamento: 'Administración' },
+                { nombre: 'Maria Perez', email: 'facturas@rodipack.com', rol: 'administrador', departamento: 'Finanzas' },
+                { nombre: 'Diego', email: 'diego@rodipack.com', rol: 'administrativo', departamento: 'Logística' }
+            ];
+
+            systemUsers.forEach(su => {
+                if (!seenNames.has(su.nombre.toLowerCase())) {
+                    seenNames.add(su.nombre.toLowerCase());
                     collabs.push({
-                        id: 'task-user-' + collabs.length,
-                        nombre: a,
-                        email: '',
-                        rol: 'colaborador',
-                        departamento: t.departamento || t.department || 'Operaciones',
+                        id: 'sys-' + collabs.length,
+                        nombre: su.nombre,
+                        email: su.email || '',
+                        rol: su.rol,
+                        departamento: su.departamento,
                         isSelf: false
                     });
                 }
             });
         }
-
-        // 3. Extraer de localStorage de tareas si appState.tasks no estuviera en memoria
-        try {
-            const rawTasks = localStorage.getItem('rp_tasks') || localStorage.getItem('rp_system_tasks');
-            if (rawTasks) {
-                const localTasks = JSON.parse(rawTasks);
-                if (Array.isArray(localTasks)) {
-                    localTasks.forEach(t => {
-                        const a = (t.assignee || '').trim();
-                        if (a && a !== 'Sin asignar' && !seenNames.has(a.toLowerCase())) {
-                            seenNames.add(a.toLowerCase());
-                            collabs.push({
-                                id: 'task-user-' + collabs.length,
-                                nombre: a,
-                                email: '',
-                                rol: 'colaborador',
-                                departamento: t.departamento || 'Operaciones',
-                                isSelf: false
-                            });
-                        }
-                    });
-                }
-            }
-        } catch (e) {}
-
-        // 4. Extraer de perfiles locales almacenados
-        try {
-            const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles') || '[]');
-            if (Array.isArray(localProfiles)) {
-                localProfiles.forEach(p => {
-                    const name = (p.nombre || p.name || '').trim();
-                    if (name && !seenNames.has(name.toLowerCase())) {
-                        seenNames.add(name.toLowerCase());
-                        collabs.push({
-                            id: p.id || 'prof-' + collabs.length,
-                            nombre: name,
-                            email: p.email || '',
-                            rol: p.rol || 'colaborador',
-                            departamento: p.departamento || 'Operaciones',
-                            isSelf: false
-                        });
-                    }
-                });
-            }
-        } catch (e) {}
-
-        // 5. Garantizar exactamente los usuarios corporativos
-        const systemUsers = [
-            { nombre: 'Roberto Miranda', rol: 'gerente', departamento: 'Operaciones' },
-            { nombre: 'Manuel Morales', rol: 'colaborador', departamento: 'Logística' },
-            { nombre: 'Maria Perez', rol: 'administrador', departamento: 'Finanzas' }
-        ];
-
-        systemUsers.forEach(su => {
-            if (!seenNames.has(su.nombre.toLowerCase())) {
-                seenNames.add(su.nombre.toLowerCase());
-                collabs.push({
-                    id: 'sys-' + collabs.length,
-                    nombre: su.nombre,
-                    email: '',
-                    rol: su.rol,
-                    departamento: su.departamento,
-                    isSelf: false
-                });
-            }
-        });
 
         return collabs;
     }
@@ -2676,14 +2607,8 @@
 
         if (filtered.length === 0) {
             itemsHtml = `
-                <li class="assignee-dropdown-item custom-add" onmousedown="event.preventDefault(); window.schemaEngine.selectSchemaAssignee('${escapeHtml(filterText)}')">
-                    <div class="assignee-item-user">
-                        <div class="assignee-item-avatar" style="background: rgba(37,99,235,0.1); color: #2563EB;">➕</div>
-                        <div class="assignee-item-details">
-                            <span class="assignee-item-name">Asignar a "${escapeHtml(filterText)}"</span>
-                            <span class="assignee-item-sub">Usar este colaborador personalizado</span>
-                        </div>
-                    </div>
+                <li class="assignee-dropdown-item" style="cursor: default; pointer-events: none; justify-content: center; padding: 12px; color: #94A3B8; font-size: 12.5px;">
+                    Sin colaboradores registrados coincidentes
                 </li>
             `;
         } else {
@@ -2716,20 +2641,6 @@
                     </li>
                 `;
             }).join('');
-
-            if (query && !collabs.some(c => (c.nombre || '').toLowerCase() === query)) {
-                itemsHtml += `
-                    <li class="assignee-dropdown-item custom-add" onmousedown="event.preventDefault(); window.schemaEngine.selectSchemaAssignee('${escapeHtml(filterText)}')">
-                        <div class="assignee-item-user">
-                            <div class="assignee-item-avatar" style="background: rgba(37,99,235,0.1); color: #2563EB;">➕</div>
-                            <div class="assignee-item-details">
-                                <span class="assignee-item-name">Asignar a "${escapeHtml(filterText)}"</span>
-                                <span class="assignee-item-sub">Usar colaborador personalizado</span>
-                            </div>
-                        </div>
-                    </li>
-                `;
-            }
         }
 
         dropdown.innerHTML = itemsHtml;
@@ -3148,7 +3059,8 @@
         const taskId = document.getElementById('schema-form-task-id').value;
         const title = document.getElementById('schema-form-title').value.trim();
         const desc = document.getElementById('schema-form-desc').value.trim();
-        const assignee = document.getElementById('schema-form-assignee').value.trim();
+        const assigneeInput = document.getElementById('schema-form-assignee');
+        let assignee = assigneeInput ? assigneeInput.value.trim() : '';
         const status = document.getElementById('schema-form-status').value;
         const dueDate = document.getElementById('schema-form-duedate').value.trim();
         const priority = document.getElementById('schema-form-priority').value;
@@ -3171,6 +3083,20 @@
         if (!title) {
             alert('Por favor introduce un título para la tarea.');
             return;
+        }
+
+        if (assignee && assignee.toLowerCase() !== 'sin asignar') {
+            const validCollabs = getSchemaCollaborators();
+            const matchedUser = validCollabs.find(u =>
+                (u.nombre && u.nombre.trim().toLowerCase() === assignee.toLowerCase()) ||
+                (u.email && u.email.trim().toLowerCase() === assignee.toLowerCase())
+            );
+            if (!matchedUser) {
+                alert('Solo puedes asignar tareas a colaboradores registrados en el sistema. Selecciona uno de la lista.');
+                if (assigneeInput) assigneeInput.focus();
+                return;
+            }
+            assignee = matchedUser.nombre;
         }
 
         // Obtener dependencias seleccionadas

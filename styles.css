@@ -6081,24 +6081,45 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     margin: 0;
 }
 
-/* 3 KPIs Grid (Imagen 2) */
+/* 3 KPIs + Proveedores/Consecutivo Grid (Imágenes 4 y 5) */
 .operaciones-kpis-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 3fr 2fr;
     gap: 16px;
     margin-bottom: 24px;
+    align-items: stretch;
+}
+
+.operaciones-kpis-left-group {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.operaciones-nav-right-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.operaciones-subnav-card {
+    height: 100%;
+    border-radius: 16px;
+    border: 1.5px solid #E2E8F0;
+    padding: 16px 20px;
 }
 
 .operaciones-kpi-card {
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 20px 24px;
+    gap: 12px;
+    padding: 14px 16px;
     background: #FFFFFF;
     border-radius: 16px;
     border: 1px solid #E2E8F0;
     box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    min-width: 0;
 }
 
 .operaciones-kpi-card:hover {
@@ -6107,8 +6128,8 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 }
 
 .operaciones-kpi-icon {
-    width: 48px;
-    height: 48px;
+    width: 42px;
+    height: 42px;
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -6132,22 +6153,36 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 }
 
 .operaciones-kpi-icon .material-symbols-outlined {
-    font-size: 26px;
+    font-size: 22px;
+}
+
+.operaciones-kpi-info {
+    min-width: 0;
 }
 
 .operaciones-kpi-info .kpi-label {
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 11px;
+    font-weight: 700;
     color: #64748B;
     display: block;
     margin-bottom: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+    line-height: 1.2;
 }
 
 .operaciones-kpi-info .kpi-value {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 800;
     color: #0F172A;
     margin: 0;
+    line-height: 1.1;
+}
+
+@media (max-width: 1200px) {
+    .operaciones-kpis-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Controls Bar (Search, Filter, Add Button) */
