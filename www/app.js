@@ -3556,13 +3556,16 @@ function renderProveedorChips() {
         chip.setAttribute('tabindex', '0');
         chip.style.cursor = 'pointer';
         
+        const isEditing = Boolean(appState.isEditingProveedores);
         chip.innerHTML = `
             <span class="chip-label-area" style="display:inline-flex; align-items:center; gap:6px;">
                 <span class="material-symbols-outlined" style="font-size: 16px;">person</span>
                 <span>${name} (${count})</span>
             </span>
-            <span class="material-symbols-outlined chip-edit-btn" style="font-size: 14px; margin-left: 6px; opacity: 0.7; cursor: pointer;" title="Editar nombre de proveedor">edit</span>
-            <span class="material-symbols-outlined chip-delete-btn" style="font-size: 14px; margin-left: 4px; opacity: 0.7; cursor: pointer;" title="Eliminar proveedor">close</span>
+            ${isEditing ? `
+                <span class="material-symbols-outlined chip-edit-btn" style="font-size: 14px; margin-left: 6px; opacity: 0.7; cursor: pointer;" title="Editar nombre de proveedor">edit</span>
+                <span class="material-symbols-outlined chip-delete-btn" style="font-size: 14px; margin-left: 4px; opacity: 0.7; cursor: pointer;" title="Eliminar proveedor">close</span>
+            ` : ''}
         `;
         
         chip.onclick = (e) => {
@@ -3598,8 +3601,25 @@ function renderProveedorChips() {
 
 function deleteProveedorName(name, event) {
     window.deleteProveedorName = deleteProveedorName;
-    if (event) event.stopPropagation();
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
     if (!name || !name.trim()) return;
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const isLockedByOther = !appState.isEditingProveedores && Boolean(appState.proveedoresLockedBy && appState.proveedoresLockedBy.isLocked !== false && appState.proveedoresLockedBy.userId !== currentUserId);
+
+    if (isLockedByOther) {
+        alert(`⚠️ Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+        return;
+    }
+
+    if (!appState.isEditingProveedores) {
+        alert("⚠️ Para añadir o quitar proveedores primero debes hacer clic en el botón 'Editar'.");
+        return;
+    }
+
     const targetName = name.trim().toLowerCase();
 
     // 1. Validar si el proveedor está en uso en algún proyecto de Operaciones activo
@@ -3635,16 +3655,15 @@ function deleteProveedorName(name, event) {
         return;
     }
 
-    if (confirm(`¿Eliminar al proveedor "${name}" de la lista y del sistema para todos los usuarios?`)) {
+    if (confirm(`¿Eliminar al proveedor "${name}" de la lista?\n\nRecuerda dar clic en 'Guardar' para confirmar los cambios.`)) {
         appState.proveedorNamesList = (appState.proveedorNamesList || []).filter(n => n.toLowerCase() !== targetName);
         if (appState.selectedProveedorFilter && appState.selectedProveedorFilter.toLowerCase() === targetName) {
             appState.selectedProveedorFilter = 'all';
         }
-        saveToStorage();
         renderProveedorChips();
         renderProveedores();
-        if (typeof window.syncProveedoresCatalogToCloud === 'function') {
-            window.syncProveedoresCatalogToCloud();
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification(`Proveedor "${name}" eliminado. Haz clic en 'Guardar' para confirmar los cambios.`, "info");
         }
     }
 }
@@ -3652,8 +3671,24 @@ window.deleteProveedorName = deleteProveedorName;
 
 function editProveedorName(oldName, event) {
     window.editProveedorName = editProveedorName;
-    if (event) event.stopPropagation();
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
     if (!oldName || !oldName.trim()) return;
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const isLockedByOther = !appState.isEditingProveedores && Boolean(appState.proveedoresLockedBy && appState.proveedoresLockedBy.isLocked !== false && appState.proveedoresLockedBy.userId !== currentUserId);
+
+    if (isLockedByOther) {
+        alert(`⚠️ Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+        return;
+    }
+
+    if (!appState.isEditingProveedores) {
+        alert("⚠️ Para editar nombres de proveedores primero debes hacer clic en el botón 'Editar'.");
+        return;
+    }
 
     const newName = prompt(`Editar nombre del proveedor "${oldName}":`, oldName);
     if (!newName || !newName.trim() || newName.trim() === oldName.trim()) return;
@@ -3661,7 +3696,7 @@ function editProveedorName(oldName, event) {
     const cleanNewName = newName.trim();
     const oldLower = oldName.trim().toLowerCase();
 
-    // 1. Actualizar catálogo de proveedores
+    // 1. Actualizar catálogo de proveedores en memoria
     appState.proveedorNamesList = (appState.proveedorNamesList || []).map(n => 
         n.trim().toLowerCase() === oldLower ? cleanNewName : n
     );
@@ -3673,8 +3708,7 @@ function editProveedorName(oldName, event) {
         appState.selectedProveedorFilter = cleanNewName;
     }
 
-    // 2. Actualizar en proyectos de Operaciones
-    let updatedInProjects = false;
+    // 2. Actualizar en proyectos de Operaciones en memoria
     (appState.operacionesProyectos || []).forEach(p => {
         if (!p) return;
         let modified = false;
@@ -3690,30 +3724,19 @@ function editProveedorName(oldName, event) {
                 }
             });
         }
-        if (modified) updatedInProjects = true;
     });
 
-    // 3. Actualizar en tabla de Proveedores
+    // 3. Actualizar en tabla de Proveedores en memoria
     (appState.proveedores || []).forEach(r => {
         if (r && r.proveedor && r.proveedor.trim().toLowerCase() === oldLower) {
             r.proveedor = cleanNewName;
         }
     });
 
-    saveToStorage();
-    if (updatedInProjects && typeof window.saveOperacionesStorage === 'function') {
-        window.saveOperacionesStorage();
-    }
-
     renderProveedorChips();
     renderProveedores();
-
-    // Sincronizar catálogo y datos a Supabase para todos los usuarios
-    if (typeof window.syncProveedoresCatalogToCloud === 'function') {
-        window.syncProveedoresCatalogToCloud();
-    }
-    if (typeof window.broadcastProveedoresUpdate === 'function') {
-        window.broadcastProveedoresUpdate();
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification(`Proveedor renombrado a "${cleanNewName}". Haz clic en 'Guardar' para confirmar los cambios.`, "info");
     }
 }
 window.editProveedorName = editProveedorName;
@@ -3727,6 +3750,19 @@ function filterByProveedor(name) {
 
 function promptAddProveedor() {
     window.promptAddProveedor = promptAddProveedor;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const isLockedByOther = !appState.isEditingProveedores && Boolean(appState.proveedoresLockedBy && appState.proveedoresLockedBy.isLocked !== false && appState.proveedoresLockedBy.userId !== currentUserId);
+
+    if (isLockedByOther) {
+        alert(`⚠️ Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+        return;
+    }
+
+    if (!appState.isEditingProveedores) {
+        alert("⚠️ Para añadir o quitar proveedores primero debes hacer clic en el botón 'Editar'.");
+        return;
+    }
+
     const name = prompt("Ingresa el nombre del nuevo proveedor:");
     if (name && name.trim()) {
         const cleanName = name.trim();
@@ -3739,11 +3775,10 @@ function promptAddProveedor() {
             appState.proveedorNamesList.push(cleanName);
         }
         appState.selectedProveedorFilter = cleanName;
-        saveToStorage();
         renderProveedorChips();
         renderProveedores();
-        if (typeof window.syncProveedoresCatalogToCloud === 'function') {
-            window.syncProveedoresCatalogToCloud();
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification(`Proveedor "${cleanName}" añadido. Haz clic en 'Guardar' para confirmar los cambios.`, "info");
         }
     }
 }
@@ -4420,6 +4455,7 @@ async function startEditingProveedores() {
     // Respaldar estado previo a la edición para que los cambios solo se guarden al dar clic en 'Guardar'
     appState._proveedoresSnapshot = JSON.parse(JSON.stringify(appState.proveedores || []));
     appState._operacionesSnapshotProv = JSON.parse(JSON.stringify(appState.operacionesProyectos || []));
+    appState._proveedorNamesListSnapshot = JSON.parse(JSON.stringify(appState.proveedorNamesList || []));
 
     const lockTime = Date.now();
     appState.isEditingProveedores = true;
@@ -4431,6 +4467,7 @@ async function startEditingProveedores() {
     };
 
     updateProveedoresEditButtonsUI();
+    renderProveedorChips();
     renderProveedores();
 
     // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
@@ -4447,7 +4484,12 @@ async function startEditingProveedores() {
                 appState.operacionesProyectos = JSON.parse(JSON.stringify(appState._operacionesSnapshotProv));
                 appState._operacionesSnapshotProv = null;
             }
+            if (appState._proveedorNamesListSnapshot) {
+                appState.proveedorNamesList = JSON.parse(JSON.stringify(appState._proveedorNamesListSnapshot));
+                appState._proveedorNamesListSnapshot = null;
+            }
             updateProveedoresEditButtonsUI();
+            renderProveedorChips();
             renderProveedores();
             alert(`⚠️ Esta tabla está siendo editada por ${activeCloudLock.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
             return;
@@ -4459,7 +4501,7 @@ async function startEditingProveedores() {
     syncProveedoresLockToCloud(true, currentUserName, currentUserId, lockTime);
 
     if (typeof showCustomNotification === 'function') {
-        showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
+        showCustomNotification("Modo de edición activado. Añade, quita proveedores o modifica estatus y haz clic en 'Guardar'.", "info");
     }
 
     // Auto-cierre de seguridad a los 5 minutos de inactividad (descarta si no se dio clic en Guardar)
@@ -4496,6 +4538,7 @@ async function saveEditingProveedores(isAuto = false) {
     appState.proveedoresLockedBy = null;
     appState._proveedoresSnapshot = null;
     appState._operacionesSnapshotProv = null;
+    appState._proveedorNamesListSnapshot = null;
 
     registerSectionMovementDate('gastosProv');
 
@@ -4504,13 +4547,18 @@ async function saveEditingProveedores(isAuto = false) {
     try {
         localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
         localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+        localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList || []));
     } catch (e) {}
 
     updateProveedoresEditButtonsUI();
+    renderProveedorChips();
     renderProveedores();
 
     if (typeof syncProveedoresToCloud === 'function') {
         syncProveedoresToCloud(true);
+    }
+    if (typeof syncProveedoresCatalogToCloud === 'function') {
+        syncProveedoresCatalogToCloud();
     }
     if (typeof broadcastProveedoresUpdate === 'function') {
         broadcastProveedoresUpdate();
@@ -4521,7 +4569,7 @@ async function saveEditingProveedores(isAuto = false) {
     await syncProveedoresLockToCloud(false, null, null);
 
     if (!isAuto && typeof showCustomNotification === 'function') {
-        showCustomNotification("Cambios de estatus guardados y tabla liberada con éxito.", "success");
+        showCustomNotification("Cambios de proveedores y estatus guardados y tabla liberada con éxito.", "success");
     }
 }
 window.saveEditingProveedores = saveEditingProveedores;
@@ -4541,8 +4589,13 @@ async function cancelEditingProveedores() {
         appState.operacionesProyectos = JSON.parse(JSON.stringify(appState._operacionesSnapshotProv));
         appState._operacionesSnapshotProv = null;
     }
+    if (appState._proveedorNamesListSnapshot) {
+        appState.proveedorNamesList = JSON.parse(JSON.stringify(appState._proveedorNamesListSnapshot));
+        appState._proveedorNamesListSnapshot = null;
+    }
 
     updateProveedoresEditButtonsUI();
+    renderProveedorChips();
     renderProveedores();
 
     broadcastProveedoresLockState(false, null, null);
@@ -4557,6 +4610,7 @@ function updateProveedoresEditButtonsUI() {
     const banner = document.getElementById("proveedores-lock-banner");
     const bannerText = document.getElementById("proveedores-lock-banner-text");
     const tableContainer = document.getElementById("proveedores-table-container");
+    const btnAddChip = document.getElementById("btn-add-proveedor-chip") || document.querySelector(".btn-add-chip");
 
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     // Si este cliente está editando activamente, NUNCA debe marcarse como bloqueado
@@ -4581,6 +4635,11 @@ function updateProveedoresEditButtonsUI() {
             btnSave.style.cursor = "not-allowed";
             btnSave.style.opacity = "0.45";
         }
+        if (btnAddChip) {
+            btnAddChip.disabled = true;
+            btnAddChip.classList.add("disabled-chip-btn");
+            btnAddChip.title = `Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName || 'otro usuario'}`;
+        }
     } else if (appState.isEditingProveedores) {
         if (tableContainer) tableContainer.classList.remove("tabla-bloqueada-editando");
         if (banner) banner.style.display = "none";
@@ -4598,6 +4657,11 @@ function updateProveedoresEditButtonsUI() {
             btnSave.style.opacity = "1";
             btnSave.title = "Guardar cambios y permitir edición a otros usuarios";
         }
+        if (btnAddChip) {
+            btnAddChip.disabled = false;
+            btnAddChip.classList.remove("disabled-chip-btn");
+            btnAddChip.title = "Añadir nuevo proveedor a la lista";
+        }
     } else {
         if (tableContainer) tableContainer.classList.remove("tabla-bloqueada-editando");
         if (banner) banner.style.display = "none";
@@ -4607,13 +4671,18 @@ function updateProveedoresEditButtonsUI() {
             btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar`;
             btnEdit.style.cursor = "pointer";
             btnEdit.style.opacity = "1";
-            btnEdit.title = "Habilitar edición de estatus";
+            btnEdit.title = "Habilitar edición de proveedores y estatus";
         }
         if (btnSave) {
             btnSave.disabled = true;
             btnSave.style.cursor = "not-allowed";
             btnSave.style.opacity = "0.45";
             btnSave.title = "Haz clic en 'Editar' para comenzar";
+        }
+        if (btnAddChip) {
+            btnAddChip.disabled = false;
+            btnAddChip.classList.remove("disabled-chip-btn");
+            btnAddChip.title = "Haz clic en 'Editar' para añadir o quitar proveedores";
         }
     }
 }
@@ -4704,6 +4773,9 @@ async function fetchProveedoresLockFromCloud() {
                     }
                 }
                 updateProveedoresEditButtonsUI();
+                if (typeof window.renderProveedorChips === 'function') {
+                    window.renderProveedorChips();
+                }
             } catch (e) {}
         }
     } catch (e) {
@@ -8749,6 +8821,9 @@ function setupRealtimeSubscriptions() {
         if (typeof window.updateProveedoresEditButtonsUI === 'function') {
             window.updateProveedoresEditButtonsUI();
         }
+        if (typeof window.renderProveedorChips === 'function') {
+            window.renderProveedorChips();
+        }
         if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
             window.renderProveedores();
         }
@@ -8791,6 +8866,7 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_catalog_update' }, payload => {
         const data = payload.payload;
         if (!data || !Array.isArray(data.catalog)) return;
+        if (appState.isEditingProveedores) return;
         appState.proveedorNamesList = data.catalog;
         try {
             localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
@@ -9150,6 +9226,7 @@ function setupRealtimeSubscriptions() {
                             if (!appState.isEditingProveedores) {
                                 appState.proveedoresLockedBy = null;
                                 if (typeof window.updateProveedoresEditButtonsUI === 'function') window.updateProveedoresEditButtonsUI();
+                                if (typeof window.renderProveedorChips === 'function') window.renderProveedorChips();
                                 if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') window.renderProveedores();
                             }
                         } else if (parsed.isLocked) {
@@ -9163,6 +9240,7 @@ function setupRealtimeSubscriptions() {
                                     if (elapsed < 5 * 60 * 1000) {
                                         appState.proveedoresLockedBy = parsed;
                                         if (typeof window.updateProveedoresEditButtonsUI === 'function') window.updateProveedoresEditButtonsUI();
+                                        if (typeof window.renderProveedorChips === 'function') window.renderProveedorChips();
                                         if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') window.renderProveedores();
                                     }
                                 }
@@ -14599,11 +14677,17 @@ if (typeof window !== 'undefined' && !window._opProjectLocksStorageBound) {
         if (appState.activeOperacionesProjectId || appState._myActiveProjectLock) {
             releaseOperacionesProjectLock(appState.activeOperacionesProjectId || appState._myActiveProjectLock?.projectId);
         }
+        if (appState.isEditingProveedores && typeof cancelEditingProveedores === 'function') {
+            cancelEditingProveedores();
+        }
     });
 
     window.addEventListener('pagehide', () => {
         if (appState.activeOperacionesProjectId || appState._myActiveProjectLock) {
             releaseOperacionesProjectLock(appState.activeOperacionesProjectId || appState._myActiveProjectLock?.projectId);
+        }
+        if (appState.isEditingProveedores && typeof cancelEditingProveedores === 'function') {
+            cancelEditingProveedores();
         }
     });
 }
