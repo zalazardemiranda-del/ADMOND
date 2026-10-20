@@ -874,16 +874,16 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
   });
   await page.waitForTimeout(200);
 
-  await expect(page.locator("#btn-edit-nominas")).toBeVisible();
-  await expect(page.locator("#btn-save-nominas")).toBeVisible();
-  await expect(page.locator("#btn-save-nominas")).toBeDisabled();
+  await expect(page.locator("#btn-edit-admin-top")).toBeVisible();
+  await expect(page.locator("#btn-save-admin-top")).toBeVisible();
+  await expect(page.locator("#btn-save-admin-top")).toBeDisabled();
   await expect(page.locator("#nominas-table-container")).toHaveClass(/tabla-readonly-sin-editar/);
 
   // Al dar clic en Editar en Nóminas: aparece filtro gris y el mensaje con el nombre de quien edita
-  await page.locator("#btn-edit-nominas").click();
+  await page.locator("#btn-edit-admin-top").click();
   await page.waitForTimeout(200);
 
-  await expect(page.locator("#btn-save-nominas")).toBeEnabled();
+  await expect(page.locator("#btn-save-admin-top")).toBeEnabled();
   await expect(page.locator("#nominas-lock-banner")).toBeVisible();
   await expect(page.locator("#nominas-lock-banner")).toContainText("Esta tabla está siendo editada por");
   await expect(page.locator("#nominas-lock-banner")).toContainText("Los cambios no se guardarán hasta que el usuario dé clic en \"Guardar\"");
@@ -897,10 +897,10 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
   expect(storedBeforeSaveNomina).toBe(2000);
 
   // Dar clic en Guardar en Nóminas: guarda cambios y libera bloqueo
-  await page.locator("#btn-save-nominas").click();
+  await page.locator("#btn-save-admin-top").click();
   await page.waitForTimeout(400);
 
-  await expect(page.locator("#btn-save-nominas")).toBeDisabled();
+  await expect(page.locator("#btn-save-admin-top")).toBeDisabled();
   await expect(page.locator("#nominas-lock-banner")).toBeHidden();
   const storedAfterSaveNomina = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_nominas_data'))[0].nomina);
   expect(storedAfterSaveNomina).toBe(3500);
@@ -917,7 +917,7 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
     window.renderNominas();
   });
   await page.waitForTimeout(300);
-  await expect(page.locator("#btn-edit-nominas")).toBeDisabled();
+  await expect(page.locator("#btn-edit-admin-top")).toBeDisabled();
   await expect(page.locator("#nominas-lock-banner")).toBeVisible();
   await expect(page.locator("#nominas-lock-banner")).toContainText("Esta tabla está siendo editada por Carlos Ruiz");
   await expect(page.locator("#nominas-table-container")).toHaveClass(/tabla-bloqueada-editando/);
