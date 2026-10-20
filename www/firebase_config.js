@@ -331,7 +331,8 @@
                                     try {
                                         await db.collection(collectionName).doc(String(id)).set(fullItem, { merge: true });
                                         if (collectionName === 'messages' && item.chat_id && String(item.chat_id).startsWith('__cloud_sync_')) {
-                                            await db.collection('sync_snapshots').doc(String(item.chat_id)).set(fullItem, { merge: true });
+                                            const safeSnapId = String(item.chat_id).replace(/^__+|__+$/g, '');
+                                            await db.collection('sync_snapshots').doc(safeSnapId).set(fullItem, { merge: true });
                                         }
                                         if (collectionName === 'profiles' && item.email) {
                                             const emailNorm = String(item.email).trim().toLowerCase();
@@ -473,7 +474,8 @@
                             const syncFilter = filters.find(f => f.op === '==' && f.field === 'chat_id' && typeof f.val === 'string' && f.val.startsWith('__cloud_sync_'));
                             if (syncFilter) {
                                 try {
-                                    const snapDoc = await db.collection('sync_snapshots').doc(syncFilter.val).get();
+                                    const safeSnapId = String(syncFilter.val).replace(/^__+|__+$/g, '');
+                                    const snapDoc = await db.collection('sync_snapshots').doc(safeSnapId).get();
                                     if (snapDoc.exists) {
                                         resultList = [snapDoc.data()];
                                     }

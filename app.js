@@ -554,10 +554,22 @@ const runInitialAppSetup = async () => {
         }
     }
     
-    // Limpiar residuos de perfiles locales no registrados en Firebase
+    // Limpiar residuos de perfiles locales no registrados en Firebase y reiniciar columna de fechas de secciones
     try {
         localStorage.removeItem('rp_user_profile_name_zalazardemiranda@gmail.com');
         localStorage.removeItem('rp_custom_user_nombre');
+        if (!localStorage.getItem('rp_cleared_section_dates_v1')) {
+            if (appState.concepts) {
+                delete appState.concepts.bancosFecha;
+                delete appState.concepts.ingresosFecha;
+                delete appState.concepts.gastosProvFecha;
+                delete appState.concepts.gastosIndFecha;
+                delete appState.concepts.nominasFecha;
+                delete appState.concepts.impuestosFecha;
+                localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts));
+            }
+            localStorage.setItem('rp_cleared_section_dates_v1', 'true');
+        }
     } catch (e) {}
 
     // Restaurar usuario en sesión si la sesión está activa y es válida
@@ -1509,6 +1521,42 @@ function calculateAdminTotals() {
     };
 }
 
+function getCurrentFormattedDate() {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = now.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+}
+window.getCurrentFormattedDate = getCurrentFormattedDate;
+
+function registerSectionMovementDate(sectionKey, skipSync = false) {
+    window.registerSectionMovementDate = registerSectionMovementDate;
+    if (!appState.concepts) appState.concepts = {};
+    const dateStr = getCurrentFormattedDate();
+    const keyMap = {
+        bancos: 'bancosFecha',
+        ingresos: 'ingresosFecha',
+        consecutivo: 'ingresosFecha',
+        gastosProv: 'gastosProvFecha',
+        proveedores: 'gastosProvFecha',
+        gastosInd: 'gastosIndFecha',
+        gastosIndirectos: 'gastosIndFecha',
+        nominas: 'nominasFecha',
+        impuestos: 'impuestosFecha'
+    };
+    const prop = keyMap[sectionKey] || sectionKey;
+    appState.concepts[prop] = dateStr;
+    saveToStorage();
+    try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
+    if (typeof renderVisualizacion === 'function') renderVisualizacion();
+    if (!skipSync) {
+        if (typeof broadcastAdminConceptsUpdate === 'function') broadcastAdminConceptsUpdate();
+        if (typeof syncAdminConceptsToCloud === 'function') syncAdminConceptsToCloud();
+    }
+}
+window.registerSectionMovementDate = registerSectionMovementDate;
+
 function renderVisualizacion() {
     const totals = calculateAdminTotals();
     
@@ -1528,11 +1576,21 @@ function renderVisualizacion() {
         kpiBal.style.color = totals.totalFinal < 0 ? "#c62828" : "#2e7d32";
     }
     
-    // Update Concept Table
-    const elBancosFecha = document.getElementById("concept-bancos-fecha");
-    if (elBancosFecha) {
-        elBancosFecha.innerText = appState.concepts?.bancosFecha ? `Fecha: ${appState.concepts.bancosFecha}` : "";
-    }
+    // Update Concept Table Dates (vacío por defecto hasta registrar movimiento en cada sección)
+    const dateMappings = [
+        ["concept-bancos-fecha", appState.concepts?.bancosFecha],
+        ["concept-ingresos-fecha", appState.concepts?.ingresosFecha],
+        ["concept-gastos-prov-fecha", appState.concepts?.gastosProvFecha],
+        ["concept-gastos-ind-fecha", appState.concepts?.gastosIndFecha],
+        ["concept-nominas-fecha", appState.concepts?.nominasFecha],
+        ["concept-impuestos-fecha", appState.concepts?.impuestosFecha]
+    ];
+    dateMappings.forEach(([elId, dateVal]) => {
+        const el = document.getElementById(elId);
+        if (el) {
+            el.innerText = dateVal ? String(dateVal) : "";
+        }
+    });
 
     const elIngresosVal = document.getElementById("concept-ingresos-val");
     if (elIngresosVal) elIngresosVal.innerText = formatCurrency(totals.ingresos);
@@ -1594,6 +1652,11 @@ function syncAdminConceptsToCloud(forceImmediate = false) {
             const payload = {
                 bancos: appState.concepts?.bancos !== undefined ? appState.concepts.bancos : 0,
                 bancosFecha: appState.concepts?.bancosFecha || '',
+                ingresosFecha: appState.concepts?.ingresosFecha || '',
+                gastosProvFecha: appState.concepts?.gastosProvFecha || '',
+                gastosIndFecha: appState.concepts?.gastosIndFecha || '',
+                nominasFecha: appState.concepts?.nominasFecha || '',
+                impuestosFecha: appState.concepts?.impuestosFecha || '',
                 impuestos: appState.concepts?.impuestos !== undefined ? appState.concepts.impuestos : 0,
                 updatedAt: new Date().toISOString()
             };
@@ -1605,8 +1668,8 @@ function syncAdminConceptsToCloud(forceImmediate = false) {
             });
             const db = (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.db) || (window.firebase && firebase.firestore && firebase.firestore());
             if (db) {
-                await db.collection('sync_snapshots').doc('__cloud_sync_admin_concepts__').set({
-                    id: '__cloud_sync_admin_concepts__',
+                await db.collection('sync_snapshots').doc('cloud_sync_admin_concepts').set({
+                    id: 'cloud_sync_admin_concepts',
                     chat_id: '__cloud_sync_admin_concepts__',
                     contenido: JSON.stringify(payload),
                     emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
@@ -1635,6 +1698,11 @@ function broadcastAdminConceptsUpdate() {
         concepts: {
             bancos: appState.concepts?.bancos !== undefined ? appState.concepts.bancos : 0,
             bancosFecha: appState.concepts?.bancosFecha || '',
+            ingresosFecha: appState.concepts?.ingresosFecha || '',
+            gastosProvFecha: appState.concepts?.gastosProvFecha || '',
+            gastosIndFecha: appState.concepts?.gastosIndFecha || '',
+            nominasFecha: appState.concepts?.nominasFecha || '',
+            impuestosFecha: appState.concepts?.impuestosFecha || '',
             impuestos: appState.concepts?.impuestos !== undefined ? appState.concepts.impuestos : 0,
             updatedAt: new Date().toISOString()
         },
@@ -1673,18 +1741,13 @@ async function fetchAdminConceptsFromCloud() {
                 if (parsed && typeof parsed === 'object') {
                     if (!appState.concepts) appState.concepts = {};
                     let changed = false;
-                    if (parsed.bancos !== undefined && appState.concepts.bancos !== parsed.bancos) {
-                        appState.concepts.bancos = parsed.bancos;
-                        changed = true;
-                    }
-                    if (parsed.bancosFecha !== undefined && appState.concepts.bancosFecha !== parsed.bancosFecha) {
-                        appState.concepts.bancosFecha = parsed.bancosFecha;
-                        changed = true;
-                    }
-                    if (parsed.impuestos !== undefined && appState.concepts.impuestos !== parsed.impuestos) {
-                        appState.concepts.impuestos = parsed.impuestos;
-                        changed = true;
-                    }
+                    const fields = ['bancos', 'impuestos', 'bancosFecha', 'ingresosFecha', 'gastosProvFecha', 'gastosIndFecha', 'nominasFecha', 'impuestosFecha'];
+                    fields.forEach(f => {
+                        if (parsed[f] !== undefined && appState.concepts[f] !== parsed[f]) {
+                            appState.concepts[f] = parsed[f];
+                            changed = true;
+                        }
+                    });
                     if (changed) {
                         saveToStorage();
                         try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
@@ -1703,14 +1766,14 @@ function updateAdminConcept(key, value) {
     window.updateAdminConcept = updateAdminConcept;
     if (!appState.concepts) appState.concepts = {};
     appState.concepts[key] = value === '' ? 0 : (Number(value) || 0);
+    const dateStr = getCurrentFormattedDate();
     if (key === 'bancos') {
-        const now = new Date();
-        const dd = String(now.getDate()).padStart(2, '0');
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        const yyyy = now.getFullYear();
-        appState.concepts.bancosFecha = `${dd}/${mm}/${yyyy}`;
+        appState.concepts.bancosFecha = dateStr;
+    } else if (key === 'impuestos') {
+        appState.concepts.impuestosFecha = dateStr;
     }
     saveToStorage();
+    try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
     renderVisualizacion();
     if (typeof broadcastAdminConceptsUpdate === 'function') {
         broadcastAdminConceptsUpdate();
@@ -1952,6 +2015,7 @@ async function saveEditingNominas(isAuto = false) {
     appState._nominasSnapshot = null;
     appState._archivosQuincenalesSnapshot = null;
 
+    registerSectionMovementDate('nominas');
     saveToStorage();
     try {
         localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas || []));
@@ -2704,6 +2768,7 @@ async function saveEditingGastosIndirectos(isAuto = false) {
     appState.gastosIndirectosLockedBy = null;
     appState._gastosIndirectosSnapshot = null;
 
+    registerSectionMovementDate('gastosInd');
     saveToStorage();
     try {
         localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos || []));
@@ -4469,6 +4534,8 @@ async function saveEditingProveedores(isAuto = false) {
     appState.proveedoresLockedBy = null;
     appState._proveedoresSnapshot = null;
     appState._operacionesSnapshotProv = null;
+
+    registerSectionMovementDate('gastosProv');
 
     // Guardar en almacenamiento y nube ANTES de re-renderizar
     saveToStorage();
@@ -6919,6 +6986,8 @@ async function saveEditingConsecutivo(isAuto = false) {
     appState._consecutivoSnapshot = null;
     appState._operacionesSnapshotConsec = null;
 
+    registerSectionMovementDate('ingresos');
+
     // Guardar en almacenamiento y nube ANTES de re-renderizar
     saveToStorage();
     try {
@@ -9092,9 +9161,10 @@ function setupRealtimeSubscriptions() {
                         const parsed = JSON.parse(row.contenido);
                         if (parsed && typeof parsed === 'object') {
                             if (!appState.concepts) appState.concepts = {};
-                            if (parsed.bancos !== undefined) appState.concepts.bancos = parsed.bancos;
-                            if (parsed.bancosFecha !== undefined) appState.concepts.bancosFecha = parsed.bancosFecha;
-                            if (parsed.impuestos !== undefined) appState.concepts.impuestos = parsed.impuestos;
+                            const fields = ['bancos', 'impuestos', 'bancosFecha', 'ingresosFecha', 'gastosProvFecha', 'gastosIndFecha', 'nominasFecha', 'impuestosFecha'];
+                            fields.forEach(f => {
+                                if (parsed[f] !== undefined) appState.concepts[f] = parsed[f];
+                            });
                             saveToStorage();
                             try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
                             if (typeof renderVisualizacion === 'function') renderVisualizacion();
@@ -9344,15 +9414,16 @@ function setupRealtimeSubscriptions() {
         } catch (e) {}
     });
 
-    // 11. Actualización instantánea de conceptos contables de Visualización (Bancos, Impuestos) por broadcast
+    // 11. Actualización instantánea de conceptos contables de Visualización (Bancos, Impuestos y fechas de movimientos) por broadcast
     window.chatRealtimeChannel.on('broadcast', { event: 'admin_concepts_update' }, payload => {
         const data = payload?.payload;
         if (data && data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
         if (data && data.concepts) {
             if (!appState.concepts) appState.concepts = {};
-            if (data.concepts.bancos !== undefined) appState.concepts.bancos = data.concepts.bancos;
-            if (data.concepts.bancosFecha !== undefined) appState.concepts.bancosFecha = data.concepts.bancosFecha;
-            if (data.concepts.impuestos !== undefined) appState.concepts.impuestos = data.concepts.impuestos;
+            const fields = ['bancos', 'impuestos', 'bancosFecha', 'ingresosFecha', 'gastosProvFecha', 'gastosIndFecha', 'nominasFecha', 'impuestosFecha'];
+            fields.forEach(f => {
+                if (data.concepts[f] !== undefined) appState.concepts[f] = data.concepts[f];
+            });
             saveToStorage();
             try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
             if (typeof renderVisualizacion === 'function') renderVisualizacion();
@@ -9459,6 +9530,12 @@ function setupRealtimeSubscriptions() {
                     if (window._usersHeartbeatTick % 5 === 0 && typeof loadProfilesList === 'function') {
                         await loadProfilesList();
                     }
+                }
+
+                // Auto-detector de nuevas versiones publicadas en línea (aplica actualizaciones sin que el usuario tenga que dar refresh)
+                window._liveVersionCheckTick = (window._liveVersionCheckTick || 0) + 1;
+                if (window._liveVersionCheckTick % 2 === 0 && typeof window.checkLiveDeploymentVersion === 'function') {
+                    window.checkLiveDeploymentVersion();
                 }
             } catch (e) {}
         }, 3000);
@@ -14427,7 +14504,44 @@ function handleIncomingSystemReleaseUpdate(payload) {
     if (typeof window.fetchOperacionesFromCloud === 'function') {
         window.fetchOperacionesFromCloud();
     }
+    setTimeout(() => {
+        try { window.location.reload(); } catch (e) {}
+    }, 500);
 }
+
+let _checkingLiveDeploy = false;
+async function checkLiveDeploymentVersion() {
+    window.checkLiveDeploymentVersion = checkLiveDeploymentVersion;
+    if (_checkingLiveDeploy) return;
+    const activeTag = document.activeElement ? document.activeElement.tagName : '';
+    const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+    if (isTyping || appState.isEditingOperacionesDetail || appState.isEditingNominas || appState.isEditingGastosIndirectos || appState.isEditingProveedores || appState.isEditingConsecutivo) {
+        return;
+    }
+    _checkingLiveDeploy = true;
+    try {
+        const currentScript = document.querySelector('script[src*="app.js?v="]');
+        if (!currentScript) return;
+        const curMatch = currentScript.getAttribute('src').match(/app\.js\?v=([^"&]+)/);
+        const currentHash = curMatch ? curMatch[1] : null;
+        if (!currentHash) return;
+
+        const res = await fetch(window.location.pathname + '?_vcheck=' + Date.now(), { cache: 'no-store' });
+        if (!res.ok) return;
+        const html = await res.text();
+        const remoteMatch = html.match(/app\.js\?v=([^"'\s&>]+)/);
+        const remoteHash = remoteMatch ? remoteMatch[1] : null;
+        if (remoteHash && remoteHash !== currentHash) {
+            console.log(`🔄 Nueva actualización en línea detectada (${currentHash} -> ${remoteHash}). Aplicando automáticamente...`);
+            window.location.reload();
+        }
+    } catch (e) {
+        // Ignorar errores de red temporales
+    } finally {
+        _checkingLiveDeploy = false;
+    }
+}
+window.checkLiveDeploymentVersion = checkLiveDeploymentVersion;
 
 async function triggerSystemReleaseEviction(customReleaseId = null) {
     window.triggerSystemReleaseEviction = triggerSystemReleaseEviction;
@@ -15266,6 +15380,8 @@ function saveEditingOperacionesProject() {
     if (typeof window.syncAllOperacionesToProveedores === 'function') {
         window.syncAllOperacionesToProveedores();
     }
+    registerSectionMovementDate('ingresos', true);
+    registerSectionMovementDate('gastosProv');
     if (typeof window.syncOperacionesToCloud === 'function') {
         window.syncOperacionesToCloud(true);
     }
