@@ -12906,14 +12906,25 @@ function syncAllOperacionesToConsecutivo() {
             const ref = String(row.referenciaOp).trim();
             if (purgedIds.has(ref) || ref.endsWith('-')) return;
             const refLower = ref.toLowerCase();
-            const exists = appState.operacionesProyectos.some(p => {
+            const existing = appState.operacionesProyectos.find(p => {
                 if (!p) return false;
                 if (typeof areProjectsSame === 'function') {
                     if (areProjectsSame(p, { id: ref, consecutivo: ref, numConsecutivo: ref, numProyecto: ref })) return true;
                 }
                 return [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].some(k => k && String(k).trim().toLowerCase() === refLower);
             });
-            if (!exists) {
+            if (existing) {
+                // Sincronizar factura bidireccionalmente entre Consecutivo y Operaciones
+                const rowFac = String(row.factura || '').trim();
+                const pFac = String(existing.numFactura || existing.factura || '').trim();
+                if (rowFac && rowFac !== '-' && (!pFac || pFac === '-')) {
+                    existing.numFactura = rowFac;
+                    existing.factura = rowFac;
+                    opChanged = true;
+                } else if (pFac && pFac !== '-' && (!rowFac || rowFac === '-')) {
+                    row.factura = pFac;
+                }
+            } else {
                 const subVal = Number(row.subtotal) || 0;
                 const ivaVal = (row.iva !== undefined && row.iva !== null && row.iva !== '') ? Number(row.iva) : (subVal > 0 ? Math.round(subVal * 0.16 * 100) / 100 : 0);
                 const totVal = (row.total !== undefined && row.total !== null && row.total !== '') ? Number(row.total) : (subVal + ivaVal);
@@ -13567,14 +13578,23 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
             ['numFactura', 'factura', 'numOC', 'cliente', 'nombreCliente', 'tipoProyecto', 'servicioName', 'fechaInicio', 'fechaInicioDisplay', 'estatus'].forEach(f => {
                 const lVal = (local[f] !== undefined && local[f] !== null) ? String(local[f]).trim() : '';
                 const cVal = (cp[f] !== undefined && cp[f] !== null) ? String(cp[f]).trim() : '';
-                if (cVal && !lVal) {
+                const isReal = (v) => v !== '' && v !== '-';
+                if (isReal(cVal) && !isReal(lVal)) {
                     merged[f] = cp[f];
-                } else if (lVal && !cVal) {
+                } else if (isReal(lVal) && !isReal(cVal)) {
                     merged[f] = local[f];
-                } else if (cVal && lVal) {
+                } else if (isReal(cVal) && isReal(lVal)) {
                     merged[f] = (forceRealtime && !isCurrentlyActive) ? cp[f] : (cVal || local[f]);
                 }
             });
+
+            // Normalización de Factura: si alguno de los campos o fuentes tiene una factura real, preservarla en ambos
+            const resolvedFactura = [merged.numFactura, merged.factura, local.numFactura, local.factura, cp.numFactura, cp.factura]
+                .filter(x => x && typeof x === 'string' && x.trim() !== '' && x.trim() !== '-')[0];
+            if (resolvedFactura) {
+                merged.numFactura = resolvedFactura.trim();
+                merged.factura = resolvedFactura.trim();
+            }
 
             // Preservar consecutivo más específico (por ej. si tiene sufijo -F)
             const lCons = (local.consecutivo || local.numConsecutivo || '').trim();
@@ -14806,6 +14826,75 @@ function confirmClearGhostData() {
     }
 };
 
+function getOperacionesProjectDateValue(p) {
+    if (!p) return 0;
+    const cleanStr = String(p.fechaInicio || p.fechaInicioDisplay || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(cleanStr)) {
+        const t = new Date(cleanStr.slice(0, 10)).getTime();
+        if (!isNaN(t)) return t;
+    }
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(cleanStr)) {
+        const parts = cleanStr.split('/');
+        const iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        const t = new Date(iso).getTime();
+        if (!isNaN(t)) return t;
+    }
+    if (p.createdAt) {
+        const t = new Date(p.createdAt).getTime();
+        if (!isNaN(t)) return t;
+    }
+    return 0;
+}
+window.getOperacionesProjectDateValue = getOperacionesProjectDateValue;
+
+function getOperacionesProjectFacturaDisplay(p) {
+    if (!p) return '-';
+    // 1. Revisar p.numFactura y p.factura directos
+    const candidates = [p.numFactura, p.factura].filter(f => f && typeof f === 'string' && f.trim() !== '' && f.trim() !== '-');
+    if (candidates.length > 0) {
+        return candidates[0].trim();
+    }
+    // 2. Buscar en Consecutivo por referenciaOp o id de proyecto
+    const pKeys = [p.consecutivo, p.numConsecutivo, p.numProyecto, p.id].filter(Boolean).map(x => String(x).trim().toLowerCase());
+    if (Array.isArray(appState.consecutivo)) {
+        const row = appState.consecutivo.find(c => {
+            if (!c) return false;
+            const cRef = String(c.referenciaOp || '').trim().toLowerCase();
+            if (cRef && pKeys.includes(cRef)) return true;
+            const cleanBase = (k) => k.replace(/-[a-z]$/i, '');
+            if (cRef && pKeys.some(k => cleanBase(k) === cleanBase(cRef))) return true;
+            return false;
+        });
+        if (row && row.factura && String(row.factura).trim() && String(row.factura).trim() !== '-') {
+            const fac = String(row.factura).trim();
+            p.factura = fac;
+            p.numFactura = fac;
+            return fac;
+        }
+    }
+    // 3. Buscar en hermanos que compartan la misma raíz de consecutivo (ej. RDP2610182-E y RDP2610182-F)
+    const baseConsec = String(p.consecutivo || p.numProyecto || p.id || '').replace(/-[a-z]$/i, '').trim().toLowerCase();
+    if (baseConsec && Array.isArray(appState.operacionesProyectos)) {
+        const sibling = appState.operacionesProyectos.find(x => {
+            if (!x || x === p) return false;
+            const xBase = String(x.consecutivo || x.numProyecto || x.id || '').replace(/-[a-z]$/i, '').trim().toLowerCase();
+            if (xBase === baseConsec) {
+                const sFac = String(x.numFactura || x.factura || '').trim();
+                return sFac && sFac !== '-';
+            }
+            return false;
+        });
+        if (sibling) {
+            const sibFac = String(sibling.numFactura || sibling.factura || '').trim();
+            p.factura = sibFac;
+            p.numFactura = sibFac;
+            return sibFac;
+        }
+    }
+    return '-';
+}
+window.getOperacionesProjectFacturaDisplay = getOperacionesProjectFacturaDisplay;
+
 function renderOperaciones() {
     window.renderOperaciones = renderOperaciones;
     const listPane = document.getElementById("operaciones-view-list");
@@ -14890,15 +14979,52 @@ function renderOperaciones() {
         if (p.consecutivo || p.numConsecutivo) {
             p.numProyecto = p.consecutivo || p.numConsecutivo;
         }
+
+        // Resolver factura desde Consecutivo si falta o tiene '-'
+        const pKeys = [p.consecutivo, p.numConsecutivo, p.numProyecto, p.id].filter(Boolean).map(x => String(x).trim().toLowerCase());
+        const rowInConsecutivo = (appState.consecutivo || []).find(c => {
+            if (!c) return false;
+            const cRef = String(c.referenciaOp || '').trim().toLowerCase();
+            if (cRef && pKeys.includes(cRef)) return true;
+            const cleanBase = (k) => k.replace(/-[a-z]$/i, '');
+            if (cRef && pKeys.some(k => cleanBase(k) === cleanBase(cRef))) return true;
+            return false;
+        });
+
+        if (rowInConsecutivo) {
+            const cFac = String(rowInConsecutivo.factura || '').trim();
+            if (cFac && cFac !== '-' && (!p.factura || p.factura === '-' || !p.numFactura || p.numFactura === '-')) {
+                p.factura = cFac;
+                p.numFactura = cFac;
+            }
+        }
+
+        // Si aún no tiene factura, verificar si un expediente hermano con la misma raíz ya la tiene (ej. RDP2610182-E y RDP2610182-F)
+        if (!p.factura || p.factura === '-' || !p.numFactura || p.numFactura === '-') {
+            const baseConsec = String(p.consecutivo || p.numProyecto || p.id || '').replace(/-[a-z]$/i, '').trim().toLowerCase();
+            if (baseConsec) {
+                const sibling = proyectos.find(x => {
+                    if (!x || x === p) return false;
+                    const xBase = String(x.consecutivo || x.numProyecto || x.id || '').replace(/-[a-z]$/i, '').trim().toLowerCase();
+                    if (xBase === baseConsec) {
+                        const sFac = String(x.numFactura || x.factura || '').trim();
+                        return sFac && sFac !== '-';
+                    }
+                    return false;
+                });
+                if (sibling) {
+                    const sibFac = String(sibling.numFactura || sibling.factura || '').trim();
+                    p.factura = sibFac;
+                    p.numFactura = sibFac;
+                }
+            }
+        }
+
         if (p.cancelado || p.estatus === 'CANCELADO') {
             p.estatus = 'CANCELADO';
         } else if (p.archivado) {
             p.estatus = 'CERRADO';
         } else {
-            // Verificar si en Consecutivo se marcó como Cancelado
-            const rowInConsecutivo = (appState.consecutivo || []).find(c =>
-                c.referenciaOp && String(c.referenciaOp).trim().toLowerCase() === String(p.numProyecto || p.consecutivo || p.id).trim().toLowerCase()
-            );
             if (rowInConsecutivo && String(rowInConsecutivo.st || '').toLowerCase().includes('cancel')) {
                 p.estatus = 'CANCELADO';
                 p.cancelado = true;
@@ -14982,6 +15108,18 @@ function renderOperaciones() {
         return true;
     });
 
+    // Ordenamiento unificado y consistente para que todos los dispositivos/usuarios vean exactamente el mismo orden:
+    // 1. Fecha de inicio más reciente primero (descendente)
+    // 2. Consecutivo / folio descendente para desempate consistente
+    filtered.sort((a, b) => {
+        const dateA = getOperacionesProjectDateValue(a);
+        const dateB = getOperacionesProjectDateValue(b);
+        if (dateB !== dateA) return dateB - dateA;
+        const consA = String(a.consecutivo || a.numConsecutivo || a.numProyecto || a.id || '');
+        const consB = String(b.consecutivo || b.numConsecutivo || b.numProyecto || b.id || '');
+        return consB.localeCompare(consA, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
     // 4. Renderizar Tabla
     const tbody = document.getElementById("tbody-operaciones-proyectos");
     if (!tbody) return;
@@ -15008,6 +15146,7 @@ function renderOperaciones() {
         const lockMsg = isLockedByOther
             ? `El proyecto está siendo editado por ${lockInfo.userName || 'otro usuario'}`
             : '';
+        const facturaDisplay = getOperacionesProjectFacturaDisplay(p);
 
         return `
         <tr data-op-id="${pId}" class="${isLockedByOther ? 'op-row-locked' : ''}" ${isLockedByOther ? `title="${lockMsg}"` : ''}>
@@ -15017,7 +15156,7 @@ function renderOperaciones() {
                 ${isLockedByMe ? `<div class="op-locked-project-msg" style="margin-top: 4px; background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE;"><span class="material-symbols-outlined" style="font-size: 14px; color: #4F46E5;">edit</span> En edición por ti</div>` : ''}
             </td>
             <td>${p.fechaInicioDisplay || p.fechaInicio || '-'}</td>
-            <td>${p.factura || p.numFactura || '-'}</td>
+            <td>${facturaDisplay}</td>
             <td><span class="op-status-badge ${p.estatus}">${p.estatus}</span></td>
             <td style="white-space: nowrap;">
                 ${isLockedByOther ? `
@@ -15621,6 +15760,13 @@ function openOperacionesDetail(projectId, clickTimestamp = null) {
         // Configuración del botón inferior en Paso 4: GENERAR PROYECTO (si es nuevo)
         if (typeof updateGenerarProyectoButton === 'function') {
             updateGenerarProyectoButton(p);
+        }
+
+        // Asegurar que la factura esté resuelta si estaba vacía o con '-'
+        const resolvedFac = getOperacionesProjectFacturaDisplay(p);
+        if (resolvedFac && resolvedFac !== '-') {
+            p.numFactura = resolvedFac;
+            p.factura = resolvedFac;
         }
 
         // Populate Step 1 (Datos de proyecto - Factura, OC, Tipo de Proyecto y Formularios)
