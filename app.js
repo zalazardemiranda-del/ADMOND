@@ -1219,7 +1219,7 @@ function switchTab(tabName) {
     const titleEl = document.getElementById("page-main-title");
     const subtitleEl = document.getElementById("page-subtitle");
     
-    if (tabName !== 'administracion' && appState.activeOperacionesProjectId) {
+    if (appState.activeOperacionesProjectId || appState._myActiveProjectLock) {
         if (typeof closeOperacionesDetail === 'function') {
             closeOperacionesDetail();
         }
@@ -1298,7 +1298,8 @@ function switchAdminFicha(fichaName) {
     const subpane = document.getElementById(`admin-subpane-${fichaName}`);
     if (subpane) subpane.classList.add("active");
 
-    if (fichaName !== 'operaciones' && appState.activeOperacionesProjectId) {
+    const isLeavingOperacionesDetail = (fichaName !== 'operaciones') || (document.getElementById("operaciones-view-detail")?.style.display !== "none");
+    if (isLeavingOperacionesDetail && (appState.activeOperacionesProjectId || appState._myActiveProjectLock)) {
         if (typeof closeOperacionesDetail === 'function') {
             closeOperacionesDetail();
         }
@@ -14109,8 +14110,8 @@ function cleanOperacionesLegacyData(proyectos) {
 // =================================================================================
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
-const OPERACIONES_LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutos de respaldo ante cierre inesperado
-const SYSTEM_RELEASE_VERSION = 'release_2026_10_19_roles_v2';
+const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
+const SYSTEM_RELEASE_VERSION = 'release_2026_10_20_operaciones_v3';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -14345,12 +14346,38 @@ async function fetchOperacionesProjectLocksFromCloud() {
         if (msgs && msgs.length > 0 && msgs[0].contenido) {
             const cloudLocks = JSON.parse(msgs[0].contenido);
             if (cloudLocks && typeof cloudLocks === 'object') {
+                const localLocks = ensureOperacionesLocksMap();
+                let changed = false;
+
+                // 1. Limpiar en local cualquier candado de OTRO usuario que ya no exista o no esté bloqueado en la nube
+                Object.keys(localLocks).forEach(k => {
+                    const loc = localLocks[k];
+                    if (loc && !isLockOwnedByMe(loc)) {
+                        const cloudEntry = cloudLocks[k] || Object.values(cloudLocks).find(cl => cl && getAllOperacionesProjectKeys(cl.projectId).includes(k));
+                        if (!cloudEntry || !cloudEntry.isLocked) {
+                            delete localLocks[k];
+                            changed = true;
+                        }
+                    }
+                });
+
+                // 2. Aplicar los candados vigentes desde la nube
                 Object.keys(cloudLocks).forEach(k => {
                     const cLock = cloudLocks[k];
                     if (cLock) {
                         handleIncomingOperacionesProjectLock(cLock, true);
                     }
                 });
+
+                if (changed) {
+                    saveOperacionesLocksMapToLocal();
+                    if (appState.currentAdminFicha === 'operaciones') {
+                        const detailPane = document.getElementById("operaciones-view-detail");
+                        if (!detailPane || detailPane.style.display === "none") {
+                            renderOperaciones();
+                        }
+                    }
+                }
             }
         }
     } catch (e) {
@@ -14569,10 +14596,35 @@ if (typeof window !== 'undefined' && !window._opProjectLocksStorageBound) {
     });
 
     window.addEventListener('beforeunload', () => {
-        if (appState.activeOperacionesProjectId) {
-            releaseOperacionesProjectLock(appState.activeOperacionesProjectId);
+        if (appState.activeOperacionesProjectId || appState._myActiveProjectLock) {
+            releaseOperacionesProjectLock(appState.activeOperacionesProjectId || appState._myActiveProjectLock?.projectId);
         }
     });
+
+    window.addEventListener('pagehide', () => {
+        if (appState.activeOperacionesProjectId || appState._myActiveProjectLock) {
+            releaseOperacionesProjectLock(appState.activeOperacionesProjectId || appState._myActiveProjectLock?.projectId);
+        }
+    });
+}
+
+// Heartbeat activo cada 10s mientras el usuario esté adentro de un proyecto
+if (typeof window !== 'undefined' && !window._operacionesLockHeartbeatStarted) {
+    window._operacionesLockHeartbeatStarted = true;
+    setInterval(() => {
+        if (appState.activeOperacionesProjectId && (appState.isEditingOperacionesDetail || document.getElementById("operaciones-view-detail")?.style.display === "block")) {
+            const myLock = appState._myActiveProjectLock;
+            if (myLock && isLockOwnedByMe(myLock)) {
+                myLock.timestamp = Date.now();
+                const locks = ensureOperacionesLocksMap();
+                const targetKeys = getAllOperacionesProjectKeys(appState.activeOperacionesProjectId);
+                targetKeys.forEach(k => {
+                    if (locks[k]) locks[k].timestamp = myLock.timestamp;
+                });
+                saveOperacionesLocksMapToLocal();
+            }
+        }
+    }, 10000);
 }
 
 // Mecanismo de expulsión automática para actualización en línea ("suelta los globos")
