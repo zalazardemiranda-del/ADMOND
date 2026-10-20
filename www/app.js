@@ -1588,7 +1588,13 @@ function renderVisualizacion() {
     dateMappings.forEach(([elId, dateVal]) => {
         const el = document.getElementById(elId);
         if (el) {
-            el.innerText = dateVal ? String(dateVal) : "";
+            if (!dateVal) {
+                el.innerText = "";
+            } else if (elId === "concept-bancos-fecha") {
+                el.innerText = String(dateVal).startsWith("Fecha:") ? String(dateVal) : `Fecha: ${dateVal}`;
+            } else {
+                el.innerText = String(dateVal);
+            }
         }
     });
 
@@ -8464,20 +8470,23 @@ async function handleUserSession(user) {
         }
 
         const emailPrefix = userEmail ? userEmail.split('@')[0] : '';
+        const savedCustomName = userEmail ? (localStorage.getItem('rp_user_profile_name_' + userEmail) || localStorage.getItem('rp_custom_user_nombre')) : localStorage.getItem('rp_custom_user_nombre');
         const savedCustomPhone = userEmail ? localStorage.getItem('rp_user_profile_phone_' + userEmail) : null;
 
         if (!profile) {
             profile = {
                 id: userId,
                 email: user.email,
-                nombre: user.displayName || user.user_metadata?.nombre || emailPrefix || 'Usuario',
+                nombre: savedCustomName || user.displayName || user.user_metadata?.nombre || emailPrefix || 'Usuario',
                 telefono: savedCustomPhone || '',
                 rol: user.user_metadata?.rol || 'administrador',
                 departamento: user.user_metadata?.departamento || 'Administración'
             };
         } else {
             if (!profile.id && userId) profile.id = userId;
-            if (!profile.nombre) {
+            if (savedCustomName) {
+                profile.nombre = savedCustomName;
+            } else if (!profile.nombre) {
                 profile.nombre = user.displayName || user.user_metadata?.nombre || emailPrefix || 'Usuario';
             }
             if (savedCustomPhone && !profile.telefono) {
@@ -11107,6 +11116,7 @@ async function handleSaveMyProfile(event) {
     localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
     if (isGerente) {
         localStorage.setItem("rp_user_profile_name_" + email, name);
+        localStorage.setItem("rp_custom_user_nombre", name);
     }
     if (phone) localStorage.setItem("rp_user_profile_phone_" + email, phone);
 
@@ -14110,13 +14120,37 @@ function getOperacionesCurrentUserInfo() {
 }
 window.getOperacionesCurrentUserInfo = getOperacionesCurrentUserInfo;
 
+function getAllOperacionesProjectKeys(projectOrId) {
+    const keys = new Set();
+    if (!projectOrId) return [];
+    if (typeof projectOrId === 'object') {
+        ['consecutivo', 'numConsecutivo', 'numProyecto', 'id'].forEach(f => {
+            if (projectOrId[f]) keys.add(String(projectOrId[f]).trim().toUpperCase());
+        });
+    } else {
+        const str = String(projectOrId).trim().toUpperCase();
+        keys.add(str);
+        const list = appState.operacionesProyectos || [];
+        const found = list.find(x => x && (
+            String(x.id || '').toUpperCase() === str ||
+            String(x.consecutivo || '').toUpperCase() === str ||
+            String(x.numConsecutivo || '').toUpperCase() === str ||
+            String(x.numProyecto || '').toUpperCase() === str
+        ));
+        if (found) {
+            ['consecutivo', 'numConsecutivo', 'numProyecto', 'id'].forEach(f => {
+                if (found[f]) keys.add(String(found[f]).trim().toUpperCase());
+            });
+        }
+    }
+    return Array.from(keys).filter(Boolean);
+}
+window.getAllOperacionesProjectKeys = getAllOperacionesProjectKeys;
+
 function normalizeOperacionesProjectKey(projectOrId) {
     if (!projectOrId) return '';
-    if (typeof projectOrId === 'object') {
-        const raw = projectOrId.consecutivo || projectOrId.numConsecutivo || projectOrId.numProyecto || projectOrId.id || '';
-        return String(raw).trim().toUpperCase();
-    }
-    return String(projectOrId).trim().toUpperCase();
+    const all = getAllOperacionesProjectKeys(projectOrId);
+    return all.length > 0 ? all[0] : String(projectOrId).trim().toUpperCase();
 }
 window.normalizeOperacionesProjectKey = normalizeOperacionesProjectKey;
 
@@ -14199,23 +14233,21 @@ window.isLockOwnedByMe = isLockOwnedByMe;
 
 function getOperacionesProjectLock(projectOrId) {
     const locks = ensureOperacionesLocksMap();
-    const key = normalizeOperacionesProjectKey(projectOrId);
-    if (!key) return null;
+    const targetKeys = getAllOperacionesProjectKeys(projectOrId);
+    if (targetKeys.length === 0) return null;
 
-    let lock = locks[key];
-    if (!lock && typeof projectOrId === 'object' && projectOrId.id) {
-        const altKey = String(projectOrId.id).trim().toUpperCase();
-        lock = locks[altKey];
+    let lock = null;
+    for (const k of targetKeys) {
+        if (locks[k] && locks[k].isLocked) {
+            lock = locks[k];
+            break;
+        }
     }
-    if (!lock) {
-        const matchKey = Object.keys(locks).find(k => k.toUpperCase() === key);
-        if (matchKey) lock = locks[matchKey];
-    }
-    if (!lock || !lock.isLocked) return null;
+    if (!lock) return null;
 
     const elapsed = Date.now() - (Number(lock.timestamp) || 0);
     if (elapsed > OPERACIONES_LOCK_TTL_MS) {
-        delete locks[key];
+        targetKeys.forEach(k => delete locks[k]);
         saveOperacionesLocksMapToLocal();
         return null;
     }
@@ -14308,15 +14340,16 @@ async function fetchOperacionesProjectLocksFromCloud() {
 
 function claimOperacionesProjectLock(projectOrId, customTimestamp = null) {
     window.claimOperacionesProjectLock = claimOperacionesProjectLock;
-    const key = normalizeOperacionesProjectKey(projectOrId);
-    if (!key) return null;
+    const targetKeys = getAllOperacionesProjectKeys(projectOrId);
+    if (targetKeys.length === 0) return null;
+    const primaryKey = targetKeys[0];
 
     const myInfo = getOperacionesCurrentUserInfo();
     const locks = ensureOperacionesLocksMap();
     const clickTs = customTimestamp !== null ? Number(customTimestamp) : Date.now();
 
     const lockEntry = {
-        projectId: key,
+        projectId: primaryKey,
         isLocked: true,
         userId: myInfo.userId,
         userEmail: myInfo.userEmail,
@@ -14326,45 +14359,63 @@ function claimOperacionesProjectLock(projectOrId, customTimestamp = null) {
         timestamp: clickTs
     };
 
-    locks[key] = lockEntry;
+    targetKeys.forEach(k => {
+        locks[k] = Object.assign({}, lockEntry, { projectId: k });
+    });
     appState._myActiveProjectLock = lockEntry;
     saveOperacionesLocksMapToLocal();
 
-    broadcastOperacionesProjectLock(lockEntry);
+    targetKeys.forEach(k => {
+        broadcastOperacionesProjectLock(Object.assign({}, lockEntry, { projectId: k }));
+    });
     syncOperacionesProjectLocksToCloud();
     return lockEntry;
 }
 
 function releaseOperacionesProjectLock(projectOrId, force = false) {
     window.releaseOperacionesProjectLock = releaseOperacionesProjectLock;
-    const key = normalizeOperacionesProjectKey(projectOrId || appState.activeOperacionesProjectId || appState._myActiveProjectLock?.projectId);
-    if (!key) return;
+    const targetKeys = getAllOperacionesProjectKeys(projectOrId || appState.activeOperacionesProjectId || appState._myActiveProjectLock?.projectId);
+    if (targetKeys.length === 0) return;
 
     const locks = ensureOperacionesLocksMap();
-    const existing = locks[key];
-    if (existing && !isLockOwnedByMe(existing) && !force) {
-        // No liberar el bloqueo si pertenece a otro usuario que ganó la carrera a menos que sea forzado
-        return;
-    }
+    targetKeys.forEach(k => {
+        const existing = locks[k];
+        if (!existing || isLockOwnedByMe(existing) || force) {
+            delete locks[k];
+        }
+    });
 
-    delete locks[key];
-    if (appState._myActiveProjectLock && normalizeOperacionesProjectKey(appState._myActiveProjectLock.projectId) === key) {
-        appState._myActiveProjectLock = null;
+    Object.keys(locks).forEach(k => {
+        const l = locks[k];
+        if (l && (targetKeys.includes(k) || targetKeys.includes(String(l.projectId || '').toUpperCase()))) {
+            if (isLockOwnedByMe(l) || force) {
+                delete locks[k];
+            }
+        }
+    });
+
+    if (appState._myActiveProjectLock) {
+        const myProjKey = String(appState._myActiveProjectLock.projectId || '').toUpperCase();
+        if (targetKeys.includes(myProjKey)) {
+            appState._myActiveProjectLock = null;
+        }
     }
     saveOperacionesLocksMapToLocal();
 
     const myInfo = getOperacionesCurrentUserInfo();
-    const unlockPayload = {
-        projectId: key,
-        isLocked: false,
-        userId: myInfo.userId,
-        userEmail: myInfo.userEmail,
-        userName: myInfo.userName,
-        userPrefix: myInfo.userPrefix,
-        clientId: myInfo.clientId,
-        timestamp: Date.now()
-    };
-    broadcastOperacionesProjectLock(unlockPayload);
+    targetKeys.forEach(k => {
+        const unlockPayload = {
+            projectId: k,
+            isLocked: false,
+            userId: myInfo.userId,
+            userEmail: myInfo.userEmail,
+            userName: myInfo.userName,
+            userPrefix: myInfo.userPrefix,
+            clientId: myInfo.clientId,
+            timestamp: Date.now()
+        };
+        broadcastOperacionesProjectLock(unlockPayload);
+    });
     syncOperacionesProjectLocksToCloud();
 }
 
@@ -14388,6 +14439,7 @@ function handleIncomingOperacionesProjectLock(payload, isFromCloudPoll = false) 
     if (!payload || !payload.projectId) return;
 
     const key = normalizeOperacionesProjectKey(payload.projectId);
+    const targetKeys = getAllOperacionesProjectKeys(payload.projectId);
     const locks = ensureOperacionesLocksMap();
 
     // Ignorar ecos de nuestra propia sesión
@@ -14396,15 +14448,20 @@ function handleIncomingOperacionesProjectLock(payload, isFromCloudPoll = false) 
     }
 
     if (!payload.isLocked) {
-        const current = locks[key];
-        if (current && !isLockOwnedByMe(current)) {
-            delete locks[key];
-            saveOperacionesLocksMapToLocal();
-            if (appState.currentAdminFicha === 'operaciones') {
-                const detailPane = document.getElementById("operaciones-view-detail");
-                if (!detailPane || detailPane.style.display === "none") {
-                    renderOperaciones();
+        targetKeys.forEach(k => delete locks[k]);
+        Object.keys(locks).forEach(k => {
+            const l = locks[k];
+            if (l && (targetKeys.includes(k) || targetKeys.includes(String(l.projectId || '').toUpperCase()))) {
+                if (!isLockOwnedByMe(l)) {
+                    delete locks[k];
                 }
+            }
+        });
+        saveOperacionesLocksMapToLocal();
+        if (appState.currentAdminFicha === 'operaciones') {
+            const detailPane = document.getElementById("operaciones-view-detail");
+            if (!detailPane || detailPane.style.display === "none") {
+                renderOperaciones();
             }
         }
         return;
@@ -14947,7 +15004,7 @@ function renderOperaciones() {
         const lockInfo = getProjectLockByOther(p);
         const isLockedByOther = Boolean(lockInfo);
         const myLockInfo = !isLockedByOther ? getOperacionesProjectLock(p) : null;
-        const isLockedByMe = Boolean(myLockInfo && isLockOwnedByMe(myLockInfo));
+        const isLockedByMe = Boolean(myLockInfo && isLockOwnedByMe(myLockInfo) && appState.isEditingOperacionesDetail && appState.activeOperacionesProjectId);
         const lockMsg = isLockedByOther
             ? `El proyecto está siendo editado por ${lockInfo.userName || 'otro usuario'}`
             : '';
@@ -15288,10 +15345,23 @@ function updateOperacionesDetailEditUI() {
         if (iconEl) iconEl.innerText = "edit_note";
         if (textEl) textEl.innerHTML = `Modo edición activo · Haz clic en <strong>"Guardar"</strong> para conservar los cambios`;
     } else {
+        const p = (typeof getActiveOperacionesProject === 'function')
+            ? getActiveOperacionesProject()
+            : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
+        const lockByOther = p ? getProjectLockByOther(p) : null;
+
         if (btnEdit) {
-            btnEdit.disabled = false;
-            btnEdit.classList.remove("active-editing");
-            btnEdit.innerHTML = `<span class="material-symbols-outlined">edit</span> Editar`;
+            if (lockByOther) {
+                btnEdit.disabled = true;
+                btnEdit.classList.remove("active-editing");
+                btnEdit.innerHTML = `<span class="material-symbols-outlined">lock</span> En edición`;
+                btnEdit.title = `El proyecto está siendo editado por ${lockByOther.userName || 'otro usuario'}`;
+            } else {
+                btnEdit.disabled = false;
+                btnEdit.classList.remove("active-editing");
+                btnEdit.innerHTML = `<span class="material-symbols-outlined">edit</span> Editar`;
+                btnEdit.title = "Editar este proyecto";
+            }
         }
         if (btnSave) {
             btnSave.disabled = true;
@@ -15303,8 +15373,14 @@ function updateOperacionesDetailEditUI() {
             indicator.classList.remove("mode-editing");
             indicator.classList.add("mode-readonly");
         }
-        if (iconEl) iconEl.innerText = "lock";
-        if (textEl) textEl.innerHTML = `Modo lectura · Haz clic en <strong>"Editar"</strong> para modificar este proyecto`;
+        if (iconEl) iconEl.innerText = lockByOther ? "lock" : "lock_open";
+        if (textEl) {
+            if (lockByOther) {
+                textEl.innerHTML = `Modo solo lectura · El proyecto está siendo editado por <strong>${lockByOther.userName || 'otro usuario'}</strong>`;
+            } else {
+                textEl.innerHTML = `Modo lectura · Haz clic en <strong>"Editar"</strong> para modificar este proyecto`;
+            }
+        }
     }
 }
 window.updateOperacionesDetailEditUI = updateOperacionesDetailEditUI;
@@ -15419,6 +15495,9 @@ function saveEditingOperacionesProject() {
         window.syncOperacionesToCloud(true);
     }
 
+    // Al guardar exitosamente, liberar el bloqueo exclusivo para que otros usuarios puedan editar
+    releaseOperacionesProjectLock(p);
+
     updateGenerarProyectoButton(p);
     updateOperacionesDetailEditUI();
 
@@ -15498,12 +15577,11 @@ function openOperacionesDetail(projectId, clickTimestamp = null) {
                     return;
                 }
             } else {
-                // Es mi propio bloqueo de antes del refresh; renovar silenciosamente
                 claimOperacionesProjectLock(p, clickTimestamp !== null ? clickTimestamp : Date.now());
             }
         }
 
-        // Si teníamos otro proyecto bloqueado previamente, liberarlo antes de abrir el nuevo
+        // Si teníamos otro proyecto bloqueado previamente por nosotros, liberarlo
         if (appState.activeOperacionesProjectId && normalizeOperacionesProjectKey(appState.activeOperacionesProjectId) !== normalizeOperacionesProjectKey(p)) {
             releaseOperacionesProjectLock(appState.activeOperacionesProjectId);
         }
@@ -15514,11 +15592,10 @@ function openOperacionesDetail(projectId, clickTimestamp = null) {
             localStorage.removeItem('rp_active_operaciones_project_id');
         } catch(e) {}
 
-        // 2. Reclamar bloqueo exclusivo para este proyecto con timestamp exacto del clic
+        // Registrar timestamp de apertura para control de concurrencia
         claimOperacionesProjectLock(p, clickTimestamp !== null ? clickTimestamp : Date.now());
 
-        // 3. Al abrir un proyecto existente, entra en modo lectura hasta que el usuario dé clic en "Editar".
-        // (Si es un proyecto nuevo en borrador recién creado con "+ Nuevo proyecto", guardamos su snapshot igualmente)
+        // Abrir siempre en modo lectura. Solo se edita si el usuario hace clic en "Editar".
         appState.isEditingOperacionesDetail = false;
         appState._operacionesDetailSnapshot = JSON.parse(JSON.stringify(p));
 
@@ -15761,6 +15838,9 @@ function renderStep1View(p) {
 function closeOperacionesDetail(options = {}) {
     window.closeOperacionesDetail = closeOperacionesDetail;
     const prevActiveId = appState.activeOperacionesProjectId || appState._myActiveProjectLock?.projectId;
+    const activeP = (typeof getActiveOperacionesProject === 'function')
+        ? getActiveOperacionesProject()
+        : (appState.operacionesProyectos || []).find(x => x && (x.id === prevActiveId || x.consecutivo === prevActiveId || x.numProyecto === prevActiveId || x.numConsecutivo === prevActiveId));
 
     // Si estaba en modo "Editar" y NO dio clic en "Guardar", descartar cambios restaurando el snapshot original
     if (appState.isEditingOperacionesDetail && appState._operacionesDetailSnapshot) {
@@ -15799,10 +15879,15 @@ function closeOperacionesDetail(options = {}) {
         } catch (e) {}
     }
 
-    // Liberar el bloqueo exclusivo del proyecto al dar clic en "Regresar a operaciones"
+    // Liberar cualquier bloqueo del proyecto al dar clic en "Regresar a operaciones"
     if (!options || !options.skipRelease) {
-        if (prevActiveId) {
+        if (activeP) {
+            releaseOperacionesProjectLock(activeP);
+        } else if (prevActiveId) {
             releaseOperacionesProjectLock(prevActiveId);
+        }
+        if (appState._myActiveProjectLock) {
+            releaseOperacionesProjectLock(appState._myActiveProjectLock.projectId);
         }
     }
     appState.activeOperacionesProjectId = null;
