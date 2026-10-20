@@ -2445,6 +2445,15 @@ select option {
     background: rgba(37, 99, 235, 0.08);
 }
 
+.btn-add-chip:disabled,
+.btn-add-chip.disabled-chip-btn {
+    opacity: 0.45;
+    cursor: not-allowed;
+    border-color: #94A3B8;
+    color: #64748B;
+    background: transparent !important;
+}
+
 /* Estatus Filters in Proveedores (P = Por pagar, C = Por cobrar) */
 .proveedor-status-filter-group {
     display: inline-flex;

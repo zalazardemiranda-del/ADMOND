@@ -1338,6 +1338,136 @@ test("17. Visualización: Reflejo en tiempo real de Gastos Indirectos y Nóminas
   await expect(kpiNominas).toContainText("$33,500.00");
 });
 
+test("18. Control de Proveedores: Añadir o quitar proveedores requiere 'Editar', solo persiste al dar 'Guardar', y bloquea a otros usuarios", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  // 1. Ir a la ficha de Proveedores
+  await page.evaluate(() => {
+    window.switchAdminFicha('proveedores');
+  });
+  await page.waitForTimeout(200);
+
+  const btnEdit = page.locator("#btn-edit-proveedores");
+  const btnSave = page.locator("#btn-save-proveedores");
+  const btnAddChip = page.locator("#btn-add-proveedor-chip");
+  const bannerProv = page.locator("#proveedores-lock-banner");
+
+  // 2. En modo lectura, no se muestran los botones de edición ni eliminación en los chips
+  const deleteButtonsCount = await page.locator(".proveedor-chip .chip-delete-btn").count();
+  expect(deleteButtonsCount).toBe(0);
+
+  // 3. Intentar añadir proveedor sin haber dado clic en 'Editar' muestra alerta y no añade
+  let alertMsg = '';
+  page.on('dialog', async dialog => {
+    alertMsg = dialog.message();
+    await dialog.dismiss();
+  });
+
+  await page.evaluate(() => {
+    window.promptAddProveedor();
+  });
+  expect(alertMsg).toContain("Para añadir o quitar proveedores primero debes hacer clic en el botón 'Editar'");
+
+  // 4. Activar modo edición dando clic en 'Editar'
+  await btnEdit.click();
+  await page.waitForTimeout(200);
+
+  await expect(btnEdit).toContainText("Editando...");
+  await expect(btnSave).toBeEnabled();
+
+  // En modo edición ahora sí se muestran los botones de editar y eliminar en los chips
+  const deleteButtonsInEdit = await page.locator(".proveedor-chip .chip-delete-btn").count();
+  expect(deleteButtonsInEdit).toBeGreaterThan(0);
+
+  // 5. Añadir un proveedor mientras se edita (en memoria)
+  await page.evaluate(() => {
+    window.prompt = () => "PROV TEST CONCURRENCY";
+    window.promptAddProveedor();
+  });
+  await page.waitForTimeout(200);
+
+  // Comprobar que en memoria está presente pero en localStorage NO se ha guardado aún
+  const inMemoryHasIt = await page.evaluate(() => window.appState.proveedorNamesList.includes("PROV TEST CONCURRENCY"));
+  expect(inMemoryHasIt).toBe(true);
+
+  const inStorageBeforeSave = await page.evaluate(() => {
+    const raw = localStorage.getItem('rp_proveedor_names');
+    return raw ? JSON.parse(raw).includes("PROV TEST CONCURRENCY") : false;
+  });
+  expect(inStorageBeforeSave).toBe(false);
+
+  // 6. Probar que si se cancela la edición, se descartan los cambios y no se guarda
+  await page.evaluate(() => {
+    window.cancelEditingProveedores();
+  });
+  await page.waitForTimeout(200);
+
+  const inMemoryAfterCancel = await page.evaluate(() => window.appState.proveedorNamesList.includes("PROV TEST CONCURRENCY"));
+  expect(inMemoryAfterCancel).toBe(false);
+
+  // 7. Volver a entrar a editar, añadir proveedor y dar clic en 'Guardar'
+  await btnEdit.click();
+  await page.waitForTimeout(200);
+
+  await page.evaluate(() => {
+    window.prompt = () => "PROV TEST PERSISTIDO";
+    window.promptAddProveedor();
+  });
+  await page.waitForTimeout(200);
+
+  await btnSave.click();
+  await page.waitForTimeout(300);
+
+  // Comprobar que al guardar, AHORA SÍ persiste en localStorage y se libera la edición
+  const inStorageAfterSave = await page.evaluate(() => {
+    const raw = localStorage.getItem('rp_proveedor_names');
+    return raw ? JSON.parse(raw).includes("PROV TEST PERSISTIDO") : false;
+  });
+  expect(inStorageAfterSave).toBe(true);
+  await expect(btnEdit).toContainText("Editar");
+  await expect(btnSave).toBeDisabled();
+
+  // 8. Simular que otro usuario está editando: tabla y botón de añadir quedan bloqueados
+  await page.evaluate(() => {
+    window.appState.proveedoresLockedBy = {
+      isLocked: true,
+      userId: 'user-maria-editor',
+      userName: 'Maria Gomez',
+      timestamp: Date.now()
+    };
+    window.updateProveedoresEditButtonsUI();
+    window.renderProveedorChips();
+  });
+  await page.waitForTimeout(100);
+
+  await expect(bannerProv).toBeVisible();
+  await expect(bannerProv).toContainText("Esta tabla está siendo editada por Maria Gomez");
+  await expect(btnEdit).toContainText("Bloqueado");
+  await expect(btnEdit).toBeDisabled();
+  await expect(btnAddChip).toBeDisabled();
+
+  // Intentar añadir en estado bloqueado por otro usuario alerta sobre el bloqueo
+  alertMsg = '';
+  await page.evaluate(() => {
+    window.promptAddProveedor();
+  });
+  expect(alertMsg).toContain("Esta tabla está siendo editada por Maria Gomez");
+
+  // Al desbloquear por el otro usuario, se restaura la funcionalidad
+  await page.evaluate(() => {
+    window.appState.proveedoresLockedBy = null;
+    window.updateProveedoresEditButtonsUI();
+    window.renderProveedorChips();
+  });
+  await page.waitForTimeout(100);
+
+  await expect(bannerProv).toBeHidden();
+  await expect(btnEdit).toContainText("Editar");
+  await expect(btnEdit).toBeEnabled();
+  await expect(btnAddChip).toBeEnabled();
+});
+
+
 
 
 
