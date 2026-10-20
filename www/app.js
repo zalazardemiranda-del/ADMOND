@@ -2314,39 +2314,16 @@ function renderNominas() {
     }
     
     list.forEach((item, index) => {
-        let nominaVal = 0;
-        if (item.nomina !== undefined && item.nomina !== null && item.nomina !== "" && !isNaN(item.nomina)) {
-            nominaVal = Number(item.nomina);
+        let totalVal = 0;
+        if (item.total !== undefined && item.total !== null && item.total !== "" && !isNaN(item.total) && Number(item.total) !== 0) {
+            totalVal = Number(item.total);
+        } else if (item.nomina !== undefined && item.nomina !== null && item.nomina !== "" && !isNaN(item.nomina)) {
+            totalVal = Number(item.nomina);
         } else if (item.servicio !== undefined && item.servicio !== null && !isNaN(item.servicio) && String(item.servicio).trim() !== "" && String(item.servicio).toLowerCase() !== "nomina") {
-            nominaVal = Number(item.servicio);
-        } else if (item.total && Number(item.total) > 0) {
-            nominaVal = Number(item.total);
-            item.nomina = nominaVal;
+            totalVal = Number(item.servicio);
         }
-        item.nomina = nominaVal;
-
-        const ivaPct = item.ivaPct !== undefined && item.ivaPct !== null && item.ivaPct !== '' ? Number(item.ivaPct) : 0;
-        const retPct = item.retPct !== undefined && item.retPct !== null && item.retPct !== '' ? Number(item.retPct) : (item.ret4Pct !== undefined ? Number(item.ret4Pct) : 0);
-        const retIsrPct = item.retIsrPct !== undefined && item.retIsrPct !== null && item.retIsrPct !== '' ? Number(item.retIsrPct) : 0;
-
-        // Cálculo acumulativo secuencial según la fórmula requerida
-        const ivaAmount = nominaVal * (ivaPct / 100);
-        const subtotal1 = nominaVal + ivaAmount;
-        const retAmount = subtotal1 * (retPct / 100);
-        const subtotal2 = subtotal1 + retAmount;
-        const retIsrAmount = subtotal2 * (retIsrPct / 100);
-        const calculatedTotal = (ivaPct === 0 && retPct === 0 && retIsrPct === 0 && item.total && Number(item.total) > 0 && nominaVal === Number(item.total))
-            ? Number(item.total)
-            : Number((subtotal2 + retIsrAmount).toFixed(2));
-
-        item.ivaPct = ivaPct;
-        item.iva = Number(ivaAmount.toFixed(2));
-        item.retPct = retPct;
-        item.ret4Pct = retPct;
-        item.ret4 = Number(retAmount.toFixed(2));
-        item.retIsrPct = retIsrPct;
-        item.retIsr = Number(retIsrAmount.toFixed(2));
-        item.total = calculatedTotal;
+        item.nomina = totalVal;
+        item.total = totalVal;
 
         const tr = document.createElement("tr");
         tr.setAttribute("data-row-key", `nom_${index}`);
@@ -2357,39 +2334,15 @@ function renderNominas() {
                 <input type="text" id="nom-folio-input-${index}" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
             </td>
             <td onclick="handleNominaCellClick(${index}, 'nom-empleado-input-${index}')">
-                <input type="text" id="nom-empleado-input-${index}" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" placeholder="Empleado..." ${disabledAttr} style="font-weight: 700;">
+                <input type="text" id="nom-empleado-input-${index}" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" ${disabledAttr} style="font-weight: 700;">
             </td>
             <td onclick="handleNominaCellClick(${index}, 'nom-fecha-input-${index}')">
                 <input type="date" id="nom-fecha-input-${index}" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)" ${disabledAttr}>
             </td>
-            <td onclick="handleNominaCellClick(${index}, 'nom-nomina-input-${index}')">
+            <td onclick="handleNominaCellClick(${index}, 'nom-total-input-${index}')">
                 <div class="excel-currency-wrap">
                     <span class="currency-symbol">$</span>
-                    <input type="number" id="nom-nomina-input-${index}" class="excel-input number-input" value="${nominaVal || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 700;">
-                </div>
-            </td>
-            <td onclick="handleNominaCellClick(${index}, 'nom-iva-input-${index}')">
-                <div class="excel-percent-wrap">
-                    <input type="number" id="nom-iva-input-${index}" class="excel-input number-input" value="${ivaPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
-                    <span class="percent-symbol">%</span>
-                </div>
-            </td>
-            <td onclick="handleNominaCellClick(${index}, 'nom-ret4-input-${index}')">
-                <div class="excel-percent-wrap">
-                    <input type="number" id="nom-ret4-input-${index}" class="excel-input number-input" value="${retPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
-                    <span class="percent-symbol">%</span>
-                </div>
-            </td>
-            <td onclick="handleNominaCellClick(${index}, 'nom-retisr-input-${index}')">
-                <div class="excel-percent-wrap">
-                    <input type="number" id="nom-retisr-input-${index}" class="excel-input number-input" value="${retIsrPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
-                    <span class="percent-symbol">%</span>
-                </div>
-            </td>
-            <td>
-                <div class="excel-currency-wrap">
-                    <span class="currency-symbol">$</span>
-                    <input type="number" id="nom-total-input-${index}" class="excel-input number-input readonly" value="${calculatedTotal || 0}" step="any" readonly style="font-weight: 800; background: rgba(31, 78, 120, 0.06);">
+                    <input type="number" id="nom-total-input-${index}" class="excel-input number-input" value="${totalVal || 0}" step="any" oninput="updateNominaManualTotal(${index}, this.value)" placeholder="0.00" ${disabledAttr} style="font-weight: 800; background: rgba(31, 78, 120, 0.06);">
                 </div>
             </td>
         `;
@@ -2442,8 +2395,11 @@ function updateNominaCell(index, key, val) {
     const list = window.getActiveNominasList();
     if (list[index]) {
         list[index][key] = val;
-        if (key === 'nomina') {
-            list[index].servicio = val;
+        if (key === 'nomina' || key === 'total') {
+            const numVal = Number(val) || 0;
+            list[index].nomina = numVal;
+            list[index].servicio = numVal;
+            list[index].total = numVal;
         }
         // No guardar en localStorage ni nube hasta dar clic en "Guardar"
     }
@@ -2455,7 +2411,10 @@ function updateNominaManualTotal(index, val) {
     if (!appState.isEditingNominas) return;
     const list = window.getActiveNominasList();
     if (list[index]) {
-        list[index].total = Number(val) || 0;
+        const numVal = Number(val) || 0;
+        list[index].total = numVal;
+        list[index].nomina = numVal;
+        list[index].servicio = numVal;
         recalculateNominasTableTotals();
         renderVisualizacion();
     }
@@ -2541,10 +2500,6 @@ function recalculateNominasTableTotals() {
             <td>Total General</td>
             <td>Suma Calculada</td>
             <td></td>
-            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumNomina)}</td>
-            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumIva)}</td>
-            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumRet)}</td>
-            <td style="font-weight: 800; text-align: right;">${formatCurrency(sumRetIsr)}</td>
             <td style="font-weight: 800; text-align: right;">${formatCurrency(sumTotal)}</td>
         `;
     }
@@ -10324,11 +10279,42 @@ async function handleFirebaseLogin(event) {
                 errorEl.style.display = "block";
             }
         } else {
+            const emailLower = email.toLowerCase();
+            const deletedProfiles = (JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]') || []).map(e => String(e).toLowerCase());
+            let isRegisteredInSystem = !deletedProfiles.includes(emailLower);
+
+            if (isRegisteredInSystem && window.isFirebaseActive()) {
+                try {
+                    const { data: allProfs } = await client.from('profiles').select('*');
+                    if (Array.isArray(allProfs) && allProfs.length > 0) {
+                        const foundInSystem = allProfs.some(p => p && p.email && String(p.email).trim().toLowerCase() === emailLower);
+                        if (!foundInSystem) isRegisteredInSystem = false;
+                    }
+                } catch (e) {}
+            }
+
+            if (!isRegisteredInSystem) {
+                try {
+                    if (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.auth && window.FIREBASE_CONFIG.auth.currentUser) {
+                        await window.FIREBASE_CONFIG.auth.currentUser.delete();
+                    }
+                    await client.auth.signOut();
+                } catch (e) {}
+                if (errorEl) {
+                    errorEl.innerText = "Error: Este usuario no está dado de alta en el sistema y ha sido depurado de Firebase.";
+                    errorEl.style.display = "block";
+                }
+                return;
+            }
+
             if (data.user) {
                 data.user.password = password;
                 sessionStorage.setItem("rp_session_pass", password);
                 localStorage.setItem("rp_user_pass", password);
-                if (email) localStorage.setItem("rp_user_pass_" + email.toLowerCase(), password);
+                if (email) localStorage.setItem("rp_user_pass_" + emailLower, password);
+                try {
+                    await client.from('profiles').update({ password, updated_at: new Date().toISOString() }).eq('email', emailLower);
+                } catch (e) {}
             }
             await handleUserSession(data.user);
             openAuthModal(); // Refresh modal view to show logged-in info
@@ -10417,8 +10403,8 @@ async function handleFirebaseRegister(event) {
             }
             return;
         }
-        if (signUpRes && signUpRes.data && signUpRes.data.user && signUpRes.data.user.id) {
-            newId = signUpRes.data.user.id;
+        if (signUpRes && signUpRes.data && signUpRes.data.user && (signUpRes.data.user.id || signUpRes.data.user.uid)) {
+            newId = signUpRes.data.user.id || signUpRes.data.user.uid;
         }
 
         const newProfileObj = { id: newId, nombre, email, rol, departamento: depto, password };
@@ -10430,6 +10416,7 @@ async function handleFirebaseRegister(event) {
 
         // 2. Guardar localmente solo tras validación en Firebase Auth
         localStorage.setItem('rp_user_profile_name_' + emailLower, nombre);
+        localStorage.setItem('rp_user_pass_' + emailLower, password);
         const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
         const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
         if (existingIdx >= 0) {
@@ -10446,6 +10433,7 @@ async function handleFirebaseRegister(event) {
                 email,
                 rol,
                 departamento: depto,
+                password,
                 updated_at: new Date().toISOString()
             });
         } catch (e) {
@@ -10508,11 +10496,15 @@ async function handleDeleteProfile(email, nombre) {
     window.handleDeleteProfile = handleDeleteProfile;
     if (!email) return;
     const targetName = nombre || email;
-    const confirmDelete = confirm(`¿Estás seguro de que deseas eliminar el perfil de "${targetName}" del sistema?`);
+    const confirmDelete = confirm(`¿Estás seguro de que deseas eliminar el perfil de "${targetName}" del sistema y de Firebase?`);
     if (!confirmDelete) return;
 
     const emailLower = email.toLowerCase();
     let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
+    const cachedMatch = (window.cachedProfilesList || []).find(p => p && p.email && p.email.toLowerCase() === emailLower);
+    const localMatch = localProfiles.find(p => p && p.email && p.email.toLowerCase() === emailLower);
+    let targetPassword = (cachedMatch && cachedMatch.password) || (localMatch && localMatch.password) || localStorage.getItem('rp_user_pass_' + emailLower) || '';
+
     localProfiles = localProfiles.filter(p => p.email && p.email.toLowerCase() !== emailLower);
     localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
 
@@ -10526,6 +10518,18 @@ async function handleDeleteProfile(email, nombre) {
     if (window.isFirebaseActive()) {
         try {
             const client = window.FIREBASE_CONFIG.client;
+            if (!targetPassword && window.FIREBASE_CONFIG.db) {
+                try {
+                    const snapPass = await window.FIREBASE_CONFIG.db.collection('profiles').where('email', '==', email).get();
+                    snapPass.forEach(doc => {
+                        const d = doc.data();
+                        if (d && d.password && !targetPassword) targetPassword = d.password;
+                    });
+                } catch (e) {}
+            }
+            if (client.auth && typeof client.auth.deleteUserAccount === 'function') {
+                await client.auth.deleteUserAccount(email, targetPassword);
+            }
             await client.from('profiles').delete().eq('email', email);
             if (window.FIREBASE_CONFIG.db) {
                 const snap = await window.FIREBASE_CONFIG.db.collection('profiles').where('email', '==', email).get();
@@ -10746,10 +10750,39 @@ async function handleGlobalLoginSubmit(event) {
                 return;
             }
             
+            const emailLower = email.toLowerCase();
+            const deletedProfiles = (JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]') || []).map(e => String(e).toLowerCase());
+            let isRegisteredInSystem = !deletedProfiles.includes(emailLower);
+
+            if (isRegisteredInSystem && window.isFirebaseActive()) {
+                try {
+                    const { data: allProfs } = await client.from('profiles').select('*');
+                    if (Array.isArray(allProfs) && allProfs.length > 0) {
+                        const foundInSystem = allProfs.some(p => p && p.email && String(p.email).trim().toLowerCase() === emailLower);
+                        if (!foundInSystem) isRegisteredInSystem = false;
+                    }
+                } catch (e) {}
+            }
+
+            if (!isRegisteredInSystem) {
+                try {
+                    if (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.auth && window.FIREBASE_CONFIG.auth.currentUser) {
+                        await window.FIREBASE_CONFIG.auth.currentUser.delete();
+                    }
+                    await client.auth.signOut();
+                } catch (e) {}
+                handleFailedLoginAttempt("Este usuario no está dado de alta en el sistema (fue depurado de Firebase).");
+                return;
+            }
+
             if (data.user) {
                 data.user.password = password;
                 sessionStorage.setItem("rp_session_pass", password);
                 localStorage.setItem("rp_user_pass", password);
+                if (email) localStorage.setItem("rp_user_pass_" + emailLower, password);
+                try {
+                    await client.from('profiles').update({ password, updated_at: new Date().toISOString() }).eq('email', emailLower);
+                } catch (e) {}
             }
             clearLoginFailures();
             await handleUserSession(data.user);

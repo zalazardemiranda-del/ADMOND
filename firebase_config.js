@@ -642,7 +642,17 @@
                             }
                         }
                         try {
-                            const res = await targetAuth.createUserWithEmailAndPassword(email, password);
+                            let res = null;
+                            try {
+                                res = await targetAuth.createUserWithEmailAndPassword(email, password);
+                            } catch (createErr) {
+                                // Si el correo ya existía en Firebase Auth pero no en el sistema, vincularlo
+                                if (createErr && (createErr.code === 'auth/email-already-in-use' || String(createErr.message || '').includes('email-already-in-use'))) {
+                                    res = await targetAuth.signInWithEmailAndPassword(email, password);
+                                } else {
+                                    throw createErr;
+                                }
+                            }
                             if (secondaryApp) {
                                 try { await secondaryApp.delete(); } catch (e) {}
                             }
@@ -652,7 +662,8 @@
                                 email: email,
                                 nombre: metadata?.nombre || email.split('@')[0],
                                 rol: metadata?.rol || 'colaborador',
-                                departamento: metadata?.departamento || 'Operaciones'
+                                departamento: metadata?.departamento || 'Operaciones',
+                                password: password
                             }, metadata);
                             if (db) {
                                 await db.collection('profiles').doc(user.uid).set(profile, { merge: true });
@@ -666,6 +677,43 @@
                         }
                     }
                     return { data: { user: { email: email, id: 'fb_' + Date.now() } }, error: null };
+                },
+                deleteUserAccount: async function(email, password) {
+                    if (!email || !window.firebase || typeof window.firebase.initializeApp !== 'function') {
+                        return { deleted: false, error: 'Firebase SDK no disponible' };
+                    }
+                    let secondaryApp = null;
+                    try {
+                        if (password) {
+                            secondaryApp = window.firebase.initializeApp({
+                                apiKey: window.FIREBASE_CONFIG.apiKey,
+                                authDomain: window.FIREBASE_CONFIG.authDomain,
+                                projectId: window.FIREBASE_CONFIG.projectId,
+                                storageBucket: window.FIREBASE_CONFIG.storageBucket,
+                                messagingSenderId: window.FIREBASE_CONFIG.messagingSenderId,
+                                appId: window.FIREBASE_CONFIG.appId
+                            }, 'DeleteUserApp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4));
+                            const secAuth = secondaryApp.auth();
+                            const res = await secAuth.signInWithEmailAndPassword(email, password);
+                            if (res && res.user && typeof res.user.delete === 'function') {
+                                await res.user.delete();
+                                try { await secondaryApp.delete(); } catch (e) {}
+                                return { deleted: true, error: null };
+                            }
+                        } else if (auth && auth.currentUser && String(auth.currentUser.email || '').toLowerCase() === String(email).toLowerCase()) {
+                            await auth.currentUser.delete();
+                            return { deleted: true, error: null };
+                        }
+                    } catch (err) {
+                        if (secondaryApp) {
+                            try { await secondaryApp.delete(); } catch (e) {}
+                        }
+                        return { deleted: false, error: err.message || String(err) };
+                    }
+                    if (secondaryApp) {
+                        try { await secondaryApp.delete(); } catch (e) {}
+                    }
+                    return { deleted: false, error: null };
                 },
                 signOut: async function() {
                     if (auth && typeof auth.signOut === 'function') {
