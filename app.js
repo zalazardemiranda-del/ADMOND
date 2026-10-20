@@ -554,42 +554,10 @@ const runInitialAppSetup = async () => {
         }
     }
     
-    // Garantizar que las credenciales locales tengan roles y nombres válidos y eliminar perfiles falsos
+    // Limpiar residuos de perfiles locales no registrados en Firebase
     try {
         localStorage.removeItem('rp_user_profile_name_zalazardemiranda@gmail.com');
-        const rawInfoCustom = localStorage.getItem('rp_user_profile_name_info@rodipack.com.mx');
-        if (rawInfoCustom && rawInfoCustom.trim().toLowerCase() === 'info') {
-            localStorage.setItem('rp_user_profile_name_info@rodipack.com.mx', 'Roberto Miranda');
-        }
-        let localProfilesInit = JSON.parse(localStorage.getItem('rp_local_profiles'));
-        if (Array.isArray(localProfilesInit)) {
-            const fakeEmails = new Set(['zalazardemiranda@gmail.com', 'jennifer@rodipack.online', 'diego.miranda@rodipack.com']);
-            const fakeNamesSet = new Set(['roberto miranda perez', 'roberto miranda pérez', 'manuel morales', 'sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
-            const cleanedLocal = localProfilesInit.filter(p => {
-                if (!p || !p.email) return false;
-                const e = String(p.email).trim().toLowerCase();
-                const n = String(p.nombre || '').trim().toLowerCase();
-                if (fakeEmails.has(e) || fakeNamesSet.has(n)) return false;
-                return true;
-            });
-            cleanedLocal.forEach(p => {
-                const e = p.email.toLowerCase();
-                if (e === 'diego@rodipack.com') {
-                    if (p.rol !== 'administrativo') p.rol = 'administrativo';
-                    if (p.nombre === 'Diego Miranda') p.nombre = 'Diego';
-                }
-                if (e === 'info@rodipack.com.mx' && (!p.nombre || p.nombre.trim().toLowerCase() === 'info')) {
-                    p.nombre = localStorage.getItem('rp_user_profile_name_info@rodipack.com.mx') || 'Roberto Miranda';
-                }
-                const savedCustom = localStorage.getItem('rp_user_profile_name_' + e);
-                if (savedCustom && !(e === 'info@rodipack.com.mx' && savedCustom.trim().toLowerCase() === 'info')) {
-                    if (p.nombre !== savedCustom) {
-                        p.nombre = savedCustom;
-                    }
-                }
-            });
-            localStorage.setItem('rp_local_profiles', JSON.stringify(cleanedLocal));
-        }
+        localStorage.removeItem('rp_custom_user_nombre');
     } catch (e) {}
 
     // Restaurar usuario en sesión si la sesión está activa y es válida
@@ -598,38 +566,11 @@ const runInitialAppSetup = async () => {
     if (isSessionActive && storedUser) {
         try {
             appState.currentUser = JSON.parse(storedUser);
-            if (!appState.currentUser || !appState.currentUser.email) {
+            if (!appState.currentUser || !appState.currentUser.email || String(appState.currentUser.email).toLowerCase() === 'zalazardemiranda@gmail.com') {
                 appState.currentUser = null;
                 isSessionActive = false;
                 localStorage.setItem("rp_session_active", "false");
                 localStorage.removeItem("rp_logged_user");
-            } else {
-                const userEmailBoot = (appState.currentUser.email || '').toLowerCase();
-                let savedCustomBoot = localStorage.getItem('rp_user_profile_name_' + userEmailBoot);
-                if (userEmailBoot === 'info@rodipack.com.mx' && (!savedCustomBoot || savedCustomBoot.trim().toLowerCase() === 'info')) {
-                    if (!appState.currentUser.nombre || appState.currentUser.nombre.trim().toLowerCase() === 'info') {
-                        savedCustomBoot = 'Roberto Miranda';
-                        localStorage.setItem('rp_user_profile_name_info@rodipack.com.mx', savedCustomBoot);
-                    } else {
-                        savedCustomBoot = appState.currentUser.nombre;
-                        localStorage.setItem('rp_user_profile_name_info@rodipack.com.mx', savedCustomBoot);
-                    }
-                }
-                if (savedCustomBoot) {
-                    if (appState.currentUser.nombre !== savedCustomBoot) {
-                        appState.currentUser.nombre = savedCustomBoot;
-                        localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
-                    }
-                }
-                const isDiego = (
-                    (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
-                    (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('diego'))
-                );
-                if (isDiego) {
-                    appState.currentUser.rol = 'administrativo';
-                    localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
-                    localStorage.setItem("rp_current_role", 'administrativo');
-                }
             }
         } catch (e) {
             console.warn("Error parsing stored user session:", e);
@@ -8069,22 +8010,6 @@ function getAvailableAssignees() {
     const seenEmails = new Set();
     const seenNames = new Set();
 
-    const fakeEmails = new Set(['zalazardemiranda@gmail.com', 'jennifer@rodipack.online', 'diego.miranda@rodipack.com']);
-    const fakeNames = new Set([
-        'roberto miranda perez',
-        'roberto miranda pérez',
-        'manuel morales',
-        'sofía castro',
-        'sofia castro',
-        'carlos ruiz',
-        'juan pérez',
-        'juan perez',
-        'maría gómez',
-        'maria gomez',
-        'gerente principal',
-        'sin asignar'
-    ]);
-
     let deletedProfiles = [];
     try {
         deletedProfiles = (JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]') || []).map(e => String(e).toLowerCase());
@@ -8093,65 +8018,41 @@ function getAvailableAssignees() {
     }
     const deletedEmails = new Set(deletedProfiles);
 
-    // 1. Usuario actual en sesión ("Tú / Asignarme a mí") destacado en 1er lugar
+    // Obtener únicamente los perfiles registrados en Firebase (profiles)
+    const firebaseProfiles = (window.cachedProfilesList && window.cachedProfilesList.length > 0)
+        ? window.cachedProfilesList
+        : (window.cloudProfilesCache || []);
+
     const current = appState.currentUser;
-    if (current && (current.nombre || current.email)) {
-        const curEmail = (current.email || '').toLowerCase().trim();
-        let selfName = (current.nombre || (current.email ? current.email.split('@')[0] : 'Mi Usuario')).trim();
-        if (selfName.toLowerCase() === 'roberto miranda perez' || selfName.toLowerCase() === 'roberto miranda pérez' || (curEmail === 'info@rodipack.com.mx' && selfName.toLowerCase() === 'info')) {
-            selfName = 'Roberto Miranda';
-        }
-        if (!fakeNames.has(selfName.toLowerCase())) {
+    const curEmail = current && current.email ? String(current.email).toLowerCase().trim() : '';
+
+    // 1. Si el usuario actual en sesión está registrado en Firebase, colocarlo en 1er lugar ("Tú")
+    if (curEmail) {
+        const selfMatch = firebaseProfiles.find(p => p && p.email && String(p.email).trim().toLowerCase() === curEmail);
+        if (selfMatch && !deletedEmails.has(curEmail)) {
+            const selfName = (selfMatch.nombre || curEmail.split('@')[0]).trim();
             list.push({
-                id: current.id || 'self-user',
+                id: selfMatch.id || current.id || 'self-user',
                 nombre: selfName,
-                email: current.email || '',
-                rol: current.rol || appState.currentRole || 'gerente',
-                departamento: current.departamento || 'General',
+                email: selfMatch.email,
+                rol: selfMatch.rol || current.rol || 'gerente',
+                departamento: selfMatch.departamento || current.departamento || 'General',
                 isSelf: true
             });
-            if (curEmail) seenEmails.add(curEmail);
+            seenEmails.add(curEmail);
             if (selfName) seenNames.add(selfName.toLowerCase());
         }
     }
 
-    // 2. Equipo corporativo real de Rodipack
-    const defaultTeam = [
-        { nombre: "Roberto Miranda", email: "info@rodipack.com.mx", rol: "gerente", departamento: "IT" },
-        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "Administración" },
-        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas" },
-        { nombre: "Diego", email: "diego@rodipack.com", rol: "administrativo", departamento: "Logística" }
-    ];
-
-    // 3. Colaboradores registrados en el sistema, nube y almacenamiento local
-    let localProfilesList = [];
-    try {
-        localProfilesList = JSON.parse(localStorage.getItem('rp_local_profiles') || '[]');
-    } catch (e) {
-        localProfilesList = [];
-    }
-
-    const allProfiles = [
-        ...(window.cachedProfilesList || []),
-        ...(window.cloudProfilesCache || []),
-        ...localProfilesList,
-        ...defaultTeam
-    ];
-
-    allProfiles.forEach(p => {
+    // 2. Resto de usuarios registrados en Firebase
+    firebaseProfiles.forEach(p => {
         if (!p || !p.email) return;
-        const pEmail = (p.email || '').trim().toLowerCase();
-        if (!pEmail || fakeEmails.has(pEmail) || deletedEmails.has(pEmail)) return;
+        const pEmail = String(p.email).trim().toLowerCase();
+        if (!pEmail || deletedEmails.has(pEmail)) return;
 
-        let pName = (p.nombre || pEmail.split('@')[0]).trim();
-        if (pEmail === 'diego@rodipack.com' && pName.toLowerCase() === 'diego miranda') {
-            pName = 'Diego';
-        }
-        if (pEmail === 'info@rodipack.com.mx' && (!pName || pName.toLowerCase() === 'info')) {
-            pName = 'Roberto Miranda';
-        }
+        const pName = (p.nombre || pEmail.split('@')[0]).trim();
         const nameLower = pName.toLowerCase();
-        if (!nameLower || fakeNames.has(nameLower)) return;
+        if (!nameLower) return;
 
         if (seenEmails.has(pEmail) || seenNames.has(nameLower)) return;
         seenEmails.add(pEmail);
@@ -8161,7 +8062,7 @@ function getAvailableAssignees() {
             id: p.id || ('profile-' + list.length),
             nombre: pName,
             email: p.email || '',
-            rol: p.rol || 'colaborador',
+            rol: p.rol || 'administrador',
             departamento: p.departamento || 'Operaciones',
             isSelf: false
         });
@@ -8455,12 +8356,7 @@ async function initAuthAndRealtime() {
             await handleUserSession(session.user);
         } else if (isSessionActive && storedUser && appState.currentUser) {
             try {
-                if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
-                    appState.currentUser.rol = 'administrativo';
-                }
-                setRole(appState.currentUser?.rol || 'gerente');
-                updateUserSessionUI();
-                updateCloudStatusUI(true, appState.currentUser);
+                await handleUserSession(appState.currentUser);
             } catch (e) {}
         } else {
             appState.currentUser = null;
@@ -8486,12 +8382,7 @@ async function initAuthAndRealtime() {
                 await handleUserSession(session.user);
             } else if (active && localUser && appState.currentUser) {
                 try {
-                    if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
-                        appState.currentUser.rol = 'administrativo';
-                    }
-                    setRole(appState.currentUser?.rol || 'gerente');
-                    updateUserSessionUI();
-                    updateCloudStatusUI(true, appState.currentUser);
+                    await handleUserSession(appState.currentUser);
                 } catch (e) {}
             } else {
                 appState.currentUser = null;
@@ -8548,74 +8439,34 @@ async function handleUserSession(user) {
             profile = deduped[0] || candidates[0];
         }
 
-        // Cargar datos personalizados locales (aislados por correo para evitar contaminar otros usuarios)
-        const isMasterAdminEmail = (userEmail === 'admin@rodipack.com' || userEmail === 'zalazardemiranda@gmail.com');
         const emailPrefix = userEmail ? userEmail.split('@')[0] : '';
-        let savedCustomName = (userEmail ? localStorage.getItem('rp_user_profile_name_' + userEmail) : null) ||
-            (isMasterAdminEmail ? localStorage.getItem('rp_custom_user_nombre') : null);
-        if (savedCustomName && emailPrefix && savedCustomName.trim().toLowerCase() === emailPrefix.toLowerCase()) {
-            savedCustomName = null;
-        }
         const savedCustomPhone = userEmail ? localStorage.getItem('rp_user_profile_phone_' + userEmail) : null;
-        let localLoggedUser = null;
-        try {
-            const rawStored = localStorage.getItem('rp_logged_user');
-            if (rawStored) localLoggedUser = JSON.parse(rawStored);
-        } catch (e) {}
-
-        let localProfileMatch = null;
-        try {
-            const allLocal = JSON.parse(localStorage.getItem('rp_local_profiles') || '[]');
-            localProfileMatch = allLocal.find(p => p.email && p.email.toLowerCase() === userEmail);
-        } catch (e) {}
-
-        const fallbackDefaultName = (userEmail === 'diego@rodipack.com')
-            ? 'Diego Miranda'
-            : (userEmail === 'info@rodipack.com.mx'
-                ? 'Roberto Miranda'
-                : (localProfileMatch?.nombre || emailPrefix || 'Usuario'));
 
         if (!profile) {
-            // Profile fallback
             profile = {
                 id: userId,
                 email: user.email,
-                nombre: savedCustomName || localProfileMatch?.nombre || localLoggedUser?.nombre || user.displayName || user.user_metadata?.nombre || fallbackDefaultName,
-                telefono: savedCustomPhone || localProfileMatch?.telefono || localLoggedUser?.telefono || '',
-                rol: localProfileMatch?.rol || user.user_metadata?.rol || localLoggedUser?.rol || (userEmail === 'diego@rodipack.com' ? 'administrativo' : 'gerente'),
-                departamento: localProfileMatch?.departamento || user.user_metadata?.departamento || localLoggedUser?.departamento || 'Administración'
+                nombre: user.displayName || user.user_metadata?.nombre || emailPrefix || 'Usuario',
+                telefono: savedCustomPhone || '',
+                rol: user.user_metadata?.rol || 'administrador',
+                departamento: user.user_metadata?.departamento || 'Administración'
             };
         } else {
             if (!profile.id && userId) profile.id = userId;
-            const remoteHasCustomName = profile.nombre && (!emailPrefix || profile.nombre.trim().toLowerCase() !== emailPrefix.toLowerCase());
-            if (savedCustomName) {
-                profile.nombre = savedCustomName;
-            } else if (remoteHasCustomName) {
-                localStorage.setItem('rp_user_profile_name_' + userEmail, profile.nombre);
-            } else if (localLoggedUser?.nombre && (!emailPrefix || localLoggedUser.nombre.trim().toLowerCase() !== emailPrefix.toLowerCase())) {
-                profile.nombre = localLoggedUser.nombre;
+            if (!profile.nombre) {
+                profile.nombre = user.displayName || user.user_metadata?.nombre || emailPrefix || 'Usuario';
             }
             if (savedCustomPhone && !profile.telefono) {
                 profile.telefono = savedCustomPhone;
-            } else if (localLoggedUser?.telefono && !profile.telefono) {
-                profile.telefono = localLoggedUser.telefono;
             }
         }
 
-        if (userEmail === 'info@rodipack.com.mx' && (!profile.nombre || profile.nombre.trim().toLowerCase() === 'info')) {
-            profile.nombre = savedCustomName || 'Roberto Miranda';
-        }
         if (profile.nombre && userEmail) {
             localStorage.setItem('rp_user_profile_name_' + userEmail, profile.nombre);
         }
 
-        // Garantizar rol de Gerente para el administrador y administrativo para Diego
-        if (profile.email && profile.email.toLowerCase() === 'zalazardemiranda@gmail.com') {
-            profile.rol = 'gerente';
-        } else if (profile.email && profile.email.toLowerCase() === 'diego@rodipack.com') {
-            profile.rol = 'administrativo';
-        } else if (!profile.rol) {
-            profile.rol = 'gerente';
+        if (!profile.rol) {
+            profile.rol = 'administrador';
         }
         
         appState.currentUser = profile;
@@ -9731,13 +9582,19 @@ async function fetchCloudData() {
     const client = window.SUPABASE_CONFIG.client;
     
     try {
-        // Cargar perfiles desde Supabase
+        // Cargar perfiles exclusivamente desde Firebase (profiles)
         const { data: profilesRaw } = await client.from('profiles').select('*');
         const profiles = dedupeProfilesByEmail(profilesRaw || []);
-        if (profiles && profiles.length > 0) {
-            cloudProfilesCache = profiles;
-            window.cloudProfilesCache = profiles;
-            updateAssigneeDropdown(profiles);
+        cloudProfilesCache = profiles;
+        window.cloudProfilesCache = profiles;
+        window.cachedProfilesList = profiles;
+        try {
+            localStorage.setItem('rp_local_profiles', JSON.stringify(profiles));
+            localStorage.setItem('rp_fb_col_profiles', JSON.stringify(profiles));
+        } catch (e) {}
+        updateAssigneeDropdown(profiles);
+        if (typeof loadProfilesList === 'function') {
+            await loadProfilesList();
         }
         
         // Sincronizar tareas
@@ -10154,30 +10011,8 @@ async function loadProfilesList() {
     window.loadProfilesList = loadProfilesList;
     const container = document.getElementById("profiles-list-container");
     
-    let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-    const deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
-    const fakeEmails = new Set(['zalazardemiranda@gmail.com', 'jennifer@rodipack.online', 'diego.miranda@rodipack.com']);
-    const fakeNames = new Set(['roberto miranda perez', 'roberto miranda pérez', 'manuel morales', 'sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
-
-    // Filtrar perfiles eliminados y falsos, y preservar nombres personalizados
-    localProfiles = localProfiles.filter(p => {
-        if (!p || !p.email) return false;
-        const e = String(p.email).trim().toLowerCase();
-        const n = String(p.nombre || '').trim().toLowerCase();
-        if (fakeEmails.has(e) || fakeNames.has(n)) return false;
-        if (deletedProfiles.includes(e)) return false;
-        return true;
-    }).map(p => {
-        const e = (p.email || '').toLowerCase();
-        const savedCustom = localStorage.getItem('rp_user_profile_name_' + e);
-        if (savedCustom && !(e === 'info@rodipack.com.mx' && savedCustom.trim().toLowerCase() === 'info') && !fakeNames.has(savedCustom.trim().toLowerCase())) {
-            p.nombre = savedCustom;
-        }
-        return p;
-    });
-    localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
-    
-    let mergedProfiles = [...localProfiles];
+    const deletedProfiles = (JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]') || []).map(e => String(e).toLowerCase());
+    let firebaseProfiles = [];
     
     if (window.isFirebaseActive()) {
         try {
@@ -10192,14 +10027,7 @@ async function loadProfilesList() {
                 for (const p of dbProfiles) {
                     if (!p || !p.email) continue;
                     const e = String(p.email).trim().toLowerCase();
-                    const n = String(p.nombre || '').trim().toLowerCase();
-                    if (fakeEmails.has(e) || fakeNames.has(n)) continue;
                     if (deletedProfiles.includes(e)) continue;
-
-                    const savedCustom = localStorage.getItem('rp_user_profile_name_' + e);
-                    if (savedCustom && !(e === 'info@rodipack.com.mx' && savedCustom.trim().toLowerCase() === 'info') && !fakeNames.has(savedCustom.trim().toLowerCase())) {
-                        p.nombre = savedCustom;
-                    }
                     cleanDbProfiles.push(p);
                 }
 
@@ -10220,42 +10048,45 @@ async function loadProfilesList() {
                         console.log(`🧹 Perfil duplicado unificado para ${k}`);
                     } catch (err) {}
                 }
-                mergedProfiles = dedupeProfilesByEmail([...localProfiles, ...cleanDbProfiles]);
+                firebaseProfiles = dedupeProfilesByEmail(cleanDbProfiles);
+                try {
+                    localStorage.setItem('rp_local_profiles', JSON.stringify(firebaseProfiles));
+                    localStorage.setItem('rp_fb_col_profiles', JSON.stringify(firebaseProfiles));
+                } catch (e) {}
             }
         } catch (err) {
             console.warn("Error loading profiles from Firebase:", err);
         }
     }
-    
-    // Unificar perfiles duplicados por correo y asegurar que prevalezcan nombres personalizados guardados
-    mergedProfiles = dedupeProfilesByEmail(mergedProfiles).map(p => {
-        if (!p || !p.email) return p;
-        const eLower = String(p.email).trim().toLowerCase();
-        const savedCustom = localStorage.getItem('rp_user_profile_name_' + eLower);
-        if (savedCustom && !(eLower === 'info@rodipack.com.mx' && savedCustom.trim().toLowerCase() === 'info') && !fakeNames.has(savedCustom.trim().toLowerCase())) {
-            p.nombre = savedCustom;
-        } else if (eLower === 'info@rodipack.com.mx' && (!p.nombre || p.nombre.trim().toLowerCase() === 'info')) {
-            p.nombre = 'Roberto Miranda';
-        }
-        return p;
-    });
 
-    window.cachedProfilesList = mergedProfiles;
+    window.cachedProfilesList = firebaseProfiles;
+    window.cloudProfilesCache = firebaseProfiles;
     if (typeof populateTaskUserFilterOptions === 'function') populateTaskUserFilterOptions();
 
     if (appState.currentUser && appState.currentUser.email) {
         const curEmail = appState.currentUser.email.toLowerCase();
-        const activeMatch = mergedProfiles.find(p => p && p.email && p.email.toLowerCase() === curEmail);
-        if (activeMatch && activeMatch.nombre && activeMatch.nombre !== appState.currentUser.nombre) {
-            appState.currentUser.nombre = activeMatch.nombre;
-            localStorage.setItem('rp_logged_user', JSON.stringify(appState.currentUser));
-            localStorage.setItem('rp_user_profile_name_' + curEmail, activeMatch.nombre);
-            if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
+        const activeMatch = firebaseProfiles.find(p => p && p.email && p.email.toLowerCase() === curEmail);
+        if (activeMatch) {
+            let changedSession = false;
+            if (activeMatch.nombre && activeMatch.nombre !== appState.currentUser.nombre) {
+                appState.currentUser.nombre = activeMatch.nombre;
+                changedSession = true;
+            }
+            if (activeMatch.rol && activeMatch.rol !== appState.currentUser.rol) {
+                appState.currentUser.rol = activeMatch.rol;
+                setRole(activeMatch.rol);
+                changedSession = true;
+            }
+            if (changedSession) {
+                localStorage.setItem('rp_logged_user', JSON.stringify(appState.currentUser));
+                localStorage.setItem('rp_user_profile_name_' + curEmail, appState.currentUser.nombre);
+                if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
+            }
         }
     }
     
     if (container) {
-        renderProfiles(mergedProfiles);
+        renderProfiles(firebaseProfiles);
     }
     
     function renderProfiles(list) {
@@ -10361,18 +10192,16 @@ async function handleFirebaseLogin(event) {
     
     if (errorEl) errorEl.style.display = "none";
     
-    const isDiego = email.toLowerCase() === 'diego@rodipack.com';
     const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
     const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
 
-    const doLocalOrDiegoLogin = async (client) => {
-
+    const doLocalLoginFallback = async () => {
         const userObj = {
-            id: (matchedProfile && matchedProfile.id) || (isDiego ? 'usr-diego-miranda' : `usr-${Date.now()}`),
+            id: (matchedProfile && matchedProfile.id) || `usr-${Date.now()}`,
             email: email,
-            nombre: isDiego ? 'Diego Miranda' : ((matchedProfile && matchedProfile.nombre) || email.split('@')[0]),
-            rol: isDiego ? 'administrativo' : ((matchedProfile && matchedProfile.rol) || 'colaborador'),
-            departamento: isDiego ? 'Administración' : ((matchedProfile && matchedProfile.departamento) || 'Operaciones'),
+            nombre: (matchedProfile && matchedProfile.nombre) || email.split('@')[0],
+            rol: (matchedProfile && matchedProfile.rol) || 'administrador',
+            departamento: (matchedProfile && matchedProfile.departamento) || 'Operaciones',
             password: password
         };
         appState.currentUser = userObj;
@@ -10391,11 +10220,11 @@ async function handleFirebaseLogin(event) {
 
     if (!window.isSupabaseActive()) {
         if (matchedProfile && matchedProfile.password === password) {
-            await doLocalOrDiegoLogin(null);
+            await doLocalLoginFallback();
             return;
         }
         if (errorEl) {
-            errorEl.innerText = "Error: Correo o contraseña incorrectos, o configura tu conexión a Supabase.";
+            errorEl.innerText = "Error: Correo o contraseña incorrectos.";
             errorEl.style.display = "block";
         }
         return;
@@ -10409,14 +10238,9 @@ async function handleFirebaseLogin(event) {
         const { data, error } = await client.auth.signInWithPassword({ email, password });
         
         if (error) {
-            if (matchedProfile && matchedProfile.password === password) {
-                await doLocalOrDiegoLogin(client);
-                return;
-            }
-
             if (errorEl) {
                 let userMsg = error.message;
-                if (userMsg.includes("Invalid login credentials")) {
+                if (userMsg.includes("Invalid login credentials") || userMsg.includes("invalid-credential") || userMsg.includes("wrong-password") || userMsg.includes("user-not-found")) {
                     userMsg = "Correo electrónico o contraseña incorrectos.";
                 }
                 errorEl.innerText = `Error: ${userMsg}`;
@@ -10434,10 +10258,6 @@ async function handleFirebaseLogin(event) {
             loadProfilesList();
         }
     } catch (err) {
-        if (matchedProfile && matchedProfile.password === password) {
-            await doLocalOrDiegoLogin(window.SUPABASE_CONFIG ? window.SUPABASE_CONFIG.client : null);
-            return;
-        }
         if (errorEl) {
             errorEl.innerText = `Error de conexión: ${err.message}`;
             errorEl.style.display = "block";
@@ -10834,85 +10654,13 @@ async function handleGlobalLoginSubmit(event) {
     if (errorEl) errorEl.style.display = "none";
     btnSubmit.disabled = true;
     btnSubmit.innerHTML = "<span class='material-symbols-outlined'>hourglass_empty</span> Validando...";
-    
-    const isDiego = email.toLowerCase() === 'diego@rodipack.com';
 
     try {
-
         if (window.isSupabaseActive()) {
             const client = window.SUPABASE_CONFIG.client;
             const { data, error } = await client.auth.signInWithPassword({ email, password });
             
             if (error) {
-
-                const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-                const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
-                
-                if (matchedProfile) {
-                    if (matchedProfile.password !== password) {
-                        handleFailedLoginAttempt("Contraseña incorrecta.");
-                        return;
-                    }
-                    
-                    const userObj = {
-                        id: matchedProfile.id || `usr-${Date.now()}`,
-                        email: matchedProfile.email,
-                        nombre: matchedProfile.nombre || 'Colaborador',
-                        rol: matchedProfile.rol || 'colaborador',
-                        departamento: matchedProfile.departamento || 'Operaciones',
-                        password: password
-                    };
-                    appState.currentUser = userObj;
-                    sessionStorage.setItem("rp_session_pass", password);
-                    localStorage.setItem("rp_user_pass", password);
-                    localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
-                    localStorage.setItem("rp_session_active", "true");
-                    localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
-                    setRole(userObj.rol);
-                    hideGlobalLoginOverlay();
-                    updateUserSessionUI();
-                    if (typeof openAuthModal === 'function') openAuthModal();
-                    return;
-                }
-
-                if (error.message && error.message.includes("Email not confirmed")) {
-                    console.log("Supabase credentials valid, bypassing pending email confirmation for user:", email);
-                    let profileData = null;
-                    try {
-                        const { data: prof } = await client.from('profiles').select('*').ilike('email', email).maybeSingle();
-                        if (prof) profileData = prof;
-                    } catch (pErr) {
-                        console.warn("Could not fetch profile on email confirmation bypass:", pErr);
-                    }
-                    
-                    const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
-                    const finalName = profileData?.nombre || matchedProfile?.nombre || email.split('@')[0];
-                    const finalRol = profileData?.rol || matchedProfile?.rol || 'colaborador';
-                    const finalDepto = profileData?.departamento || matchedProfile?.departamento || 'Operaciones';
-                    const finalId = profileData?.id || matchedProfile?.id || `usr-${Date.now()}`;
-                    
-                    const userObj = {
-                        id: finalId,
-                        email: email,
-                        nombre: finalName,
-                        rol: finalRol,
-                        departamento: finalDepto,
-                        password: password
-                    };
-                    
-                    appState.currentUser = userObj;
-                    sessionStorage.setItem("rp_session_pass", password);
-                    localStorage.setItem("rp_user_pass", password);
-                    localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
-                    localStorage.setItem("rp_session_active", "true");
-                    localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
-                    setRole(userObj.rol);
-                    hideGlobalLoginOverlay();
-                    updateUserSessionUI();
-                    if (typeof openAuthModal === 'function') openAuthModal();
-                    return;
-                }
-
                 let userMsg = error.message;
                 if (userMsg.includes("Invalid login credentials") || userMsg.includes("invalid-credential") || userMsg.includes("wrong-password") || userMsg.includes("user-not-found")) {
                     userMsg = "Correo electrónico o contraseña incorrectos.";
@@ -10939,11 +10687,11 @@ async function handleGlobalLoginSubmit(event) {
 
             const isManager = (roleSelect === 'gerente' || (matchedProfile && matchedProfile.rol === 'gerente'));
             const userObj = {
-                id: matchedProfile?.id || (isDiego ? 'usr-diego-miranda' : `usr-${Date.now()}`),
+                id: matchedProfile?.id || `usr-${Date.now()}`,
                 email: email,
-                nombre: isDiego ? 'Diego Miranda' : (matchedProfile?.nombre || (email ? email.split('@')[0] : 'Usuario')),
-                rol: isDiego ? 'administrativo' : (matchedProfile?.rol || (isManager ? 'gerente' : 'colaborador')),
-                departamento: isDiego ? 'Administración' : (matchedProfile?.departamento || 'Operaciones'),
+                nombre: matchedProfile?.nombre || (email ? email.split('@')[0] : 'Usuario'),
+                rol: matchedProfile?.rol || (isManager ? 'gerente' : 'administrador'),
+                departamento: matchedProfile?.departamento || 'Operaciones',
                 password: password || ''
             };
             appState.currentUser = userObj;
@@ -11029,7 +10777,7 @@ function openInteractiveResetModal() {
     resetCodeState.smsCode = Math.floor(100000 + Math.random() * 900000).toString();
     
     const emailInput = document.getElementById("myprofile-edit-email");
-    const userEmail = (emailInput && emailInput.value) ? emailInput.value : (appState.currentUser?.email || "zalazardemiranda@gmail.com");
+    const userEmail = (emailInput && emailInput.value) ? emailInput.value : (appState.currentUser?.email || "");
     
     const step1 = document.getElementById("reset-step-1");
     const step2 = document.getElementById("reset-step-2");
@@ -11232,11 +10980,12 @@ async function handleSaveMyProfile(event) {
     const phone = document.getElementById("myprofile-edit-phone").value.trim();
     const msgEl = document.getElementById("myprofile-update-msg");
     
-    const email = (appState.currentUser?.email || (window.firebase?.auth && firebase.auth().currentUser ? firebase.auth().currentUser.email : '') || 'zalazardemiranda@gmail.com').toLowerCase();
-    const uid = (window.firebase?.auth && firebase.auth().currentUser ? firebase.auth().currentUser.uid : '') || (appState.currentUser?.id) || 'usr_zalazardemiranda';
+    const email = (appState.currentUser?.email || (window.firebase?.auth && firebase.auth().currentUser ? firebase.auth().currentUser.email : '') || '').toLowerCase();
+    const uid = (window.firebase?.auth && firebase.auth().currentUser ? firebase.auth().currentUser.uid : '') || (appState.currentUser?.id) || '';
+    if (!email) return;
 
     if (!appState.currentUser) {
-        appState.currentUser = { email: email, nombre: name, rol: appState.currentRole || 'gerente', departamento: 'Administración' };
+        appState.currentUser = { email: email, nombre: name, rol: appState.currentRole || 'administrador', departamento: 'Administración' };
     }
     
     appState.currentUser.id = uid;
@@ -11246,10 +10995,6 @@ async function handleSaveMyProfile(event) {
     
     // 1. Guardar de inmediato en almacenamiento local persistente
     localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
-    const isMasterAdminEmail = (email === 'admin@rodipack.com' || email === 'zalazardemiranda@gmail.com');
-    if (isMasterAdminEmail && isGerente) {
-        localStorage.setItem("rp_custom_user_nombre", name);
-    }
     if (isGerente) {
         localStorage.setItem("rp_user_profile_name_" + email, name);
     }
@@ -11412,17 +11157,6 @@ function updateUserProfileUI() {
             statusTag.style.background = '#FEF2F2';
             statusTag.style.color = '#DC2626';
             statusTag.style.borderColor = '#FECACA';
-        }
-    }
-
-    if (isAuth && appState.currentUser && (appState.currentUser.email || '').toLowerCase() === 'info@rodipack.com.mx') {
-        const curName = (appState.currentUser.nombre || '').trim().toLowerCase();
-        if (!curName || curName === 'info') {
-            appState.currentUser.nombre = 'Roberto Miranda';
-            try {
-                localStorage.setItem('rp_user_profile_name_info@rodipack.com.mx', 'Roberto Miranda');
-                localStorage.setItem('rp_logged_user', JSON.stringify(appState.currentUser));
-            } catch (e) {}
         }
     }
 
@@ -14336,7 +14070,7 @@ function isLockOwnedByMe(lock) {
         return true;
     }
 
-    // 5. Coincidencia por prefijo de correo (ej. "zalazardemiranda" vs "zalazardemiranda@gmail.com")
+    // 5. Coincidencia por prefijo de correo
     const myPrefix = (myInfo.userPrefix || '').toLowerCase();
     const lockPrefix = (lock.userPrefix || (lockEmail.includes('@') ? lockEmail.split('@')[0] : '')).toLowerCase();
     if (myPrefix && (lockName === myPrefix || lockPrefix === myPrefix)) {
@@ -14346,13 +14080,6 @@ function isLockOwnedByMe(lock) {
         return true;
     }
     if (myName && lockEmail && (lockEmail.startsWith(myName + '@') || lockEmail === myName)) {
-        return true;
-    }
-
-    // 6. Cuenta de administración principal Roberto Miranda / zalazardemiranda
-    const isMainAdmin = myEmail === 'zalazardemiranda@gmail.com' || myName.includes('zalazar') || myPrefix === 'zalazardemiranda';
-    const isLockMainAdmin = lockEmail === 'zalazardemiranda@gmail.com' || lockName.includes('zalazar') || lockName === 'zalazardemiranda' || String(lock.userId || '').toLowerCase().includes('zalazardemiranda');
-    if (isMainAdmin && isLockMainAdmin) {
         return true;
     }
 

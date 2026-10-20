@@ -481,6 +481,7 @@
                             }
                         }
 
+                        let fetchedFromRemoteDb = false;
                         if (db && resultList.length === 0) {
                             try {
                                 let ref = db.collection(collectionName);
@@ -499,8 +500,12 @@
                                     ref = ref.limit(limitNum);
                                 }
                                 const snap = await ref.get();
+                                fetchedFromRemoteDb = true;
                                 if (!snap.empty) {
                                     snap.forEach(doc => resultList.push(doc.data()));
+                                }
+                                if (collectionName === 'profiles' && filters.length === 0) {
+                                    _localStore.saveCollection('profiles', resultList);
                                 }
                             } catch (e) {
                                 // Firestore requiere índice compuesto para where + orderBy en campos distintos.
@@ -513,17 +518,25 @@
                                         }
                                     }
                                     const snap2 = await fallbackRef.get();
+                                    fetchedFromRemoteDb = true;
                                     if (!snap2.empty) {
                                         snap2.forEach(doc => resultList.push(doc.data()));
                                     }
+                                    if (collectionName === 'profiles' && filters.length === 0) {
+                                        _localStore.saveCollection('profiles', resultList);
+                                    }
                                 } catch (e2) {
-                                    resultList = localItems.slice();
+                                    if (collectionName !== 'profiles') {
+                                        resultList = localItems.slice();
+                                    }
                                 }
                             }
                         }
 
-                        if (resultList.length === 0) {
-                            resultList = localItems.slice();
+                        if (resultList.length === 0 && !(collectionName === 'profiles' && fetchedFromRemoteDb)) {
+                            if (collectionName !== 'profiles') {
+                                resultList = localItems.slice();
+                            }
                         }
 
                         // Aplicar filtros en memoria

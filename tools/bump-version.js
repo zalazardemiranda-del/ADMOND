@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, "..");
 const htmlPath = path.join(root, "index.html");
 let html = fs.readFileSync(htmlPath, "utf8");
 
-const assets = ["styles.css", "firebase_config.js", "consecutivo_data.js", "schema.js", "app.js"];
+const assets = ["styles.css", "firebase_config.js", "backup_data.js", "consecutivo_data.js", "schema.js", "app.js"];
 for (const asset of assets) {
   const file = path.join(root, asset);
   if (!fs.existsSync(file)) continue;

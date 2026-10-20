@@ -44,22 +44,58 @@
         const auth = firebaseInstance && typeof firebaseInstance.auth === 'function' ? firebaseInstance.auth() : null;
         const db = firebaseInstance && typeof firebaseInstance.firestore === 'function' ? firebaseInstance.firestore() : null;
 
+        // Identificador único por pestaña/dispositivo para evitar auto-ecos sin bloquear otros equipos/pestañas
+        if (!window._myClientId) {
+            try {
+                let sid = sessionStorage.getItem('rp_tab_client_id');
+                if (!sid) {
+                    sid = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+                    sessionStorage.setItem('rp_tab_client_id', sid);
+                }
+                window._myClientId = sid;
+            } catch (e) {
+                window._myClientId = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+            }
+        }
+
         const broadcastHandlers = {};
         const postgresChangeHandlers = {};
         let realtimeHubUnsub = null;
+        let hubInitialSnapshotSeen = false;
 
-        // Escuchar eventos en tiempo real en Firestore documento sync/realtime_hub
+        // Canal local en el navegador (BroadcastChannel) para sincronización instantánea (0 ms) entre pestañas/ventanas del mismo navegador
+        let localBus = null;
+        try {
+            if (typeof window.BroadcastChannel === 'function') {
+                localBus = new BroadcastChannel('central_realtime_local_bus');
+                localBus.onmessage = function(ev) {
+                    const msg = ev.data;
+                    if (!msg || !msg.event) return;
+                    if (msg.senderClientId && msg.senderClientId === window._myClientId) return;
+                    const handlers = broadcastHandlers[msg.event] || [];
+                    handlers.forEach(function(fn) {
+                        try { fn({ payload: msg.payload }); } catch (e) {}
+                    });
+                };
+            }
+        } catch (e) {}
+
+        // Escuchar eventos en tiempo real en Firestore en la colección sync (usando documentos individuales por evento para que no se sobreescriban)
         if (db) {
             try {
-                realtimeHubUnsub = db.collection('sync').doc('realtime_hub').onSnapshot(function(docSnap) {
-                    if (!docSnap || !docSnap.exists) return;
-                    const data = docSnap.data();
-                    if (!data || !data.event) return;
-                    // Evitar auto-eco inmediato si el emisor coincide
-                    if (data.senderClientId && data.senderClientId === window._myClientId) return;
-                    const handlers = broadcastHandlers[data.event] || [];
-                    handlers.forEach(function(fn) {
-                        try { fn({ payload: data.payload }); } catch (e) { console.warn("Error en broadcast handler:", e); }
+                realtimeHubUnsub = db.collection('sync').onSnapshot(function(snapshot) {
+                    // Ignorar la primera entrega: son estados guardados previamente, no eventos nuevos en vivo
+                    if (!hubInitialSnapshotSeen) { hubInitialSnapshotSeen = true; return; }
+                    snapshot.docChanges().forEach(function(change) {
+                        if (change.type === 'removed') return;
+                        const data = change.doc.data();
+                        if (!data || !data.event) return;
+                        // Evitar auto-eco inmediato si el emisor es esta misma pestaña
+                        if (data.senderClientId && data.senderClientId === window._myClientId) return;
+                        const handlers = broadcastHandlers[data.event] || [];
+                        handlers.forEach(function(fn) {
+                            try { fn({ payload: data.payload }); } catch (e) { console.warn("Error en broadcast handler:", e); }
+                        });
                     });
                 }, function(err) {
                     console.warn("Realtime hub listener status:", err.message || err);
@@ -83,7 +119,13 @@
                     if (db && !channelInterface._activeColListeners?.[tbl]) {
                         if (!channelInterface._activeColListeners) channelInterface._activeColListeners = {};
                         try {
+                            let isInitialSnapshot = true;
                             channelInterface._activeColListeners[tbl] = db.collection(tbl).onSnapshot(function(snapshot) {
+                                if (isInitialSnapshot) {
+                                    // La primera entrega contiene todos los documentos existentes como "added": no son cambios en vivo.
+                                    isInitialSnapshot = false;
+                                    return;
+                                }
                                 snapshot.docChanges().forEach(function(change) {
                                     const eventType = change.type === 'added' ? 'INSERT' : (change.type === 'modified' ? 'UPDATE' : 'DELETE');
                                     const payload = {
@@ -106,19 +148,37 @@
                 if (msg.type === 'broadcast') {
                     const evt = msg.event;
                     const payload = msg.payload || {};
-                    // Ejecutar de inmediato en la misma pestaña si aplica
-                    const currentHandlers = broadcastHandlers[evt] || [];
-                    currentHandlers.forEach(function(fn) {
-                        try { fn({ payload: payload }); } catch (e) {}
-                    });
+                    const senderId = window._myClientId || 'client_main';
+                    const nowTs = Date.now();
 
-                    // Persistir en Firestore para emitir a otras pestañas y dispositivos
+                    // 1. Emitir al instante a otras pestañas/ventanas del mismo navegador (0 ms)
+                    if (localBus) {
+                        try {
+                            localBus.postMessage({
+                                event: evt,
+                                payload: payload,
+                                senderClientId: senderId,
+                                timestamp: nowTs
+                            });
+                        } catch (e) {}
+                    }
+
+                    // 2. Persistir en Firestore por documento único por tipo de evento
+                    // Así, si se emite 'nominas_update' y luego 'nominas_lock_update', NUNCA se pisan entre sí
                     if (db) {
+                        db.collection('sync').doc('evt_' + evt).set({
+                            event: evt,
+                            payload: payload,
+                            senderClientId: senderId,
+                            timestamp: nowTs
+                        }).catch(function() {});
+
+                        // Respaldo para compatibilidad en el documento único anterior
                         db.collection('sync').doc('realtime_hub').set({
                             event: evt,
                             payload: payload,
-                            senderClientId: window._myClientId || 'client_main',
-                            timestamp: Date.now()
+                            senderClientId: senderId,
+                            timestamp: nowTs
                         }).catch(function() {});
                     }
                 }
@@ -129,12 +189,30 @@
                 return channelInterface;
             },
             unsubscribe: function() {
+                // Conservar los listeners de Firestore activos (realtime_hub y colecciones):
+                // solo se limpian los handlers para que setupRealtimeSubscriptions los vuelva a registrar
+                // sin duplicarlos. Antes se cancelaba el listener del hub y nunca se volvía a crear,
+                // dejando a la computadora sin actualizaciones en línea.
+                Object.keys(broadcastHandlers).forEach(function(k) { delete broadcastHandlers[k]; });
+                Object.keys(postgresChangeHandlers).forEach(function(k) { delete postgresChangeHandlers[k]; });
+                return Promise.resolve();
+            },
+            destroy: function() {
+                // Cierre total de listeners (solo para cerrar la app por completo)
+                if (localBus) {
+                    try { localBus.close(); } catch (e) {}
+                    localBus = null;
+                }
                 if (realtimeHubUnsub) {
                     try { realtimeHubUnsub(); } catch (e) {}
                     realtimeHubUnsub = null;
                 }
+                const active = channelInterface._activeColListeners || {};
+                Object.keys(active).forEach(function(k) { try { active[k](); } catch (e) {} delete active[k]; });
                 return Promise.resolve();
-            }
+            },
+            _broadcastHandlers: broadcastHandlers,
+            _postgresChangeHandlers: postgresChangeHandlers
         };
 
         // Query Builder para Firestore con compatibilidad completa para la API existente
@@ -252,6 +330,48 @@
                                 if (db) {
                                     try {
                                         await db.collection(collectionName).doc(String(id)).set(fullItem, { merge: true });
+                                        if (collectionName === 'messages' && item.chat_id && String(item.chat_id).startsWith('__cloud_sync_')) {
+                                            await db.collection('sync_snapshots').doc(String(item.chat_id)).set(fullItem, { merge: true });
+                                        }
+                                        if (collectionName === 'profiles' && item.email) {
+                                            const emailNorm = String(item.email).trim().toLowerCase();
+                                            const isAuthUid = /^[A-Za-z0-9]{28}$/.test(String(id));
+                                            const snapEq = await db.collection('profiles').where('email', '==', emailNorm).get();
+                                            const dupDocs = [];
+                                            snapEq.forEach(docP => { if (docP.id !== String(id)) dupDocs.push(docP); });
+                                            if (item.email !== emailNorm) {
+                                                const snapRaw = await db.collection('profiles').where('email', '==', item.email).get();
+                                                snapRaw.forEach(docP => { if (docP.id !== String(id) && !dupDocs.some(d => d.id === docP.id)) dupDocs.push(docP); });
+                                            }
+                                            if (dupDocs.length > 0) {
+                                                if (isAuthUid) {
+                                                    // Consolidar: rellenar campos faltantes desde los duplicados y eliminarlos
+                                                    const fill = {};
+                                                    dupDocs.forEach(d => {
+                                                        const dd = d.data() || {};
+                                                        Object.keys(dd).forEach(k => {
+                                                            if (k === 'id') return;
+                                                            if ((fullItem[k] === undefined || fullItem[k] === null || fullItem[k] === '') && dd[k]) fill[k] = dd[k];
+                                                        });
+                                                    });
+                                                    if (Object.keys(fill).length > 0) {
+                                                        await db.collection('profiles').doc(String(id)).set(fill, { merge: true });
+                                                        Object.assign(fullItem, fill);
+                                                    }
+                                                    for (const d of dupDocs) {
+                                                        try { await d.ref.delete(); } catch (e) {}
+                                                    }
+                                                } else {
+                                                    const propagate = { updated_at: new Date().toISOString() };
+                                                    ['nombre', 'rol', 'departamento', 'telefono', 'phone'].forEach(k => {
+                                                        if (item[k] !== undefined && item[k] !== null && item[k] !== '') propagate[k] = item[k];
+                                                    });
+                                                    dupDocs.forEach(docP => {
+                                                        docP.ref.set(propagate, { merge: true }).catch(() => {});
+                                                    });
+                                                }
+                                            }
+                                        }
                                     } catch (e) {
                                         console.warn(`[Firebase] Error escribiendo en ${collectionName}:`, e.message || e);
                                     }
@@ -269,22 +389,53 @@
                             return { data: isSingle ? (inserted[0] || null) : inserted, error: null };
                         }
 
+                        // Busca en Firestore los documentos que cumplen los filtros (para update/delete
+                        // desde cualquier computadora, aunque el documento no exista en la caché local).
+                        const findRemoteRefs = async function() {
+                            if (!db) return [];
+                            const usable = filters.filter(f => f.op === '==' || f.op === 'in');
+                            if (usable.length === 0) return [];
+                            try {
+                                let ref = db.collection(collectionName);
+                                for (let f of usable) ref = ref.where(f.field, f.op, f.val);
+                                const snap = await ref.get();
+                                const refs = [];
+                                snap.forEach(d => refs.push({ ref: d.ref, data: d.data() }));
+                                return refs;
+                            } catch (e) {
+                                console.warn(`[Firebase] Error buscando documentos en ${collectionName}:`, e.message || e);
+                                return [];
+                            }
+                        };
+                        const matchesFilters = function(item) {
+                            for (let f of filters) {
+                                if (f.op === '==' && item[f.field] !== f.val) return false;
+                                if (f.op === 'in' && !(f.val || []).includes(item[f.field])) return false;
+                            }
+                            return true;
+                        };
+
                         if (action === 'update') {
                             const updated = [];
+                            const nowIso = new Date().toISOString();
+                            const remote = await findRemoteRefs();
+                            const touchedIds = new Set();
+                            for (const r of remote) {
+                                const merged = Object.assign({}, r.data, actionData, { updated_at: nowIso });
+                                try { await r.ref.set(merged, { merge: true }); } catch (e) {}
+                                touchedIds.add(String(r.ref.id));
+                                updated.push(merged);
+                            }
                             localItems = localItems.map(item => {
-                                let match = true;
-                                for (let f of filters) {
-                                    if (f.op === '==' && item[f.field] !== f.val) match = false;
-                                }
-                                if (match) {
-                                    const merged = Object.assign({}, item, actionData, { updated_at: new Date().toISOString() });
+                                if (!matchesFilters(item)) return item;
+                                const merged = Object.assign({}, item, actionData, { updated_at: nowIso });
+                                if (!item.id || !touchedIds.has(String(item.id))) {
                                     if (db && item.id) {
                                         db.collection(collectionName).doc(String(item.id)).set(merged, { merge: true }).catch(() => {});
                                     }
                                     updated.push(merged);
-                                    return merged;
                                 }
-                                return item;
+                                return merged;
                             });
                             _localStore.saveCollection(collectionName, localItems);
                             return { data: updated, error: null };
@@ -293,16 +444,20 @@
                         if (action === 'delete') {
                             const remaining = [];
                             const deleted = [];
+                            const remote = await findRemoteRefs();
+                            const deletedIds = new Set();
+                            for (const r of remote) {
+                                try { await r.ref.delete(); } catch (e) {}
+                                deletedIds.add(String(r.ref.id));
+                                deleted.push(r.data);
+                            }
                             for (let item of localItems) {
-                                let match = true;
-                                for (let f of filters) {
-                                    if (f.op === '==' && item[f.field] !== f.val) match = false;
-                                    if (f.op === 'in' && !f.val.includes(item[f.field])) match = false;
-                                }
-                                if (match) {
-                                    deleted.push(item);
-                                    if (db && item.id) {
-                                        db.collection(collectionName).doc(String(item.id)).delete().catch(() => {});
+                                if (matchesFilters(item)) {
+                                    if (!item.id || !deletedIds.has(String(item.id))) {
+                                        if (db && item.id) {
+                                            db.collection(collectionName).doc(String(item.id)).delete().catch(() => {});
+                                        }
+                                        deleted.push(item);
                                     }
                                 } else {
                                     remaining.push(item);
@@ -314,7 +469,20 @@
 
                         // Lectura (SELECT)
                         let resultList = [];
-                        if (db) {
+                        if (db && collectionName === 'messages') {
+                            const syncFilter = filters.find(f => f.op === '==' && f.field === 'chat_id' && typeof f.val === 'string' && f.val.startsWith('__cloud_sync_'));
+                            if (syncFilter) {
+                                try {
+                                    const snapDoc = await db.collection('sync_snapshots').doc(syncFilter.val).get();
+                                    if (snapDoc.exists) {
+                                        resultList = [snapDoc.data()];
+                                    }
+                                } catch (e) {}
+                            }
+                        }
+
+                        let fetchedFromRemoteDb = false;
+                        if (db && resultList.length === 0) {
                             try {
                                 let ref = db.collection(collectionName);
                                 for (let f of filters) {
@@ -322,24 +490,53 @@
                                         ref = ref.where(f.field, f.op, f.val);
                                     }
                                 }
-                                for (let o of orders) {
-                                    ref = ref.orderBy(o.field, o.ascending ? 'asc' : 'desc');
+                                const canOrderInFirestore = (filters.length === 0) || (orders.length > 0 && filters.every(f => f.field === orders[0].field));
+                                if (canOrderInFirestore) {
+                                    for (let o of orders) {
+                                        ref = ref.orderBy(o.field, o.ascending ? 'asc' : 'desc');
+                                    }
                                 }
-                                if (limitNum) {
+                                if (limitNum && canOrderInFirestore) {
                                     ref = ref.limit(limitNum);
                                 }
                                 const snap = await ref.get();
+                                fetchedFromRemoteDb = true;
                                 if (!snap.empty) {
                                     snap.forEach(doc => resultList.push(doc.data()));
                                 }
+                                if (collectionName === 'profiles' && filters.length === 0) {
+                                    _localStore.saveCollection('profiles', resultList);
+                                }
                             } catch (e) {
-                                // En caso de requerir índices compuestos en Firestore, usar datos locales enriquecidos
-                                resultList = localItems.slice();
+                                // Firestore requiere índice compuesto para where + orderBy en campos distintos.
+                                // Reintento sin orderBy (el orden se aplica en memoria):
+                                try {
+                                    let fallbackRef = db.collection(collectionName);
+                                    for (let f of filters) {
+                                        if (f.op === '==' || f.op === '!=' || f.op === 'in') {
+                                            fallbackRef = fallbackRef.where(f.field, f.op, f.val);
+                                        }
+                                    }
+                                    const snap2 = await fallbackRef.get();
+                                    fetchedFromRemoteDb = true;
+                                    if (!snap2.empty) {
+                                        snap2.forEach(doc => resultList.push(doc.data()));
+                                    }
+                                    if (collectionName === 'profiles' && filters.length === 0) {
+                                        _localStore.saveCollection('profiles', resultList);
+                                    }
+                                } catch (e2) {
+                                    if (collectionName !== 'profiles') {
+                                        resultList = localItems.slice();
+                                    }
+                                }
                             }
                         }
 
-                        if (resultList.length === 0) {
-                            resultList = localItems.slice();
+                        if (resultList.length === 0 && !(collectionName === 'profiles' && fetchedFromRemoteDb)) {
+                            if (collectionName !== 'profiles') {
+                                resultList = localItems.slice();
+                            }
                         }
 
                         // Aplicar filtros en memoria
@@ -425,8 +622,28 @@
                     const password = credentials ? credentials.password : '';
                     const metadata = credentials && credentials.options ? credentials.options.data : {};
                     if (auth && typeof auth.createUserWithEmailAndPassword === 'function') {
+                        let secondaryApp = null;
+                        let targetAuth = auth;
+                        if (window.firebase && typeof window.firebase.initializeApp === 'function') {
+                            try {
+                                secondaryApp = window.firebase.initializeApp({
+                                    apiKey: window.FIREBASE_CONFIG.apiKey,
+                                    authDomain: window.FIREBASE_CONFIG.authDomain,
+                                    projectId: window.FIREBASE_CONFIG.projectId,
+                                    storageBucket: window.FIREBASE_CONFIG.storageBucket,
+                                    messagingSenderId: window.FIREBASE_CONFIG.messagingSenderId,
+                                    appId: window.FIREBASE_CONFIG.appId
+                                }, 'SecondaryApp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4));
+                                targetAuth = secondaryApp.auth();
+                            } catch (e) {
+                                targetAuth = auth;
+                            }
+                        }
                         try {
-                            const res = await auth.createUserWithEmailAndPassword(email, password);
+                            const res = await targetAuth.createUserWithEmailAndPassword(email, password);
+                            if (secondaryApp) {
+                                try { await secondaryApp.delete(); } catch (e) {}
+                            }
                             const user = res.user;
                             const profile = Object.assign({
                                 id: user.uid,
@@ -440,6 +657,9 @@
                             }
                             return { data: { user: user }, error: null };
                         } catch (err) {
+                            if (secondaryApp) {
+                                try { await secondaryApp.delete(); } catch (e) {}
+                            }
                             return { data: { user: null }, error: { message: err.message, code: err.code } };
                         }
                     }

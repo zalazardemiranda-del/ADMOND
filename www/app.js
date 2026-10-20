@@ -146,7 +146,7 @@ const runInitialAppSetup = async () => {
         const sig = `${(task.title || '').trim().toLowerCase()}____${(task.desc || '').trim().toLowerCase()}`;
         return (appState.deletedTaskIds || []).some(d => d === task.id || (sig && d === sig));
     };
-    const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
+    const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal', 'roberto miranda perez', 'roberto miranda pérez', 'manuel morales']);
     storedTasks = storedTasks.filter(t => {
         if (!t || !t.title || t.id === 'task-1' || t.id === 'task-2' || isTaskDeleted(t)) return false;
         const assignee = (t.assignee || '').trim().toLowerCase();
@@ -193,7 +193,7 @@ const runInitialAppSetup = async () => {
     }
     let storedChats = JSON.parse(localStorage.getItem('rp_chats'));
     if (storedChats && typeof storedChats === 'object') {
-        const fakeNames = new Set(["Juan Pérez", "Juan Perez", "María Gómez", "Maria Gomez", "Gerente Principal"]);
+        const fakeNames = new Set(["Juan Pérez", "Juan Perez", "María Gómez", "Maria Gomez", "Gerente Principal", "Roberto Miranda Perez", "Roberto Miranda Pérez", "Manuel Morales"]);
         Object.keys(storedChats).forEach(k => {
             if (k === 'cubicacion-ayuda' || k === 'tracking-status') {
                 delete storedChats[k];
@@ -554,23 +554,10 @@ const runInitialAppSetup = async () => {
         }
     }
     
-    // Garantizar que las credenciales locales tengan roles válidos
+    // Limpiar residuos de perfiles locales no registrados en Firebase
     try {
-        let localProfilesInit = JSON.parse(localStorage.getItem('rp_local_profiles'));
-        if (Array.isArray(localProfilesInit)) {
-            let changed = false;
-            localProfilesInit.forEach(p => {
-                if (p && p.email && p.email.toLowerCase() === 'diego@rodipack.com') {
-                    if (p.rol !== 'administrativo') {
-                        p.rol = 'administrativo';
-                        changed = true;
-                    }
-                }
-            });
-            if (changed) {
-                localStorage.setItem('rp_local_profiles', JSON.stringify(localProfilesInit));
-            }
-        }
+        localStorage.removeItem('rp_user_profile_name_zalazardemiranda@gmail.com');
+        localStorage.removeItem('rp_custom_user_nombre');
     } catch (e) {}
 
     // Restaurar usuario en sesión si la sesión está activa y es válida
@@ -579,21 +566,11 @@ const runInitialAppSetup = async () => {
     if (isSessionActive && storedUser) {
         try {
             appState.currentUser = JSON.parse(storedUser);
-            if (!appState.currentUser || !appState.currentUser.email) {
+            if (!appState.currentUser || !appState.currentUser.email || String(appState.currentUser.email).toLowerCase() === 'zalazardemiranda@gmail.com') {
                 appState.currentUser = null;
                 isSessionActive = false;
                 localStorage.setItem("rp_session_active", "false");
                 localStorage.removeItem("rp_logged_user");
-            } else {
-                const isDiego = (
-                    (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
-                    (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('diego'))
-                );
-                if (isDiego) {
-                    appState.currentUser.rol = 'administrativo';
-                    localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
-                    localStorage.setItem("rp_current_role", 'administrativo');
-                }
             }
         } catch (e) {
             console.warn("Error parsing stored user session:", e);
@@ -630,8 +607,10 @@ const runInitialAppSetup = async () => {
     let storedTab = localStorage.getItem("rp_current_tab");
     if (hashTab === 'emails') hashTab = 'schema';
     if (storedTab === 'emails') storedTab = 'schema';
+    if (hashTab === 'meetings') hashTab = 'tasks';
+    if (storedTab === 'meetings') storedTab = 'tasks';
 
-    if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'meetings', 'users', 'profile'].includes(hashTab)) {
+    if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'users', 'profile'].includes(hashTab)) {
         appState.currentTab = hashTab;
     } else if (storedTab) {
         appState.currentTab = storedTab;
@@ -660,7 +639,6 @@ const runInitialAppSetup = async () => {
 
     renderTasks();
     renderChatMessages(true);
-    renderMeetings();
     renderAdministracion();
     updateGlobalStats();
     updateUserSessionUI();
@@ -749,8 +727,8 @@ function saveToStorage() {
         if (appState.customChannels) localStorage.setItem('rp_custom_channels', JSON.stringify(appState.customChannels));
         if (appState.meetings) localStorage.setItem('rp_meetings', JSON.stringify(appState.meetings));
         if (appState.proveedores) localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores));
-        if (appState.nominas) localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
-        if (appState.gastosIndirectos) localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos));
+        if (appState.nominas && !appState.isEditingNominas) localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
+        if (appState.gastosIndirectos && !appState.isEditingGastosIndirectos) localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos));
         if (appState.archivosQuincenales) localStorage.setItem('rp_archivos_quincenales', JSON.stringify(appState.archivosQuincenales));
         if (appState.concepts) localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts));
         if (appState.proveedorNamesList) localStorage.setItem('rp_proveedor_names', JSON.stringify(appState.proveedorNamesList));
@@ -787,25 +765,23 @@ function setRole(role) {
         (appState.currentUser.email && appState.currentUser.email.toLowerCase().includes('diego')) ||
         (appState.currentUser.nombre && appState.currentUser.nombre.toLowerCase().includes('diego'))
     );
-    if (isDiego) {
-        role = 'administrativo';
-    }
-    appState.currentRole = role || 'gerente';
-    localStorage.setItem("rp_current_role", appState.currentRole);
+    const rawRole = (role || 'gerente').toLowerCase().trim();
+    const isGerente = (rawRole === 'gerente' || rawRole === 'manager' || rawRole === 'director') && !isDiego;
 
-    const r = (appState.currentRole || '').toLowerCase().trim();
-    const isGerente = (r === 'gerente' || r === 'manager' || r === 'director') && !isDiego;
-    const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo' || r === 'administracion' || isDiego;
+    // Solo existen dos roles en el sistema: Manager ('gerente') y Administrativo ('administrativo')
+    appState.currentRole = isGerente ? 'gerente' : 'administrativo';
+    if (appState.currentUser && !isGerente) {
+        appState.currentUser.rol = 'administrador';
+    }
+    localStorage.setItem("rp_current_role", appState.currentRole);
 
     // Manejar clases en el body para control de estilos CSS inmediato e irrevocable
     if (typeof document !== 'undefined' && document.body) {
         document.body.classList.remove('role-gerente', 'role-administrativo', 'role-administrador', 'role-admin', 'role-colaborador');
         if (isGerente) {
             document.body.classList.add('role-gerente');
-        } else if (isAdmin) {
-            document.body.classList.add('role-administrativo');
         } else {
-            document.body.classList.add('role-colaborador');
+            document.body.classList.add('role-administrativo');
         }
     }
 
@@ -827,8 +803,11 @@ function setRole(role) {
         if (adminWorkspace) adminWorkspace.style.display = "block";
         if (adminLockScreen) adminLockScreen.style.display = "none";
         if (btnCreateGroup) btnCreateGroup.style.display = "inline-flex";
-    } else if (isAdmin) {
-        // Administrador / Administrativo: Acceso completo a Finanzas & Administración, SIN acceso a usuarios
+    } else {
+        // Usuario / Administrativo:
+        // - Acceso total en la sección administrativa
+        // - Sin acceso a "Administración de Usuarios"
+        // - En Tareas solo puede ver sus tareas y marcarlas como completadas (no crear, editar ni eliminar)
         if (newTaskCard) newTaskCard.style.display = "none";
         if (tasksControlPanel) tasksControlPanel.style.display = "none";
         if (tasksLayout) tasksLayout.classList.add("full-width-tasks");
@@ -838,34 +817,18 @@ function setRole(role) {
         if (adminLockScreen) adminLockScreen.style.display = "none";
         if (btnCreateGroup) btnCreateGroup.style.display = "none";
         
-        // Si estaba en la pestaña de usuarios (solo gerentes), redirigir a administración
+        // Si estaba en la pestaña de usuarios (solo Managers), redirigir a administración
         if (appState.currentTab === 'users') {
             switchTab('administracion');
             return;
         }
-    } else {
-        // Colaborador de Operaciones
-        if (newTaskCard) newTaskCard.style.display = "none";
-        if (tasksControlPanel) tasksControlPanel.style.display = "none";
-        if (tasksLayout) tasksLayout.classList.add("full-width-tasks");
-        if (sidebarAdminItem) sidebarAdminItem.style.setProperty("display", "none", "important");
-        if (sidebarUsersItem) sidebarUsersItem.style.setProperty("display", "none", "important");
-        if (adminWorkspace) adminWorkspace.style.display = "none";
-        if (adminLockScreen) adminLockScreen.style.display = "block";
-        if (btnCreateGroup) btnCreateGroup.style.display = "none";
-        
-        // Si estaba en administración o usuarios, redirigir a tareas
-        if (appState.currentTab === 'administracion' || appState.currentTab === 'users') {
-            switchTab('tasks');
-            return;
-        }
     }
     
-    // Ajustar encabezado y selector de colaborador según el rol
+    // Ajustar encabezado y selector de usuario según el rol
     const userFilterHeading = document.getElementById("user-filter-heading");
     const userFilterWrap = document.querySelector(".user-filter-select-wrap");
     if (isGerente) {
-        if (userFilterHeading) userFilterHeading.innerText = "Filtrar por Colaborador:";
+        if (userFilterHeading) userFilterHeading.innerText = "Filtrar por Usuario:";
         if (userFilterWrap) userFilterWrap.style.display = "block";
         if (typeof window.populateTaskUserFilterOptions === 'function') {
             window.populateTaskUserFilterOptions();
@@ -902,18 +865,16 @@ function updateUserSessionUI() {
         const u = appState.currentUser;
         const r = (u.rol || '').toLowerCase();
         const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
-        const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
 
         const realName = u.nombre || (u.email ? u.email.split('@')[0] : 'Usuario');
         if (userNameEl) userNameEl.innerText = realName;
         if (userRoleEl) {
-            if (isGerente) userRoleEl.innerText = 'Rango: Gerente / Director';
-            else if (isAdmin) userRoleEl.innerText = 'Rango: Administrativo';
-            else userRoleEl.innerText = `Rango: Colaborador (${u.departamento || 'Operaciones'})`;
+            if (isGerente) userRoleEl.innerText = 'Rango: Manager / Director';
+            else userRoleEl.innerText = 'Rango: Administrativo';
         }
         if (userAvatarEl) {
             const initial = realName.charAt(0).toUpperCase();
-            const avatarColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
+            const avatarColor = isGerente ? '#2563EB' : '#10B981';
             userAvatarEl.innerText = initial;
             userAvatarEl.style.borderColor = avatarColor;
             userAvatarEl.style.color = avatarColor;
@@ -923,12 +884,11 @@ function updateUserSessionUI() {
     } else {
         const r = (appState.currentRole || '').toLowerCase();
         const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
-        const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
         
         const roleName = 'Sin sesión';
-        const roleLabel = isGerente ? 'Rango: Gerente / Director' : (isAdmin ? 'Rango: Administrativo' : 'Rango: Colaborador');
+        const roleLabel = isGerente ? 'Rango: Manager / Director' : 'Rango: Administrativo';
         const avatarLetter = '?';
-        const avatarColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
+        const avatarColor = isGerente ? '#2563EB' : '#10B981';
 
         if (userNameEl) userNameEl.innerText = roleName;
         if (userRoleEl) userRoleEl.innerText = roleLabel;
@@ -1209,6 +1169,9 @@ function switchTab(tabName) {
     if (tabName === 'emails' || tabName === 'schema' || tabName === 'chat') {
         tabName = 'tasks';
     }
+    if (tabName === 'meetings') {
+        tabName = 'tasks';
+    }
 
     const r = (appState.currentRole || '').toLowerCase();
     const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
@@ -1269,9 +1232,6 @@ function switchTab(tabName) {
             renderChatChannels();
             renderChatMessages(true);
         }
-    } else if (tabName === 'meetings') {
-        titleEl.innerText = "Calendario de Reuniones";
-        subtitleEl.innerText = "Planifica y agenda llamadas de coordinación del equipo";
     } else if (tabName === 'administracion') {
         titleEl.innerText = "Administración General";
         subtitleEl.innerText = "Control financiero, estadísticas por departamento, nóminas quincenales y proveedores";
@@ -1309,6 +1269,16 @@ function switchAdminFicha(fichaName) {
     } else if (fichaName === 'archivo-digital') {
         const btnQ = document.getElementById('ficha-btn-quincenal');
         if (btnQ) btnQ.classList.add("active");
+    }
+    if (fichaName === 'proveedores' || fichaName === 'consecutivo') {
+        const btnOp = document.getElementById('ficha-btn-operaciones');
+        if (btnOp) btnOp.classList.add("active");
+    }
+
+    const opKpisRow = document.getElementById('operaciones-kpis-row');
+    if (opKpisRow) {
+        const showOpRow = (fichaName === 'operaciones' || fichaName === 'proveedores' || fichaName === 'consecutivo');
+        opKpisRow.style.display = showOpRow ? "grid" : "none";
     }
     
     // Update active subpane
@@ -1354,6 +1324,15 @@ function renderAdministracion() {
     
     if (appState.currentAdminFicha === 'visualizacion') {
         renderVisualizacion();
+        Promise.allSettled([
+            typeof window.fetchAdminConceptsFromCloud === 'function' ? window.fetchAdminConceptsFromCloud() : Promise.resolve(),
+            typeof window.fetchConsecutivoFromCloud === 'function' ? window.fetchConsecutivoFromCloud() : Promise.resolve(),
+            typeof window.fetchProveedoresDataFromCloud === 'function' ? window.fetchProveedoresDataFromCloud() : Promise.resolve(),
+            typeof window.fetchNominasFromCloud === 'function' ? window.fetchNominasFromCloud() : Promise.resolve(),
+            typeof window.fetchGastosIndirectosFromCloud === 'function' ? window.fetchGastosIndirectosFromCloud() : Promise.resolve()
+        ]).then(() => {
+            if (typeof renderVisualizacion === 'function') renderVisualizacion();
+        });
     } else if (appState.currentAdminFicha === 'quincenal') {
         if (typeof window.fetchNominasLockFromCloud === 'function') {
             window.fetchNominasLockFromCloud();
@@ -1361,12 +1340,19 @@ function renderAdministracion() {
         if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
             window.fetchGastosIndirectosLockFromCloud();
         }
+        if (typeof window.fetchNominasFromCloud === 'function' && !appState.isEditingNominas) {
+            window.fetchNominasFromCloud();
+        }
+        if (typeof window.fetchGastosIndirectosFromCloud === 'function' && !appState.isEditingGastosIndirectos) {
+            window.fetchGastosIndirectosFromCloud();
+        }
         if (typeof window.switchAdminSubSection === 'function') {
             window.switchAdminSubSection(appState.adminSubSection || 'quincenas');
         } else {
             renderNominas();
         }
     } else if (appState.currentAdminFicha === 'proveedores') {
+        if (typeof window.renderOperacionesList === 'function') window.renderOperacionesList();
         if (typeof window.fetchProveedoresLockFromCloud === 'function') {
             window.fetchProveedoresLockFromCloud();
         }
@@ -1379,6 +1365,7 @@ function renderAdministracion() {
             window.updateProveedoresEditButtonsUI();
         }
     } else if (appState.currentAdminFicha === 'consecutivo') {
+        if (typeof window.renderOperacionesList === 'function') window.renderOperacionesList();
         if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
             window.fetchConsecutivoLockFromCloud();
         }
@@ -1461,7 +1448,12 @@ function calculateAdminTotals() {
     let gastosInd = 0;
     if (Array.isArray(appState.gastosIndirectos)) {
         appState.gastosIndirectos.forEach(g => {
-            if (g) gastosInd += Number(g.total) || 0;
+            if (g) {
+                const val = (g.total !== undefined && g.total !== null && g.total !== '' && !isNaN(g.total))
+                    ? Number(g.total)
+                    : (Number(g.subtotal) || Number(g.monto) || 0);
+                gastosInd += val;
+            }
         });
     }
     gastosInd = Math.round(gastosInd * 100) / 100;
@@ -1473,7 +1465,21 @@ function calculateAdminTotals() {
     // Nominas: resultado del total de nóminas
     let totalNominas = 0;
     window.getActiveNominasList().forEach(n => {
-        if (n) totalNominas += Number(n.total) || 0;
+        if (n) {
+            const nomVal = Number(n.nomina !== undefined && n.nomina !== null && n.nomina !== '' ? n.nomina : (n.servicio && !isNaN(n.servicio) ? n.servicio : (n.total || 0))) || 0;
+            const ivaPct = Number(n.ivaPct) || 0;
+            const ivaVal = Number(n.iva !== undefined ? n.iva : (nomVal * (ivaPct / 100))) || 0;
+            const sub1 = nomVal + ivaVal;
+            const retPct = Number(n.retPct ?? n.ret4Pct) || 0;
+            const retVal = Number(n.ret4 !== undefined ? n.ret4 : (sub1 * (retPct / 100))) || 0;
+            const sub2 = sub1 + retVal;
+            const retIsrPct = Number(n.retIsrPct) || 0;
+            const retIsrVal = Number(n.retIsr !== undefined ? n.retIsr : (sub2 * (retIsrPct / 100))) || 0;
+            const totVal = (n.total !== undefined && n.total !== null && n.total !== '' && !isNaN(n.total))
+                ? Number(n.total)
+                : (sub2 + retIsrVal);
+            totalNominas += totVal;
+        }
     });
     totalNominas = Math.round(totalNominas * 100) / 100;
     
@@ -1575,6 +1581,124 @@ function renderVisualizacion() {
     renderPieChart(totals);
 }
 
+let _syncAdminConceptsTimer = null;
+function syncAdminConceptsToCloud(forceImmediate = false) {
+    window.syncAdminConceptsToCloud = syncAdminConceptsToCloud;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    const doSync = async () => {
+        try {
+            window._lastLocalAdminConceptsSyncTime = Date.now();
+            const payload = {
+                bancos: appState.concepts?.bancos !== undefined ? appState.concepts.bancos : 0,
+                bancosFecha: appState.concepts?.bancosFecha || '',
+                impuestos: appState.concepts?.impuestos !== undefined ? appState.concepts.impuestos : 0,
+                updatedAt: new Date().toISOString()
+            };
+            await client.from('messages').insert({
+                chat_id: '__cloud_sync_admin_concepts__',
+                contenido: JSON.stringify(payload),
+                emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                emisor_role: 'sistema'
+            });
+            const db = (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.db) || (window.firebase && firebase.firestore && firebase.firestore());
+            if (db) {
+                await db.collection('sync_snapshots').doc('__cloud_sync_admin_concepts__').set({
+                    id: '__cloud_sync_admin_concepts__',
+                    chat_id: '__cloud_sync_admin_concepts__',
+                    contenido: JSON.stringify(payload),
+                    emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                    emisor_role: 'sistema',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }, { merge: true });
+            }
+        } catch (e) {
+            console.warn("⚠️ Error persisting admin concepts to cloud:", e);
+        }
+    };
+
+    if (_syncAdminConceptsTimer) clearTimeout(_syncAdminConceptsTimer);
+    if (forceImmediate) {
+        doSync();
+    } else {
+        _syncAdminConceptsTimer = setTimeout(doSync, 400);
+    }
+}
+window.syncAdminConceptsToCloud = syncAdminConceptsToCloud;
+
+function broadcastAdminConceptsUpdate() {
+    window.broadcastAdminConceptsUpdate = broadcastAdminConceptsUpdate;
+    const payload = {
+        concepts: {
+            bancos: appState.concepts?.bancos !== undefined ? appState.concepts.bancos : 0,
+            bancosFecha: appState.concepts?.bancosFecha || '',
+            impuestos: appState.concepts?.impuestos !== undefined ? appState.concepts.impuestos : 0,
+            updatedAt: new Date().toISOString()
+        },
+        senderClientId: window._myClientId,
+        timestamp: Date.now()
+    };
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'admin_concepts_update',
+                payload: payload
+            });
+        } catch (e) {}
+    }
+}
+window.broadcastAdminConceptsUpdate = broadcastAdminConceptsUpdate;
+
+async function fetchAdminConceptsFromCloud() {
+    window.fetchAdminConceptsFromCloud = fetchAdminConceptsFromCloud;
+    if (Date.now() - (window._lastLocalAdminConceptsSyncTime || 0) < 3000) return;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return;
+
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_admin_concepts__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                if (parsed && typeof parsed === 'object') {
+                    if (!appState.concepts) appState.concepts = {};
+                    let changed = false;
+                    if (parsed.bancos !== undefined && appState.concepts.bancos !== parsed.bancos) {
+                        appState.concepts.bancos = parsed.bancos;
+                        changed = true;
+                    }
+                    if (parsed.bancosFecha !== undefined && appState.concepts.bancosFecha !== parsed.bancosFecha) {
+                        appState.concepts.bancosFecha = parsed.bancosFecha;
+                        changed = true;
+                    }
+                    if (parsed.impuestos !== undefined && appState.concepts.impuestos !== parsed.impuestos) {
+                        appState.concepts.impuestos = parsed.impuestos;
+                        changed = true;
+                    }
+                    if (changed) {
+                        saveToStorage();
+                        try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
+                        renderVisualizacion();
+                    }
+                }
+            } catch (e) {}
+        }
+    } catch (err) {
+        console.warn("⚠️ Error fetching admin concepts from cloud:", err);
+    }
+}
+window.fetchAdminConceptsFromCloud = fetchAdminConceptsFromCloud;
+
 function updateAdminConcept(key, value) {
     window.updateAdminConcept = updateAdminConcept;
     if (!appState.concepts) appState.concepts = {};
@@ -1588,6 +1712,12 @@ function updateAdminConcept(key, value) {
     }
     saveToStorage();
     renderVisualizacion();
+    if (typeof broadcastAdminConceptsUpdate === 'function') {
+        broadcastAdminConceptsUpdate();
+    }
+    if (typeof syncAdminConceptsToCloud === 'function') {
+        syncAdminConceptsToCloud();
+    }
 };
 
 function renderPieChart(totals) {
@@ -1713,15 +1843,31 @@ window.handleAdminQuincenalTopSave = handleAdminQuincenalTopSave;
 
 let _editNominasTimeout = null;
 
+function isLockOwnedByCurrentUser(lockObj) {
+    if (!lockObj) return false;
+    const currentUserId = (appState.currentUser?.id || appState.currentUser?.email || 'admin').toLowerCase();
+    const currentUserEmail = (appState.currentUser?.email || '').toLowerCase();
+    const currentUserName = (appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador').toLowerCase();
+    const lockId = (lockObj.userId || '').toLowerCase();
+    const lockName = (lockObj.userName || '').toLowerCase();
+    return Boolean(
+        (lockId && (lockId === currentUserId || (currentUserEmail && lockId === currentUserEmail))) ||
+        (lockName && lockName === currentUserName)
+    );
+}
+window.isLockOwnedByCurrentUser = isLockOwnedByCurrentUser;
+
 async function startEditingNominas() {
     window.startEditingNominas = startEditingNominas;
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
 
-    if (appState.nominasLockedBy && appState.nominasLockedBy.userId !== currentUserId) {
+    // 1. Verificar si localmente está bloqueado por otro usuario (< 5 min)
+    if (appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.nominasLockedBy)) {
         const elapsed = Date.now() - (appState.nominasLockedBy.timestamp || 0);
         if (elapsed < 5 * 60 * 1000) {
-            alert(`⚠️ Esta tabla está siendo editada por ${appState.nominasLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.nominasLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            updateNominasEditButtonsUI();
             return;
         }
     }
@@ -1730,18 +1876,61 @@ async function startEditingNominas() {
     appState._nominasSnapshot = JSON.parse(JSON.stringify(appState.nominas || []));
     appState._archivosQuincenalesSnapshot = JSON.parse(JSON.stringify(appState.archivosQuincenales || []));
 
+    // Garantizar al menos 1 fila editable cuando la lista esté vacía
+    const activeList = window.getActiveNominasList();
+    if (activeList && activeList.length === 0) {
+        activeList.push({
+            folio: "1",
+            empleado: "",
+            fecha: new Date().toISOString().split('T')[0],
+            nomina: 0,
+            servicio: 0,
+            ivaPct: 0,
+            iva: 0,
+            retPct: 0,
+            ret4Pct: 0,
+            ret4: 0,
+            retIsrPct: 0,
+            retIsr: 0,
+            total: 0
+        });
+    }
+
+    const lockTime = Date.now();
     appState.isEditingNominas = true;
     appState.nominasLockedBy = {
         userId: currentUserId,
         userName: currentUserName,
-        timestamp: Date.now()
+        timestamp: lockTime,
+        isLocked: true
     };
 
     updateNominasEditButtonsUI();
     renderNominas();
 
-    broadcastNominasLockState(true, currentUserName, currentUserId);
-    await syncNominasLockToCloud(true, currentUserName, currentUserId);
+    // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
+    try {
+        const activeCloudLock = await checkCloudLockActive('__cloud_sync_nominas_lock__', currentUserId);
+        if (activeCloudLock && activeCloudLock.isLocked && !isLockOwnedByCurrentUser(activeCloudLock)) {
+            appState.isEditingNominas = false;
+            appState.nominasLockedBy = activeCloudLock;
+            if (appState._nominasSnapshot) {
+                appState.nominas = JSON.parse(JSON.stringify(appState._nominasSnapshot));
+                appState._nominasSnapshot = null;
+            }
+            if (appState._archivosQuincenalesSnapshot) {
+                appState.archivosQuincenales = JSON.parse(JSON.stringify(appState._archivosQuincenalesSnapshot));
+                appState._archivosQuincenalesSnapshot = null;
+            }
+            updateNominasEditButtonsUI();
+            renderNominas();
+            alert(`⚠️ Esta tabla está siendo editada por ${activeCloudLock.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    } catch (e) {}
+
+    broadcastNominasLockState(true, currentUserName, currentUserId, lockTime);
+    await syncNominasLockToCloud(true, currentUserName, currentUserId, lockTime);
 
     if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
     _editNominasTimeout = setTimeout(() => {
@@ -1824,9 +2013,8 @@ function updateNominasEditButtonsUI() {
     const bannerText = document.getElementById("nominas-lock-banner-text");
     const tableContainer = document.getElementById("nominas-table-container");
 
-    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
-    const isLockedByOther = Boolean(appState.nominasLockedBy && appState.nominasLockedBy.userId !== currentUserId);
+    const isLockedByOther = !appState.isEditingNominas && Boolean(appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.nominasLockedBy));
     const isQuincenasSubtab = (appState.adminSubSection || 'quincenas') === 'quincenas';
 
     const applyBtnState = (editEl, saveEl) => {
@@ -1883,9 +2071,9 @@ function updateNominasEditButtonsUI() {
     }
 
     if (btnAddRow) {
-        btnAddRow.disabled = !appState.isEditingNominas || isLockedByOther;
-        btnAddRow.style.opacity = (!appState.isEditingNominas || isLockedByOther) ? "0.55" : "1";
-        btnAddRow.style.cursor = (!appState.isEditingNominas || isLockedByOther) ? "not-allowed" : "pointer";
+        btnAddRow.disabled = Boolean(isLockedByOther);
+        btnAddRow.style.opacity = isLockedByOther ? "0.55" : "1";
+        btnAddRow.style.cursor = isLockedByOther ? "not-allowed" : "pointer";
     }
 
     if (isLockedByOther) {
@@ -1922,7 +2110,7 @@ function updateNominasEditButtonsUI() {
 }
 window.updateNominasEditButtonsUI = updateNominasEditButtonsUI;
 
-function broadcastNominasLockState(isLocked, userName, userId) {
+function broadcastNominasLockState(isLocked, userName, userId, timestamp) {
     window.broadcastNominasLockState = broadcastNominasLockState;
     if (!window.chatRealtimeChannel) return;
     try {
@@ -1933,7 +2121,7 @@ function broadcastNominasLockState(isLocked, userName, userId) {
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
-                timestamp: Date.now()
+                timestamp: timestamp || Date.now()
             }
         });
     } catch (e) {
@@ -1942,7 +2130,7 @@ function broadcastNominasLockState(isLocked, userName, userId) {
 }
 window.broadcastNominasLockState = broadcastNominasLockState;
 
-async function syncNominasLockToCloud(isLocked, userName, userId) {
+async function syncNominasLockToCloud(isLocked, userName, userId, timestamp) {
     window.syncNominasLockToCloud = syncNominasLockToCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
@@ -1954,7 +2142,7 @@ async function syncNominasLockToCloud(isLocked, userName, userId) {
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
-                timestamp: Date.now()
+                timestamp: timestamp || Date.now()
             }),
             emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
             emisor_role: 'sistema'
@@ -1981,14 +2169,25 @@ async function fetchNominasLockFromCloud() {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
                 const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
                 if (parsed.isLocked) {
                     const elapsed = Date.now() - (parsed.timestamp || 0);
                     if (elapsed < 5 * 60 * 1000) {
-                        if (parsed.userId !== currentUserId) {
+                        if (!isLockOwnedByCurrentUser(parsed)) {
+                            if (appState.isEditingNominas) {
+                                // Preferencia absoluta: mantener mi sesión activa hasta que yo de clic en Guardar
+                                const myLockTime = appState.nominasLockedBy?.timestamp || Date.now();
+                                syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
+                                return;
+                            }
                             appState.nominasLockedBy = parsed;
                         }
                     } else {
-                        appState.nominasLockedBy = null;
+                        if (!appState.isEditingNominas) {
+                            appState.nominasLockedBy = null;
+                        }
                     }
                 } else {
                     if (!appState.isEditingNominas) {
@@ -2004,6 +2203,20 @@ async function fetchNominasLockFromCloud() {
 }
 window.fetchNominasLockFromCloud = fetchNominasLockFromCloud;
 
+async function handleNominaCellClick(index, fieldId) {
+    window.handleNominaCellClick = handleNominaCellClick;
+    if (!appState.isEditingNominas) {
+        await startEditingNominas();
+        if (appState.isEditingNominas && fieldId) {
+            setTimeout(() => {
+                const el = document.getElementById(fieldId);
+                if (el && !el.disabled) el.focus();
+            }, 30);
+        }
+    }
+}
+window.handleNominaCellClick = handleNominaCellClick;
+
 function renderNominas() {
     const tbody = document.getElementById("tbody-nominas");
     if (!tbody) return;
@@ -2018,6 +2231,23 @@ function renderNominas() {
 
     const frag = document.createDocumentFragment();
     const list = window.getActiveNominasList();
+    if (!appState.viewingArchiveId && Array.isArray(list) && list.length === 0) {
+        list.push({
+            folio: "1",
+            empleado: "",
+            fecha: new Date().toISOString().split('T')[0],
+            nomina: 0,
+            servicio: 0,
+            ivaPct: 0,
+            iva: 0,
+            retPct: 0,
+            ret4Pct: 0,
+            ret4: 0,
+            retIsrPct: 0,
+            retIsr: 0,
+            total: 0
+        });
+    }
     
     list.forEach((item, index) => {
         let nominaVal = 0;
@@ -2057,36 +2287,36 @@ function renderNominas() {
         const tr = document.createElement("tr");
         tr.setAttribute("data-row-key", `nom_${index}`);
         tr.setAttribute("oncontextmenu", `if(appState.isEditingNominas && confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
-        tr.title = isEditable ? "Clic derecho para eliminar fila" : "Haz clic en 'Editar' para modificar esta tabla";
+        tr.title = isEditable ? "Clic derecho para eliminar fila" : "Haz clic en 'Editar' o en una celda para modificar esta tabla";
         tr.innerHTML = `
-            <td>
-                <input type="text" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
+            <td onclick="handleNominaCellClick(${index}, 'nom-folio-input-${index}')">
+                <input type="text" id="nom-folio-input-${index}" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
             </td>
-            <td>
-                <input type="text" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" placeholder="Empleado..." ${disabledAttr} style="font-weight: 700;">
+            <td onclick="handleNominaCellClick(${index}, 'nom-empleado-input-${index}')">
+                <input type="text" id="nom-empleado-input-${index}" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" placeholder="Empleado..." ${disabledAttr} style="font-weight: 700;">
             </td>
-            <td>
-                <input type="date" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)" ${disabledAttr}>
+            <td onclick="handleNominaCellClick(${index}, 'nom-fecha-input-${index}')">
+                <input type="date" id="nom-fecha-input-${index}" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)" ${disabledAttr}>
             </td>
-            <td>
+            <td onclick="handleNominaCellClick(${index}, 'nom-nomina-input-${index}')">
                 <div class="excel-currency-wrap">
                     <span class="currency-symbol">$</span>
                     <input type="number" id="nom-nomina-input-${index}" class="excel-input number-input" value="${nominaVal || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 700;">
                 </div>
             </td>
-            <td>
+            <td onclick="handleNominaCellClick(${index}, 'nom-iva-input-${index}')">
                 <div class="excel-percent-wrap">
                     <input type="number" id="nom-iva-input-${index}" class="excel-input number-input" value="${ivaPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
                 </div>
             </td>
-            <td>
+            <td onclick="handleNominaCellClick(${index}, 'nom-ret4-input-${index}')">
                 <div class="excel-percent-wrap">
                     <input type="number" id="nom-ret4-input-${index}" class="excel-input number-input" value="${retPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
                 </div>
             </td>
-            <td>
+            <td onclick="handleNominaCellClick(${index}, 'nom-retisr-input-${index}')">
                 <div class="excel-percent-wrap">
                     <input type="number" id="nom-retisr-input-${index}" class="excel-input number-input" value="${retIsrPct || 0}" step="any" oninput="liveUpdateNominaTotals(${index})" placeholder="0" ${disabledAttr}>
                     <span class="percent-symbol">%</span>
@@ -2256,13 +2486,11 @@ function recalculateNominasTableTotals() {
     }
 };
 
-function addNewNominaRow() {
+async function addNewNominaRow() {
     window.addNewNominaRow = addNewNominaRow;
     if (!appState.isEditingNominas) {
-        if (typeof showCustomNotification === 'function') {
-            showCustomNotification("Haz clic en 'Editar' para agregar o modificar registros de Nómina.", "info");
-        }
-        return;
+        await startEditingNominas();
+        if (!appState.isEditingNominas) return;
     }
     const nextNum = window.getActiveNominasList().length + 1;
     window.getActiveNominasList().push({
@@ -2382,10 +2610,15 @@ async function fetchNominasFromCloud() {
                     if (Array.isArray(parsed.archivosQuincenales)) {
                         appState.archivosQuincenales = parsed.archivosQuincenales;
                     }
-                    if (changed) {
-                        saveToStorage();
+                    saveToStorage();
+                    try {
+                        localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas));
+                    } catch (e) {}
+                    const tbody = document.getElementById("tbody-nominas");
+                    const tableNeedsRender = !tbody || tbody.children.length === 0;
+                    if (changed || tableNeedsRender || appState.currentAdminFicha === 'visualizacion') {
                         if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
-                            renderNominas();
+                            if (appState.currentAdminFicha === 'quincenal') renderNominas();
                             renderVisualizacion();
                         }
                     }
@@ -2408,28 +2641,49 @@ async function startEditingGastosIndirectos() {
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
 
-    if (appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId) {
+    // 1. Verificar si localmente está bloqueado por otro usuario (< 5 min)
+    if (appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.isLocked !== false && appState.gastosIndirectosLockedBy.userId !== currentUserId) {
         const elapsed = Date.now() - (appState.gastosIndirectosLockedBy.timestamp || 0);
         if (elapsed < 5 * 60 * 1000) {
-            alert(`⚠️ Esta tabla está siendo editada por ${appState.gastosIndirectosLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.gastosIndirectosLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            updateGastosIndirectosEditButtonsUI();
             return;
         }
     }
 
     appState._gastosIndirectosSnapshot = JSON.parse(JSON.stringify(appState.gastosIndirectos || []));
 
+    const lockTime = Date.now();
     appState.isEditingGastosIndirectos = true;
     appState.gastosIndirectosLockedBy = {
         userId: currentUserId,
         userName: currentUserName,
-        timestamp: Date.now()
+        timestamp: lockTime,
+        isLocked: true
     };
 
     updateGastosIndirectosEditButtonsUI();
     renderGastosIndirectos();
 
-    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId);
-    await syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId);
+    // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
+    try {
+        const activeCloudLock = await checkCloudLockActive('__cloud_sync_gastos_indirectos_lock__', currentUserId);
+        if (activeCloudLock && activeCloudLock.isLocked && activeCloudLock.userId !== currentUserId) {
+            appState.isEditingGastosIndirectos = false;
+            appState.gastosIndirectosLockedBy = activeCloudLock;
+            if (appState._gastosIndirectosSnapshot) {
+                appState.gastosIndirectos = JSON.parse(JSON.stringify(appState._gastosIndirectosSnapshot));
+                appState._gastosIndirectosSnapshot = null;
+            }
+            updateGastosIndirectosEditButtonsUI();
+            renderGastosIndirectos();
+            alert(`⚠️ Esta tabla está siendo editada por ${activeCloudLock.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    } catch (e) {}
+
+    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, lockTime);
+    await syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, lockTime);
 
     if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
     _editGastosIndirectosTimeout = setTimeout(() => {
@@ -2505,7 +2759,7 @@ function updateGastosIndirectosEditButtonsUI() {
 
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
-    const isLockedByOther = Boolean(appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId);
+    const isLockedByOther = !appState.isEditingGastosIndirectos && Boolean(appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.isLocked !== false && appState.gastosIndirectosLockedBy.userId !== currentUserId);
     const isGastosIndSubtab = appState.adminSubSection === 'gastos-indirectos';
 
     const applyBtnState = (editEl, saveEl) => {
@@ -2601,7 +2855,7 @@ function updateGastosIndirectosEditButtonsUI() {
 }
 window.updateGastosIndirectosEditButtonsUI = updateGastosIndirectosEditButtonsUI;
 
-function broadcastGastosIndirectosLockState(isLocked, userName, userId) {
+function broadcastGastosIndirectosLockState(isLocked, userName, userId, timestamp) {
     window.broadcastGastosIndirectosLockState = broadcastGastosIndirectosLockState;
     if (!window.chatRealtimeChannel) return;
     try {
@@ -2612,7 +2866,7 @@ function broadcastGastosIndirectosLockState(isLocked, userName, userId) {
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
-                timestamp: Date.now()
+                timestamp: timestamp || Date.now()
             }
         });
     } catch (e) {
@@ -2621,7 +2875,7 @@ function broadcastGastosIndirectosLockState(isLocked, userName, userId) {
 }
 window.broadcastGastosIndirectosLockState = broadcastGastosIndirectosLockState;
 
-async function syncGastosIndirectosLockToCloud(isLocked, userName, userId) {
+async function syncGastosIndirectosLockToCloud(isLocked, userName, userId, timestamp) {
     window.syncGastosIndirectosLockToCloud = syncGastosIndirectosLockToCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
@@ -2633,7 +2887,7 @@ async function syncGastosIndirectosLockToCloud(isLocked, userName, userId) {
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
-                timestamp: Date.now()
+                timestamp: timestamp || Date.now()
             }),
             emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
             emisor_role: 'sistema'
@@ -2660,14 +2914,25 @@ async function fetchGastosIndirectosLockFromCloud() {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
                 const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
                 if (parsed.isLocked) {
                     const elapsed = Date.now() - (parsed.timestamp || 0);
                     if (elapsed < 5 * 60 * 1000) {
                         if (parsed.userId !== currentUserId) {
+                            if (appState.isEditingGastosIndirectos) {
+                                // Preferencia absoluta: mantener mi sesión activa hasta que yo de clic en Guardar
+                                const myLockTime = appState.gastosIndirectosLockedBy?.timestamp || Date.now();
+                                syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, myLockTime);
+                                return;
+                            }
                             appState.gastosIndirectosLockedBy = parsed;
                         }
                     } else {
-                        appState.gastosIndirectosLockedBy = null;
+                        if (!appState.isEditingGastosIndirectos) {
+                            appState.gastosIndirectosLockedBy = null;
+                        }
                     }
                 } else {
                     if (!appState.isEditingGastosIndirectos) {
@@ -2773,6 +3038,13 @@ async function fetchGastosIndirectosFromCloud() {
                             renderGastosIndirectos();
                         }
                         recalculateGastosIndirectosTotals();
+                        if (typeof renderVisualizacion === 'function') {
+                            renderVisualizacion();
+                        }
+                    } else if (appState.currentAdminFicha === 'visualizacion') {
+                        if (typeof renderVisualizacion === 'function') {
+                            renderVisualizacion();
+                        }
                     }
                 }
             } catch (e) {}
@@ -2818,6 +3090,9 @@ function switchAdminSubSection(subSec) {
             btnGastosInd.style.borderColor = '#2563EB';
             btnGastosInd.style.boxShadow = '0 2px 6px rgba(37,99,235,0.25)';
         }
+        if (typeof window.fetchGastosIndirectosFromCloud === 'function' && !appState.isEditingGastosIndirectos) {
+            window.fetchGastosIndirectosFromCloud();
+        }
         renderGastosIndirectos();
         updateGastosIndirectosEditButtonsUI();
     } else {
@@ -2837,6 +3112,9 @@ function switchAdminSubSection(subSec) {
             btnGastosInd.style.color = '#475569';
             btnGastosInd.style.borderColor = 'rgba(15,23,42,0.15)';
             btnGastosInd.style.boxShadow = 'none';
+        }
+        if (typeof window.fetchNominasFromCloud === 'function' && !appState.isEditingNominas) {
+            window.fetchNominasFromCloud();
         }
         renderNominas();
         updateNominasEditButtonsUI();
@@ -4072,16 +4350,42 @@ window.handleProvEstatusDblClick = handleProvEstatusDblClick;
 
 let _editProveedoresTimeout = null;
 
+async function checkCloudLockActive(lockChatId, currentUserId) {
+    window.checkCloudLockActive = checkCloudLockActive;
+    if (!window.isSupabaseActive || !window.isSupabaseActive()) return null;
+    const client = window.SUPABASE_CONFIG?.client;
+    if (!client) return null;
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', lockChatId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            const parsed = JSON.parse(msgs[0].contenido);
+            if (parsed && parsed.isLocked) {
+                const elapsed = Date.now() - (parsed.timestamp || 0);
+                if (elapsed < 5 * 60 * 1000 && parsed.userId !== currentUserId && !isLockOwnedByCurrentUser(parsed)) {
+                    return parsed;
+                }
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+window.checkCloudLockActive = checkCloudLockActive;
+
 async function startEditingProveedores() {
     window.startEditingProveedores = startEditingProveedores;
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
 
-    // Verificar si está bloqueado por otro usuario
-    if (appState.proveedoresLockedBy && appState.proveedoresLockedBy.userId !== currentUserId) {
+    // 1. Verificar si localmente está bloqueado por otro usuario (< 5 min)
+    if (appState.proveedoresLockedBy && appState.proveedoresLockedBy.isLocked !== false && appState.proveedoresLockedBy.userId !== currentUserId) {
         const elapsed = Date.now() - (appState.proveedoresLockedBy.timestamp || 0);
         if (elapsed < 5 * 60 * 1000) {
-            alert(`⚠️ Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            updateProveedoresEditButtonsUI();
             return;
         }
     }
@@ -4090,21 +4394,42 @@ async function startEditingProveedores() {
     appState._proveedoresSnapshot = JSON.parse(JSON.stringify(appState.proveedores || []));
     appState._operacionesSnapshotProv = JSON.parse(JSON.stringify(appState.operacionesProyectos || []));
 
+    const lockTime = Date.now();
     appState.isEditingProveedores = true;
     appState.proveedoresLockedBy = {
         userId: currentUserId,
         userName: currentUserName,
-        timestamp: Date.now()
+        timestamp: lockTime,
+        isLocked: true
     };
 
     updateProveedoresEditButtonsUI();
     renderProveedores();
 
-    // Notificar a otras máquinas por WebSockets
-    broadcastProveedoresLockState(true, currentUserName, currentUserId);
+    // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
+    try {
+        const activeCloudLock = await checkCloudLockActive('__cloud_sync_proveedores_lock__', currentUserId);
+        if (activeCloudLock && activeCloudLock.isLocked && activeCloudLock.userId !== currentUserId) {
+            appState.isEditingProveedores = false;
+            appState.proveedoresLockedBy = activeCloudLock;
+            if (appState._proveedoresSnapshot) {
+                appState.proveedores = JSON.parse(JSON.stringify(appState._proveedoresSnapshot));
+                appState._proveedoresSnapshot = null;
+            }
+            if (appState._operacionesSnapshotProv) {
+                appState.operacionesProyectos = JSON.parse(JSON.stringify(appState._operacionesSnapshotProv));
+                appState._operacionesSnapshotProv = null;
+            }
+            updateProveedoresEditButtonsUI();
+            renderProveedores();
+            alert(`⚠️ Esta tabla está siendo editada por ${activeCloudLock.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    } catch (e) {}
 
-    // Persistir estado de bloqueo en Supabase
-    await syncProveedoresLockToCloud(true, currentUserName, currentUserId);
+    // Notificar a otras máquinas por WebSockets y persistir en Supabase
+    broadcastProveedoresLockState(true, currentUserName, currentUserId, lockTime);
+    syncProveedoresLockToCloud(true, currentUserName, currentUserId, lockTime);
 
     if (typeof showCustomNotification === 'function') {
         showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
@@ -4205,7 +4530,8 @@ function updateProveedoresEditButtonsUI() {
     const tableContainer = document.getElementById("proveedores-table-container");
 
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
-    const isLockedByOther = appState.proveedoresLockedBy && appState.proveedoresLockedBy.userId !== currentUserId;
+    // Si este cliente está editando activamente, NUNCA debe marcarse como bloqueado
+    const isLockedByOther = !appState.isEditingProveedores && Boolean(appState.proveedoresLockedBy && appState.proveedoresLockedBy.isLocked !== false && appState.proveedoresLockedBy.userId !== currentUserId);
 
     if (isLockedByOther) {
         if (tableContainer) tableContainer.classList.add("tabla-bloqueada-editando");
@@ -4219,7 +4545,7 @@ function updateProveedoresEditButtonsUI() {
             btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
             btnEdit.style.cursor = "not-allowed";
             btnEdit.style.opacity = "0.5";
-            btnEdit.title = `Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName}`;
+            btnEdit.title = `Esta tabla está siendo editada por ${appState.proveedoresLockedBy.userName || 'otro usuario'}`;
         }
         if (btnSave) {
             btnSave.disabled = true;
@@ -4264,7 +4590,7 @@ function updateProveedoresEditButtonsUI() {
 }
 window.updateProveedoresEditButtonsUI = updateProveedoresEditButtonsUI;
 
-function broadcastProveedoresLockState(isLocked, userName, userId) {
+function broadcastProveedoresLockState(isLocked, userName, userId, timestamp) {
     window.broadcastProveedoresLockState = broadcastProveedoresLockState;
     if (!window.chatRealtimeChannel) return;
     try {
@@ -4275,7 +4601,7 @@ function broadcastProveedoresLockState(isLocked, userName, userId) {
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
-                timestamp: Date.now()
+                timestamp: timestamp || Date.now()
             }
         });
     } catch (e) {
@@ -4284,7 +4610,7 @@ function broadcastProveedoresLockState(isLocked, userName, userId) {
 }
 window.broadcastProveedoresLockState = broadcastProveedoresLockState;
 
-async function syncProveedoresLockToCloud(isLocked, userName, userId) {
+async function syncProveedoresLockToCloud(isLocked, userName, userId, timestamp) {
     window.syncProveedoresLockToCloud = syncProveedoresLockToCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
@@ -4296,7 +4622,7 @@ async function syncProveedoresLockToCloud(isLocked, userName, userId) {
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
-                timestamp: Date.now()
+                timestamp: timestamp || Date.now()
             }),
             emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
             emisor_role: 'sistema'
@@ -4323,14 +4649,25 @@ async function fetchProveedoresLockFromCloud() {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
                 const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
                 if (parsed.isLocked) {
                     const elapsed = Date.now() - (parsed.timestamp || 0);
                     if (elapsed < 5 * 60 * 1000) {
                         if (parsed.userId !== currentUserId) {
+                            if (appState.isEditingProveedores) {
+                                // Preferencia absoluta: mantener mi sesión activa hasta que yo de clic en Guardar
+                                const myLockTime = appState.proveedoresLockedBy?.timestamp || Date.now();
+                                syncProveedoresLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                broadcastProveedoresLockState(true, currentUserName, currentUserId, myLockTime);
+                                return;
+                            }
                             appState.proveedoresLockedBy = parsed;
                         }
                     } else {
-                        appState.proveedoresLockedBy = null;
+                        if (!appState.isEditingProveedores) {
+                            appState.proveedoresLockedBy = null;
+                        }
                     }
                 } else {
                     if (!appState.isEditingProveedores) {
@@ -4811,14 +5148,32 @@ function deleteProveedorRecord(index) {
 function handleCreateTask(event) {
     window.handleCreateTask = handleCreateTask;
     event.preventDefault();
+    if (typeof isManagerUser === 'function' && !isManagerUser()) {
+        alert("Solo los usuarios con rol de Manager pueden crear y asignar tareas.");
+        return;
+    }
     const title = document.getElementById("task-title").value.trim();
     const desc = document.getElementById("task-desc").value.trim();
     const assigneeInput = document.getElementById("task-assignee");
-    const assignee = assigneeInput ? assigneeInput.value.trim() : '';
+    let assignee = assigneeInput ? assigneeInput.value.trim() : '';
     const rawPriority = document.getElementById("task-priority").value || 'alta';
     const priority = rawPriority.trim().toLowerCase();
     
     if (!title) return;
+
+    if (assignee && assignee.toLowerCase() !== 'sin asignar') {
+        const validAssignees = typeof getAvailableAssignees === 'function' ? getAvailableAssignees() : [];
+        const matchedUser = validAssignees.find(u =>
+            (u.nombre && u.nombre.trim().toLowerCase() === assignee.toLowerCase()) ||
+            (u.email && u.email.trim().toLowerCase() === assignee.toLowerCase())
+        );
+        if (!matchedUser) {
+            alert("Solo puedes asignar tareas a colaboradores registrados en el sistema. Selecciona uno de la lista.");
+            if (assigneeInput) assigneeInput.focus();
+            return;
+        }
+        assignee = matchedUser.nombre;
+    }
     
     const newTask = {
         id: `task-${Date.now()}`,
@@ -5001,10 +5356,25 @@ function handleSaveTaskEdit(event) {
     const taskId = document.getElementById("edit-task-id").value;
     const title = document.getElementById("edit-task-title").value.trim();
     const desc = document.getElementById("edit-task-desc").value.trim();
-    const assignee = document.getElementById("edit-task-assignee").value.trim();
+    const assigneeInput = document.getElementById("edit-task-assignee");
+    let assignee = assigneeInput ? assigneeInput.value.trim() : '';
     const priority = document.getElementById("edit-task-priority").value || 'alta';
 
     if (!title || !taskId) return;
+
+    if (assignee && assignee.toLowerCase() !== 'sin asignar') {
+        const validAssignees = typeof getAvailableAssignees === 'function' ? getAvailableAssignees() : [];
+        const matchedUser = validAssignees.find(u =>
+            (u.nombre && u.nombre.trim().toLowerCase() === assignee.toLowerCase()) ||
+            (u.email && u.email.trim().toLowerCase() === assignee.toLowerCase())
+        );
+        if (!matchedUser) {
+            alert("Solo puedes asignar tareas a colaboradores registrados en el sistema. Selecciona uno válido.");
+            if (assigneeInput) assigneeInput.focus();
+            return;
+        }
+        assignee = matchedUser.nombre;
+    }
 
     const taskIndex = appState.tasks.findIndex(t => t.id === taskId);
     if (taskIndex !== -1) {
@@ -5201,7 +5571,7 @@ function populateTaskUserFilterOptions() {
     const assignees = typeof getAvailableAssignees === 'function' ? getAvailableAssignees() : [];
     const usersMap = new Map();
 
-    // 1. Agregar colaboradores conocidos del sistema
+    // 1. Agregar colaboradores registrados del sistema
     assignees.forEach(u => {
         if (u && u.nombre && !usersMap.has(u.nombre)) {
             usersMap.set(u.nombre, {
@@ -5214,32 +5584,7 @@ function populateTaskUserFilterOptions() {
         }
     });
 
-    // 2. Agregar asignados de tareas existentes si no estaban registrados
-    (appState.tasks || []).forEach(t => {
-        const a = (t.assignee || '').trim();
-        const fakeUsers = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
-        if (a && a !== 'Sin asignar' && !fakeUsers.has(a.toLowerCase())) {
-            let matchedKey = null;
-            for (const [key, val] of usersMap.entries()) {
-                if (key.toLowerCase() === a.toLowerCase() || 
-                    (val.userObj && isTaskAssignedToUser(t, val.userObj))) {
-                    matchedKey = key;
-                    break;
-                }
-            }
-            if (!matchedKey) {
-                usersMap.set(a, {
-                    displayName: a,
-                    userObj: { nombre: a },
-                    pending: 0,
-                    completed: 0,
-                    total: 0
-                });
-            }
-        }
-    });
-
-    // 3. Contar tareas por usuario (pendientes y completadas)
+    // 2. Contar tareas por usuario (pendientes y completadas)
     (appState.tasks || []).forEach(t => {
         const st = (t.status || '').toLowerCase();
         const isComp = st === 'completed' || st === 'completada';
@@ -6095,7 +6440,7 @@ function handleSendChatMessage(event) {
     
     if (!text && !attachment) return;
     
-    const senderName = appState.currentUser ? appState.currentUser.nombre : (appState.currentRole === 'gerente' ? 'Roberto Miranda Perez' : 'Roberto Miranda Perez');
+    const senderName = appState.currentUser ? appState.currentUser.nombre : (appState.currentRole === 'gerente' ? 'Roberto Miranda' : 'Colaborador');
     const senderRole = appState.currentUser ? appState.currentUser.rol : appState.currentRole;
     const currentChan = appState.currentChannel || 'general';
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -6485,11 +6830,12 @@ async function startEditingConsecutivo() {
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
 
-    // Verificar si está bloqueado por otro usuario
-    if (appState.consecutivoLockedBy && appState.consecutivoLockedBy.userId !== currentUserId) {
+    // 1. Verificar si localmente está bloqueado por otro usuario (< 5 min)
+    if (appState.consecutivoLockedBy && appState.consecutivoLockedBy.isLocked !== false && appState.consecutivoLockedBy.userId !== currentUserId) {
         const elapsed = Date.now() - (appState.consecutivoLockedBy.timestamp || 0);
         if (elapsed < 5 * 60 * 1000) {
-            alert(`⚠️ Esta sección está siendo editada por ${appState.consecutivoLockedBy.userName}. Por favor espera a que termine de guardar.`);
+            alert(`⚠️ Esta sección está siendo editada por ${appState.consecutivoLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            updateConsecutivoEditButtonsUI();
             return;
         }
     }
@@ -6498,21 +6844,42 @@ async function startEditingConsecutivo() {
     appState._consecutivoSnapshot = JSON.parse(JSON.stringify(appState.consecutivo || []));
     appState._operacionesSnapshotConsec = JSON.parse(JSON.stringify(appState.operacionesProyectos || []));
 
+    const lockTime = Date.now();
     appState.isEditingConsecutivo = true;
     appState.consecutivoLockedBy = {
         userId: currentUserId,
         userName: currentUserName,
-        timestamp: Date.now()
+        timestamp: lockTime,
+        isLocked: true
     };
 
     updateConsecutivoEditButtonsUI();
     renderConsecutivo();
 
-    // Notificar a otras máquinas por WebSockets
-    broadcastConsecutivoLockState(true, currentUserName, currentUserId);
+    // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
+    try {
+        const activeCloudLock = await checkCloudLockActive('__cloud_sync_consecutivo_lock__', currentUserId);
+        if (activeCloudLock && activeCloudLock.isLocked && activeCloudLock.userId !== currentUserId) {
+            appState.isEditingConsecutivo = false;
+            appState.consecutivoLockedBy = activeCloudLock;
+            if (appState._consecutivoSnapshot) {
+                appState.consecutivo = JSON.parse(JSON.stringify(appState._consecutivoSnapshot));
+                appState._consecutivoSnapshot = null;
+            }
+            if (appState._operacionesSnapshotConsec) {
+                appState.operacionesProyectos = JSON.parse(JSON.stringify(appState._operacionesSnapshotConsec));
+                appState._operacionesSnapshotConsec = null;
+            }
+            updateConsecutivoEditButtonsUI();
+            renderConsecutivo();
+            alert(`⚠️ Esta sección está siendo editada por ${activeCloudLock.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+    } catch (e) {}
 
-    // Persistir estado de bloqueo en Supabase
-    await syncConsecutivoLockToCloud(true, currentUserName, currentUserId);
+    // Notificar a otras máquinas por WebSockets y persistir en Supabase
+    broadcastConsecutivoLockState(true, currentUserName, currentUserId, lockTime);
+    syncConsecutivoLockToCloud(true, currentUserName, currentUserId, lockTime);
 
     if (typeof showCustomNotification === 'function') {
         showCustomNotification("Modo de edición activado. Modifica los estatus necesarios y haz clic en 'Guardar'.", "info");
@@ -6609,7 +6976,8 @@ function updateConsecutivoEditButtonsUI() {
     const tableContainer = document.getElementById("consecutivo-table-container");
 
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
-    const isLockedByOther = appState.consecutivoLockedBy && appState.consecutivoLockedBy.userId !== currentUserId;
+    // Si este cliente está editando activamente, NUNCA debe marcarse como bloqueado
+    const isLockedByOther = !appState.isEditingConsecutivo && Boolean(appState.consecutivoLockedBy && appState.consecutivoLockedBy.isLocked !== false && appState.consecutivoLockedBy.userId !== currentUserId);
 
     if (isLockedByOther) {
         if (tableContainer) tableContainer.classList.add("tabla-bloqueada-editando");
@@ -6623,7 +6991,7 @@ function updateConsecutivoEditButtonsUI() {
             btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
             btnEdit.style.cursor = "not-allowed";
             btnEdit.style.opacity = "0.5";
-            btnEdit.title = `Esta sección está siendo editada por ${appState.consecutivoLockedBy.userName}`;
+            btnEdit.title = `Esta sección está siendo editada por ${appState.consecutivoLockedBy.userName || 'otro usuario'}`;
         }
         if (btnSave) {
             btnSave.disabled = true;
@@ -6668,7 +7036,7 @@ function updateConsecutivoEditButtonsUI() {
 }
 window.updateConsecutivoEditButtonsUI = updateConsecutivoEditButtonsUI;
 
-function broadcastConsecutivoLockState(isLocked, userName, userId) {
+function broadcastConsecutivoLockState(isLocked, userName, userId, timestamp) {
     window.broadcastConsecutivoLockState = broadcastConsecutivoLockState;
     if (!window.chatRealtimeChannel) return;
     try {
@@ -6679,7 +7047,7 @@ function broadcastConsecutivoLockState(isLocked, userName, userId) {
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
-                timestamp: Date.now()
+                timestamp: timestamp || Date.now()
             }
         });
     } catch (e) {
@@ -6688,7 +7056,7 @@ function broadcastConsecutivoLockState(isLocked, userName, userId) {
 }
 window.broadcastConsecutivoLockState = broadcastConsecutivoLockState;
 
-async function syncConsecutivoLockToCloud(isLocked, userName, userId) {
+async function syncConsecutivoLockToCloud(isLocked, userName, userId, timestamp) {
     window.syncConsecutivoLockToCloud = syncConsecutivoLockToCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
@@ -6700,7 +7068,7 @@ async function syncConsecutivoLockToCloud(isLocked, userName, userId) {
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
-                timestamp: Date.now()
+                timestamp: timestamp || Date.now()
             }),
             emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
             emisor_role: 'sistema'
@@ -6727,14 +7095,25 @@ async function fetchConsecutivoLockFromCloud() {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
                 const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
                 if (parsed.isLocked) {
                     const elapsed = Date.now() - (parsed.timestamp || 0);
                     if (elapsed < 5 * 60 * 1000) {
                         if (parsed.userId !== currentUserId) {
+                            if (appState.isEditingConsecutivo) {
+                                // Preferencia absoluta: mantener mi sesión activa hasta que yo de clic en Guardar
+                                const myLockTime = appState.consecutivoLockedBy?.timestamp || Date.now();
+                                syncConsecutivoLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                broadcastConsecutivoLockState(true, currentUserName, currentUserId, myLockTime);
+                                return;
+                            }
                             appState.consecutivoLockedBy = parsed;
                         }
                     } else {
-                        appState.consecutivoLockedBy = null;
+                        if (!appState.isEditingConsecutivo) {
+                            appState.consecutivoLockedBy = null;
+                        }
                     }
                 } else {
                     if (!appState.isEditingConsecutivo) {
@@ -7626,125 +8005,68 @@ function selectStOption(index, value, event) {
 // TASK ASSIGNEE AUTOCOMPLETE & DROPDOWN LOGIC
 // ==============================================================================
 function getAvailableAssignees() {
+    window.getAvailableAssignees = getAvailableAssignees;
     const list = [];
     const seenEmails = new Set();
     const seenNames = new Set();
 
-    // 1. Usuario actual en sesión ("Tú / Asignarme a mí") destacado en 1er lugar
-    const current = appState.currentUser;
-    if (current && (current.nombre || current.email)) {
-        const selfName = current.nombre || (current.email ? current.email.split('@')[0] : 'Mi Usuario');
-        list.push({
-            id: current.id || 'self-user',
-            nombre: selfName,
-            email: current.email || '',
-            rol: current.rol || appState.currentRole || 'gerente',
-            departamento: current.departamento || 'General',
-            isSelf: true
-        });
-        if (current.email) seenEmails.add(current.email.toLowerCase().trim());
-        if (selfName) seenNames.add(selfName.toLowerCase().trim());
-    } else {
-        const defaultName = appState.currentUser?.nombre || (appState.currentRole === 'gerente' ? 'Gerente' : 'Colaborador');
-        list.push({
-            id: 'self-user',
-            nombre: defaultName,
-            email: '',
-            rol: appState.currentRole || 'gerente',
-            departamento: 'General',
-            isSelf: true
-        });
-        seenNames.add(defaultName.toLowerCase());
-    }
-
-    // 2. Equipo base garantizado de Rodipack (todos los perfiles clave)
-    const defaultTeam = [
-        { nombre: "Diego Miranda", email: "diego@rodipack.com", rol: "administrativo", departamento: "Administración" },
-        { nombre: "Roberto Miranda Perez", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Sistemas IT" },
-        { nombre: "Roberto Miranda", email: "zalazardemiranda@gmail.com", rol: "gerente", departamento: "Operaciones" },
-        { nombre: "Maria Perez", email: "facturas@rodipack.com", rol: "administrador", departamento: "Finanzas" },
-        { nombre: "Manuel Miranda", email: "roberto@rodipack.com", rol: "gerente", departamento: "CEO" },
-        { nombre: "Manuel Morales", email: "", rol: "colaborador", departamento: "Logística" }
-    ];
-
-    // 3. Colaboradores registrados en el sistema, nube y almacenamiento local
-    let localProfilesList = [];
+    let deletedProfiles = [];
     try {
-        localProfilesList = JSON.parse(localStorage.getItem('rp_local_profiles') || '[]');
+        deletedProfiles = (JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]') || []).map(e => String(e).toLowerCase());
     } catch (e) {
-        localProfilesList = [];
+        deletedProfiles = [];
+    }
+    const deletedEmails = new Set(deletedProfiles);
+
+    // Obtener únicamente los perfiles registrados en Firebase (profiles)
+    const firebaseProfiles = (window.cachedProfilesList && window.cachedProfilesList.length > 0)
+        ? window.cachedProfilesList
+        : (window.cloudProfilesCache || []);
+
+    const current = appState.currentUser;
+    const curEmail = current && current.email ? String(current.email).toLowerCase().trim() : '';
+
+    // 1. Si el usuario actual en sesión está registrado en Firebase, colocarlo en 1er lugar ("Tú")
+    if (curEmail) {
+        const selfMatch = firebaseProfiles.find(p => p && p.email && String(p.email).trim().toLowerCase() === curEmail);
+        if (selfMatch && !deletedEmails.has(curEmail)) {
+            const selfName = (selfMatch.nombre || curEmail.split('@')[0]).trim();
+            list.push({
+                id: selfMatch.id || current.id || 'self-user',
+                nombre: selfName,
+                email: selfMatch.email,
+                rol: selfMatch.rol || current.rol || 'gerente',
+                departamento: selfMatch.departamento || current.departamento || 'General',
+                isSelf: true
+            });
+            seenEmails.add(curEmail);
+            if (selfName) seenNames.add(selfName.toLowerCase());
+        }
     }
 
-    const allProfiles = [
-        ...(window.cachedProfilesList || []),
-        ...(window.cloudProfilesCache || []),
-        ...localProfilesList,
-        ...defaultTeam
-    ];
+    // 2. Resto de usuarios registrados en Firebase
+    firebaseProfiles.forEach(p => {
+        if (!p || !p.email) return;
+        const pEmail = String(p.email).trim().toLowerCase();
+        if (!pEmail || deletedEmails.has(pEmail)) return;
 
-    allProfiles.forEach(p => {
-        if (!p || (!p.nombre && !p.email)) return;
-        const pName = (p.nombre || (p.email ? p.email.split('@')[0] : '')).trim();
-        const pEmail = (p.email || '').trim().toLowerCase();
+        const pName = (p.nombre || pEmail.split('@')[0]).trim();
         const nameLower = pName.toLowerCase();
+        if (!nameLower) return;
 
-        if (pEmail && seenEmails.has(pEmail)) return;
-        if (nameLower && seenNames.has(nameLower)) return;
-        if (pEmail) seenEmails.add(pEmail);
-        if (nameLower) seenNames.add(nameLower);
+        if (seenEmails.has(pEmail) || seenNames.has(nameLower)) return;
+        seenEmails.add(pEmail);
+        seenNames.add(nameLower);
 
         list.push({
             id: p.id || ('profile-' + list.length),
-            nombre: pName || 'Colaborador',
+            nombre: pName,
             email: p.email || '',
-            rol: p.rol || 'colaborador',
+            rol: p.rol || 'administrador',
             departamento: p.departamento || 'Operaciones',
             isSelf: false
         });
     });
-
-    // 4. Incorporar cualquier colaborador asignado en tareas existentes de appState.tasks
-    const ignoredNames = new Set(['sin asignar', 'sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
-    (appState.tasks || []).forEach(t => {
-        const a = (t.assignee || '').trim();
-        if (a && !ignoredNames.has(a.toLowerCase())) {
-            const aLower = a.toLowerCase();
-            if (!seenNames.has(aLower)) {
-                seenNames.add(aLower);
-                list.push({
-                    id: 'task-assignee-' + list.length,
-                    nombre: a,
-                    email: '',
-                    rol: 'colaborador',
-                    departamento: 'Equipo Rodipack',
-                    isSelf: false
-                });
-            }
-        }
-    });
-
-    // 5. Incorporar colaboradores de Esquematización si están definidos
-    if (window.schemaEngine && typeof window.schemaEngine.getSchemaCollaborators === 'function') {
-        try {
-            const schemaCollabs = window.schemaEngine.getSchemaCollaborators();
-            if (Array.isArray(schemaCollabs)) {
-                schemaCollabs.forEach(u => {
-                    const scName = (u.nombre || '').trim();
-                    if (scName && !seenNames.has(scName.toLowerCase())) {
-                        seenNames.add(scName.toLowerCase());
-                        list.push({
-                            id: u.id || ('schema-collab-' + list.length),
-                            nombre: scName,
-                            email: u.email || '',
-                            rol: u.rol || 'colaborador',
-                            departamento: u.departamento || 'General',
-                            isSelf: false
-                        });
-                    }
-                });
-            }
-        } catch (e) {}
-    }
 
     return list;
 }
@@ -7802,16 +8124,9 @@ function filterAssigneeDropdown(query) {
     let itemsHtml = '';
 
     if (filtered.length === 0) {
-        const cleanQuery = (query || '').trim();
         itemsHtml = `
-            <li class="assignee-dropdown-item custom-add" onmousedown="event.preventDefault(); selectTaskAssignee('${cleanQuery.replace(/'/g, "\\'")}')">
-                <div class="assignee-item-user">
-                    <div class="assignee-item-avatar" style="background: rgba(37, 99, 235, 0.1); color: #2563EB;">➕</div>
-                    <div class="assignee-item-details">
-                        <span class="assignee-item-name">Asignar a "${cleanQuery.replace(/'/g, "\\'")}"</span>
-                        <span class="assignee-item-sub">Usar este colaborador</span>
-                    </div>
-                </div>
+            <li class="assignee-dropdown-item" style="cursor: default; pointer-events: none; justify-content: center; padding: 12px; color: #94A3B8; font-size: 12.5px;">
+                Sin colaboradores registrados coincidentes
             </li>
         `;
     } else {
@@ -7844,21 +8159,6 @@ function filterAssigneeDropdown(query) {
                 </li>
             `;
         }).join('');
-
-        if (q && !assignees.some(u => (u.nombre || '').toLowerCase() === q)) {
-            const cleanQuery = (query || '').trim();
-            itemsHtml += `
-                <li class="assignee-dropdown-item custom-add" onmousedown="event.preventDefault(); selectTaskAssignee('${cleanQuery.replace(/'/g, "\\'")}')" style="border-top: 1px dashed #E2E8F0; margin-top: 4px; padding-top: 8px;">
-                    <div class="assignee-item-user">
-                        <div class="assignee-item-avatar" style="background: rgba(37, 99, 235, 0.1); color: #2563EB;">➕</div>
-                        <div class="assignee-item-details">
-                            <span class="assignee-item-name">Asignar a "${cleanQuery.replace(/'/g, "\\'")}"</span>
-                            <span class="assignee-item-sub">Usar nuevo colaborador personalizado</span>
-                        </div>
-                    </div>
-                </li>
-            `;
-        }
     }
 
     menu.innerHTML = itemsHtml;
@@ -8056,12 +8356,7 @@ async function initAuthAndRealtime() {
             await handleUserSession(session.user);
         } else if (isSessionActive && storedUser && appState.currentUser) {
             try {
-                if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
-                    appState.currentUser.rol = 'administrativo';
-                }
-                setRole(appState.currentUser?.rol || 'gerente');
-                updateUserSessionUI();
-                updateCloudStatusUI(true, appState.currentUser);
+                await handleUserSession(appState.currentUser);
             } catch (e) {}
         } else {
             appState.currentUser = null;
@@ -8087,12 +8382,7 @@ async function initAuthAndRealtime() {
                 await handleUserSession(session.user);
             } else if (active && localUser && appState.currentUser) {
                 try {
-                    if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === 'diego@rodipack.com') {
-                        appState.currentUser.rol = 'administrativo';
-                    }
-                    setRole(appState.currentUser?.rol || 'gerente');
-                    updateUserSessionUI();
-                    updateCloudStatusUI(true, appState.currentUser);
+                    await handleUserSession(appState.currentUser);
                 } catch (e) {}
             } else {
                 appState.currentUser = null;
@@ -8116,74 +8406,67 @@ async function handleUserSession(user) {
     if (!window.isSupabaseActive() || !user) return;
     const client = window.SUPABASE_CONFIG.client;
     const userEmail = (user.email || '').toLowerCase();
+    const userId = user.id || user.uid || '';
     
     try {
         let profile = null;
-        try {
-            const { data: profById } = await client
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .maybeSingle();
-            if (profById) profile = profById;
-        } catch (e) {}
-
-        if (!profile && userEmail) {
+        const candidates = [];
+        if (userId) {
             try {
-                const { data: profByEmail } = await client
+                const { data: profById } = await client
                     .from('profiles')
                     .select('*')
-                    .eq('email', userEmail)
+                    .eq('id', userId)
                     .maybeSingle();
-                if (profByEmail) profile = profByEmail;
+                if (profById) candidates.push(profById);
             } catch (e) {}
         }
 
-        // Cargar datos personalizados locales
-        const savedCustomName = localStorage.getItem('rp_custom_user_nombre') ||
-            (userEmail ? localStorage.getItem('rp_user_profile_name_' + userEmail) : null);
-        const savedCustomPhone = userEmail ? localStorage.getItem('rp_user_profile_phone_' + userEmail) : null;
-        let localLoggedUser = null;
-        try {
-            const rawStored = localStorage.getItem('rp_logged_user');
-            if (rawStored) localLoggedUser = JSON.parse(rawStored);
-        } catch (e) {}
+        if (userEmail) {
+            try {
+                const { data: profsByEmail } = await client
+                    .from('profiles')
+                    .select('*')
+                    .eq('email', userEmail);
+                if (Array.isArray(profsByEmail) && profsByEmail.length > 0) {
+                    candidates.push(...profsByEmail);
+                }
+            } catch (e) {}
+        }
+
+        if (candidates.length > 0) {
+            const deduped = typeof dedupeProfilesByEmail === 'function' ? dedupeProfilesByEmail(candidates) : candidates;
+            profile = deduped[0] || candidates[0];
+        }
 
         const emailPrefix = userEmail ? userEmail.split('@')[0] : '';
-        const fallbackDefaultName = (userEmail === 'diego@rodipack.com') ? 'Diego Miranda' : (emailPrefix || 'Usuario');
+        const savedCustomPhone = userEmail ? localStorage.getItem('rp_user_profile_phone_' + userEmail) : null;
 
         if (!profile) {
-            // Profile fallback
             profile = {
-                id: user.id,
+                id: userId,
                 email: user.email,
-                nombre: savedCustomName || localLoggedUser?.nombre || user.displayName || user.user_metadata?.nombre || fallbackDefaultName,
-                telefono: savedCustomPhone || localLoggedUser?.telefono || '',
-                rol: user.user_metadata?.rol || localLoggedUser?.rol || (userEmail === 'diego@rodipack.com' ? 'administrativo' : 'gerente'),
-                departamento: user.user_metadata?.departamento || localLoggedUser?.departamento || 'Administración'
+                nombre: user.displayName || user.user_metadata?.nombre || emailPrefix || 'Usuario',
+                telefono: savedCustomPhone || '',
+                rol: user.user_metadata?.rol || 'administrador',
+                departamento: user.user_metadata?.departamento || 'Administración'
             };
         } else {
-            // Si el perfil remoto tiene el nombre vacío o coincide exactamente con el prefijo plano del email ("zalazardemiranda")
-            // y el usuario guardó un nombre personalizado, preservar siempre el personalizado
-            if (savedCustomName) {
-                profile.nombre = savedCustomName;
-            } else if (localLoggedUser?.nombre && (!profile.nombre || profile.nombre.toLowerCase() === emailPrefix.toLowerCase())) {
-                profile.nombre = localLoggedUser.nombre;
+            if (!profile.id && userId) profile.id = userId;
+            if (!profile.nombre) {
+                profile.nombre = user.displayName || user.user_metadata?.nombre || emailPrefix || 'Usuario';
             }
             if (savedCustomPhone && !profile.telefono) {
                 profile.telefono = savedCustomPhone;
-            } else if (localLoggedUser?.telefono && !profile.telefono) {
-                profile.telefono = localLoggedUser.telefono;
             }
         }
-        
-        // Garantizar rol de Gerente para el administrador y administrativo para Diego
-        if (profile.email && profile.email.toLowerCase() === 'zalazardemiranda@gmail.com') {
-            profile.rol = 'gerente';
-        } else if (profile.email && profile.email.toLowerCase() === 'diego@rodipack.com') {
-            profile.rol = 'administrativo';
-        } else if (!profile.rol) {
-            profile.rol = 'gerente';
+
+        if (profile.nombre && userEmail) {
+            localStorage.setItem('rp_user_profile_name_' + userEmail, profile.nombre);
+        }
+
+        if (!profile.rol) {
+            profile.rol = 'administrador';
         }
         
         appState.currentUser = profile;
@@ -8377,8 +8660,8 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'proveedores_update' }, payload => {
         const data = payload.payload;
         if (!data || !Array.isArray(data.proveedores)) return;
+        if (data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
         if (appState.isEditingProveedores) return;
-        if (Date.now() - (window._lastLocalProveedoresSyncTime || 0) < 5000) return;
         const purgedIds = window.purgedProjectIds || new Set();
         const validProv = data.proveedores.filter(r => {
             if (!r) return false;
@@ -8400,6 +8683,7 @@ function setupRealtimeSubscriptions() {
                 if (typeof window.renderProveedoresTable === 'function') renderProveedoresTable();
                 if (typeof window.renderProveedores === 'function') renderProveedores();
             }
+            if (typeof window.renderVisualizacion === 'function') renderVisualizacion();
         }
     });
 
@@ -8408,10 +8692,21 @@ function setupRealtimeSubscriptions() {
         const data = payload.payload;
         if (!data) return;
         const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
         if (data.isLocked) {
-            if (data.userId !== currentUserId) {
-                appState.proveedoresLockedBy = data;
+            if (data.userId === currentUserId) return;
+
+            if (appState.isEditingProveedores) {
+                // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
+                // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
+                const myLockTime = appState.proveedoresLockedBy?.timestamp || Date.now();
+                broadcastProveedoresLockState(true, currentUserName, currentUserId, myLockTime);
+                syncProveedoresLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                return;
             }
+
+            appState.proveedoresLockedBy = data;
         } else {
             if (!appState.isEditingProveedores) {
                 appState.proveedoresLockedBy = null;
@@ -8430,10 +8725,21 @@ function setupRealtimeSubscriptions() {
         const data = payload.payload;
         if (!data) return;
         const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
         if (data.isLocked) {
-            if (data.userId !== currentUserId) {
-                appState.consecutivoLockedBy = data;
+            if (data.userId === currentUserId) return;
+
+            if (appState.isEditingConsecutivo) {
+                // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
+                // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
+                const myLockTime = appState.consecutivoLockedBy?.timestamp || Date.now();
+                broadcastConsecutivoLockState(true, currentUserName, currentUserId, myLockTime);
+                syncConsecutivoLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                return;
             }
+
+            appState.consecutivoLockedBy = data;
         } else {
             if (!appState.isEditingConsecutivo) {
                 appState.consecutivoLockedBy = null;
@@ -8467,11 +8773,10 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'consecutivo_update' }, payload => {
         const data = payload.payload;
         if (!data || !Array.isArray(data.consecutivo)) return;
-        if (data.sender && appState.currentUser?.email && data.sender === appState.currentUser.email) return;
+        if (data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
         if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
-        if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
         if (typeof window.mergeConsecutivoFromCloud === 'function') {
-            window.mergeConsecutivoFromCloud(data.consecutivo);
+            window.mergeConsecutivoFromCloud(data.consecutivo, true);
         }
     });
 
@@ -8520,14 +8825,18 @@ function setupRealtimeSubscriptions() {
         if (appState.isEditingNominas) return;
         const data = payload.payload;
         if (!data) return;
+        if (data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
         if (Array.isArray(data.nominas)) {
             appState.nominas = data.nominas;
             if (Array.isArray(data.archivosQuincenales)) {
                 appState.archivosQuincenales = data.archivosQuincenales;
             }
             saveToStorage();
+            try { localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas)); } catch (e) {}
             if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
                 renderNominas();
+            }
+            if (typeof window.renderVisualizacion === 'function') {
                 renderVisualizacion();
             }
         }
@@ -8538,10 +8847,21 @@ function setupRealtimeSubscriptions() {
         const data = payload.payload;
         if (!data) return;
         const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
         if (data.isLocked) {
-            if (data.userId !== currentUserId) {
-                appState.nominasLockedBy = data;
+            if (data.userId === currentUserId) return;
+
+            if (appState.isEditingNominas) {
+                // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
+                // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
+                const myLockTime = appState.nominasLockedBy?.timestamp || Date.now();
+                broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
+                syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                return;
             }
+
+            appState.nominasLockedBy = data;
         } else {
             if (!appState.isEditingNominas) {
                 appState.nominasLockedBy = null;
@@ -8560,6 +8880,7 @@ function setupRealtimeSubscriptions() {
         if (appState.isEditingGastosIndirectos) return;
         const data = payload.payload;
         if (!data || !Array.isArray(data.gastosIndirectos)) return;
+        if (data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
         appState.gastosIndirectos = data.gastosIndirectos.filter(item => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(item));
         saveToStorage();
         if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
@@ -8570,6 +8891,9 @@ function setupRealtimeSubscriptions() {
         if (typeof window.recalculateGastosIndirectosTotals === 'function') {
             window.recalculateGastosIndirectosTotals();
         }
+        if (typeof window.renderVisualizacion === 'function') {
+            window.renderVisualizacion();
+        }
     });
 
     // 4h-lock. Bloqueo de Edición Exclusiva de Gastos Indirectos en tiempo real
@@ -8577,10 +8901,21 @@ function setupRealtimeSubscriptions() {
         const data = payload.payload;
         if (!data) return;
         const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
         if (data.isLocked) {
-            if (data.userId !== currentUserId) {
-                appState.gastosIndirectosLockedBy = data;
+            if (data.userId === currentUserId) return;
+
+            if (appState.isEditingGastosIndirectos) {
+                // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
+                // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
+                const myLockTime = appState.gastosIndirectosLockedBy?.timestamp || Date.now();
+                broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, myLockTime);
+                syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                return;
             }
+
+            appState.gastosIndirectosLockedBy = data;
         } else {
             if (!appState.isEditingGastosIndirectos) {
                 appState.gastosIndirectosLockedBy = null;
@@ -8655,32 +8990,254 @@ function setupRealtimeSubscriptions() {
             if (channelKey === '__cloud_sync_system_release__' && typeof window.checkSystemReleaseFromCloud === 'function') {
                 window.checkSystemReleaseFromCloud();
             }
-            if (channelKey === '__cloud_sync_consecutivo__' && typeof window.fetchConsecutivoFromCloud === 'function') {
-                window.fetchConsecutivoFromCloud();
+            if (channelKey === '__cloud_sync_consecutivo__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (Array.isArray(parsed) && typeof window.mergeConsecutivoFromCloud === 'function') {
+                            window.mergeConsecutivoFromCloud(parsed, true);
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchConsecutivoFromCloud === 'function') {
+                    window.fetchConsecutivoFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_proveedores_catalog__' && typeof window.fetchProveedoresCatalogFromCloud === 'function') {
-                window.fetchProveedoresCatalogFromCloud();
+            if (channelKey === '__cloud_sync_proveedores_catalog__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (Array.isArray(parsed)) {
+                            appState.proveedorNamesList = parsed;
+                            try { localStorage.setItem('rp_proveedor_names', JSON.stringify(parsed)); } catch (e) {}
+                            if (typeof window.renderProveedorChips === 'function') window.renderProveedorChips();
+                            if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') renderProveedores();
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchProveedoresCatalogFromCloud === 'function') {
+                    window.fetchProveedoresCatalogFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_proveedores_data__' && typeof window.fetchProveedoresDataFromCloud === 'function') {
-                window.fetchProveedoresDataFromCloud();
+            if (channelKey === '__cloud_sync_proveedores_data__') {
+                if (row.contenido && !appState.isEditingProveedores) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            appState.proveedores = parsed;
+                            saveToStorage();
+                            try { localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores)); } catch (e) {}
+                            if (appState.currentAdminFicha === 'proveedores') {
+                                if (typeof window.updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
+                                if (typeof window.renderProveedoresTable === 'function') renderProveedoresTable();
+                                if (typeof window.renderProveedores === 'function') renderProveedores();
+                            }
+                            if (typeof window.renderVisualizacion === 'function') renderVisualizacion();
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchProveedoresDataFromCloud === 'function') {
+                    window.fetchProveedoresDataFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_nominas__' && typeof window.fetchNominasFromCloud === 'function') {
-                window.fetchNominasFromCloud();
+            if (channelKey === '__cloud_sync_nominas__') {
+                if (row.contenido && !appState.isEditingNominas) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (parsed && Array.isArray(parsed.nominas)) {
+                            appState.nominas = parsed.nominas;
+                            if (Array.isArray(parsed.archivosQuincenales)) {
+                                appState.archivosQuincenales = parsed.archivosQuincenales;
+                            }
+                            saveToStorage();
+                            try { localStorage.setItem('rp_nominas_data', JSON.stringify(appState.nominas)); } catch (e) {}
+                            if (appState.currentTab === 'administracion' || appState.currentTab === 'admin') {
+                                if (typeof renderNominas === 'function') renderNominas();
+                            }
+                            if (typeof renderVisualizacion === 'function') renderVisualizacion();
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchNominasFromCloud === 'function') {
+                    window.fetchNominasFromCloud();
+                }
             }
             if (channelKey === '__cloud_sync_nominas_lock__' && typeof window.fetchNominasLockFromCloud === 'function') {
                 window.fetchNominasLockFromCloud();
             }
-            if (channelKey === '__cloud_sync_gastos_indirectos__' && typeof window.fetchGastosIndirectosFromCloud === 'function') {
-                window.fetchGastosIndirectosFromCloud();
+            if (channelKey === '__cloud_sync_gastos_indirectos__') {
+                if (row.contenido && !appState.isEditingGastosIndirectos) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.gastosIndirectos) ? parsed.gastosIndirectos : null);
+                        if (list) {
+                            appState.gastosIndirectos = list.filter(item => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(item));
+                            saveToStorage();
+                            try { localStorage.setItem('rp_gastos_indirectos', JSON.stringify(appState.gastosIndirectos)); } catch (e) {}
+                            if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
+                                if (typeof renderGastosIndirectos === 'function') renderGastosIndirectos();
+                            }
+                            if (typeof recalculateGastosIndirectosTotals === 'function') recalculateGastosIndirectosTotals();
+                            if (typeof renderVisualizacion === 'function') renderVisualizacion();
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchGastosIndirectosFromCloud === 'function') {
+                    window.fetchGastosIndirectosFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_gastos_indirectos_lock__' && typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
-                window.fetchGastosIndirectosLockFromCloud();
+            if (channelKey === '__cloud_sync_admin_concepts__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        if (parsed && typeof parsed === 'object') {
+                            if (!appState.concepts) appState.concepts = {};
+                            if (parsed.bancos !== undefined) appState.concepts.bancos = parsed.bancos;
+                            if (parsed.bancosFecha !== undefined) appState.concepts.bancosFecha = parsed.bancosFecha;
+                            if (parsed.impuestos !== undefined) appState.concepts.impuestos = parsed.impuestos;
+                            saveToStorage();
+                            try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
+                            if (typeof renderVisualizacion === 'function') renderVisualizacion();
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchAdminConceptsFromCloud === 'function') {
+                    window.fetchAdminConceptsFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_proveedores_lock__' && typeof window.fetchProveedoresLockFromCloud === 'function') {
-                window.fetchProveedoresLockFromCloud();
+            if (channelKey === '__cloud_sync_proveedores_lock__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+                        if (parsed.isLocked === false) {
+                            if (!appState.isEditingProveedores) {
+                                appState.proveedoresLockedBy = null;
+                                if (typeof window.updateProveedoresEditButtonsUI === 'function') window.updateProveedoresEditButtonsUI();
+                                if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') window.renderProveedores();
+                            }
+                        } else if (parsed.isLocked) {
+                            if (parsed.userId !== currentUserId) {
+                                if (appState.isEditingProveedores) {
+                                    const myLockTime = appState.proveedoresLockedBy?.timestamp || Date.now();
+                                    broadcastProveedoresLockState(true, currentUserName, currentUserId, myLockTime);
+                                    syncProveedoresLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                } else {
+                                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                                    if (elapsed < 5 * 60 * 1000) {
+                                        appState.proveedoresLockedBy = parsed;
+                                        if (typeof window.updateProveedoresEditButtonsUI === 'function') window.updateProveedoresEditButtonsUI();
+                                        if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') window.renderProveedores();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchProveedoresLockFromCloud === 'function') {
+                    window.fetchProveedoresLockFromCloud();
+                }
             }
-            if (channelKey === '__cloud_sync_consecutivo_lock__' && typeof window.fetchConsecutivoLockFromCloud === 'function') {
-                window.fetchConsecutivoLockFromCloud();
+            if (channelKey === '__cloud_sync_consecutivo_lock__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+                        if (parsed.isLocked === false) {
+                            if (!appState.isEditingConsecutivo) {
+                                appState.consecutivoLockedBy = null;
+                                if (typeof window.updateConsecutivoEditButtonsUI === 'function') window.updateConsecutivoEditButtonsUI();
+                                if (appState.currentAdminFicha === 'consecutivo' && typeof window.renderConsecutivo === 'function') window.renderConsecutivo();
+                            }
+                        } else if (parsed.isLocked) {
+                            if (parsed.userId !== currentUserId) {
+                                if (appState.isEditingConsecutivo) {
+                                    const myLockTime = appState.consecutivoLockedBy?.timestamp || Date.now();
+                                    broadcastConsecutivoLockState(true, currentUserName, currentUserId, myLockTime);
+                                    syncConsecutivoLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                } else {
+                                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                                    if (elapsed < 5 * 60 * 1000) {
+                                        appState.consecutivoLockedBy = parsed;
+                                        if (typeof window.updateConsecutivoEditButtonsUI === 'function') window.updateConsecutivoEditButtonsUI();
+                                        if (appState.currentAdminFicha === 'consecutivo' && typeof window.renderConsecutivo === 'function') window.renderConsecutivo();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
+                    window.fetchConsecutivoLockFromCloud();
+                }
+            }
+            if (channelKey === '__cloud_sync_nominas_lock__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+                        if (parsed.isLocked === false) {
+                            if (!appState.isEditingNominas) {
+                                appState.nominasLockedBy = null;
+                                if (typeof window.updateNominasEditButtonsUI === 'function') window.updateNominasEditButtonsUI();
+                                if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderNominas === 'function') window.renderNominas();
+                            }
+                        } else if (parsed.isLocked) {
+                            if (parsed.userId !== currentUserId) {
+                                if (appState.isEditingNominas) {
+                                    const myLockTime = appState.nominasLockedBy?.timestamp || Date.now();
+                                    broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
+                                    syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                } else {
+                                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                                    if (elapsed < 5 * 60 * 1000) {
+                                        appState.nominasLockedBy = parsed;
+                                        if (typeof window.updateNominasEditButtonsUI === 'function') window.updateNominasEditButtonsUI();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchNominasLockFromCloud === 'function') {
+                    window.fetchNominasLockFromCloud();
+                }
+            }
+            if (channelKey === '__cloud_sync_gastos_indirectos_lock__') {
+                if (row.contenido) {
+                    try {
+                        const parsed = JSON.parse(row.contenido);
+                        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+                        if (parsed.isLocked === false) {
+                            if (!appState.isEditingGastosIndirectos) {
+                                appState.gastosIndirectosLockedBy = null;
+                                if (typeof window.updateGastosIndirectosEditButtonsUI === 'function') window.updateGastosIndirectosEditButtonsUI();
+                                if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderGastosIndirectos === 'function') window.renderGastosIndirectos();
+                            }
+                        } else if (parsed.isLocked) {
+                            if (parsed.userId !== currentUserId) {
+                                if (appState.isEditingGastosIndirectos) {
+                                    const myLockTime = appState.gastosIndirectosLockedBy?.timestamp || Date.now();
+                                    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, myLockTime);
+                                    syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                } else {
+                                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                                    if (elapsed < 5 * 60 * 1000) {
+                                        appState.gastosIndirectosLockedBy = parsed;
+                                        if (typeof window.updateGastosIndirectosEditButtonsUI === 'function') window.updateGastosIndirectosEditButtonsUI();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
+                    window.fetchGastosIndirectosLockFromCloud();
+                }
             }
             return;
         }
@@ -8744,6 +9301,61 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'consecutivo' }, async () => {
         if (typeof window.fetchConsecutivoFromCloud === 'function') {
             await window.fetchConsecutivoFromCloud();
+        }
+    });
+
+    // 9. Cambios en perfiles de usuario (alta, edición, baja) desde otra computadora
+    let _profilesRealtimeTimer = null;
+    window.chatRealtimeChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        if (_profilesRealtimeTimer) clearTimeout(_profilesRealtimeTimer);
+        _profilesRealtimeTimer = setTimeout(async () => {
+            try {
+                if (typeof loadProfilesList === 'function') await loadProfilesList();
+                if (Array.isArray(window.cachedProfilesList) && window.cachedProfilesList.length > 0) {
+                    cloudProfilesCache = window.cachedProfilesList;
+                    window.cloudProfilesCache = window.cachedProfilesList;
+                }
+            } catch (e) {}
+        }, 400);
+    });
+
+    // 10. Actualización instantánea de perfiles de usuario por broadcast (0 ms / sub-100ms)
+    window.chatRealtimeChannel.on('broadcast', { event: 'profiles_update' }, async payload => {
+        const data = payload?.payload;
+        if (data && data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
+        try {
+            if (data && data.email && data.nombre) {
+                const eLower = data.email.toLowerCase();
+                localStorage.setItem('rp_user_profile_name_' + eLower, data.nombre);
+                if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === eLower) {
+                    appState.currentUser.nombre = data.nombre;
+                    if (data.rol) appState.currentUser.rol = data.rol;
+                    if (data.departamento) appState.currentUser.departamento = data.departamento;
+                    localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
+                    if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
+                }
+            }
+            if (typeof loadProfilesList === 'function') await loadProfilesList();
+            if (Array.isArray(window.cachedProfilesList) && window.cachedProfilesList.length > 0) {
+                cloudProfilesCache = window.cachedProfilesList;
+                window.cloudProfilesCache = window.cachedProfilesList;
+            }
+            if (typeof updateUserSessionUI === 'function') updateUserSessionUI();
+        } catch (e) {}
+    });
+
+    // 11. Actualización instantánea de conceptos contables de Visualización (Bancos, Impuestos) por broadcast
+    window.chatRealtimeChannel.on('broadcast', { event: 'admin_concepts_update' }, payload => {
+        const data = payload?.payload;
+        if (data && data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
+        if (data && data.concepts) {
+            if (!appState.concepts) appState.concepts = {};
+            if (data.concepts.bancos !== undefined) appState.concepts.bancos = data.concepts.bancos;
+            if (data.concepts.bancosFecha !== undefined) appState.concepts.bancosFecha = data.concepts.bancosFecha;
+            if (data.concepts.impuestos !== undefined) appState.concepts.impuestos = data.concepts.impuestos;
+            saveToStorage();
+            try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
+            if (typeof renderVisualizacion === 'function') renderVisualizacion();
         }
     });
 
@@ -8835,6 +9447,17 @@ function setupRealtimeSubscriptions() {
                         if (typeof window.fetchConsecutivoLockFromCloud === 'function') {
                             await window.fetchConsecutivoLockFromCloud();
                         }
+                    } else if (appState.currentAdminFicha === 'visualizacion') {
+                        const fetchers = ['fetchAdminConceptsFromCloud', 'fetchNominasFromCloud', 'fetchGastosIndirectosFromCloud', 'fetchConsecutivoFromCloud', 'fetchProveedoresDataFromCloud'];
+                        for (const fn of fetchers) {
+                            if (typeof window[fn] === 'function') { try { await window[fn](); } catch (e) {} }
+                        }
+                        if (typeof window.renderVisualizacion === 'function') window.renderVisualizacion();
+                    }
+                } else if (appState.currentTab === 'users' || appState.currentTab === 'profile') {
+                    window._usersHeartbeatTick = (window._usersHeartbeatTick || 0) + 1;
+                    if (window._usersHeartbeatTick % 5 === 0 && typeof loadProfilesList === 'function') {
+                        await loadProfilesList();
                     }
                 }
             } catch (e) {}
@@ -8959,12 +9582,19 @@ async function fetchCloudData() {
     const client = window.SUPABASE_CONFIG.client;
     
     try {
-        // Cargar perfiles desde Supabase
-        const { data: profiles, error: pError } = await client.from('profiles').select('*');
-        if (profiles && profiles.length > 0) {
-            cloudProfilesCache = profiles;
-            window.cloudProfilesCache = profiles;
-            updateAssigneeDropdown(profiles);
+        // Cargar perfiles exclusivamente desde Firebase (profiles)
+        const { data: profilesRaw } = await client.from('profiles').select('*');
+        const profiles = dedupeProfilesByEmail(profilesRaw || []);
+        cloudProfilesCache = profiles;
+        window.cloudProfilesCache = profiles;
+        window.cachedProfilesList = profiles;
+        try {
+            localStorage.setItem('rp_local_profiles', JSON.stringify(profiles));
+            localStorage.setItem('rp_fb_col_profiles', JSON.stringify(profiles));
+        } catch (e) {}
+        updateAssigneeDropdown(profiles);
+        if (typeof loadProfilesList === 'function') {
+            await loadProfilesList();
         }
         
         // Sincronizar tareas
@@ -9016,6 +9646,11 @@ async function fetchCloudData() {
         }
         if (typeof window.fetchGastosIndirectosLockFromCloud === 'function') {
             await window.fetchGastosIndirectosLockFromCloud();
+        }
+        
+        // Sincronizar conceptos contables de Visualización (Bancos, Impuestos)
+        if (typeof window.fetchAdminConceptsFromCloud === 'function') {
+            await window.fetchAdminConceptsFromCloud();
         }
         
         // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)
@@ -9101,7 +9736,7 @@ async function fetchTasksFromCloud() {
         });
 
         // Filtrar tareas que hayan sido eliminadas o asignadas a usuarios inventados
-        const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal']);
+        const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal', 'roberto miranda perez', 'roberto miranda pérez', 'manuel morales']);
         const filteredCloudTasks = cloudTasks.filter(ct => {
             if (!ct || !ct.title) return false;
             const sig = `${(ct.title || '').trim().toLowerCase()}____${(ct.desc || '').trim().toLowerCase()}`;
@@ -9206,6 +9841,7 @@ function updateAssigneeDropdown(profiles) {
     if (profiles && profiles.length > 0) {
         cloudProfilesCache = profiles;
         window.cloudProfilesCache = profiles;
+        if (typeof populateTaskUserFilterOptions === 'function') populateTaskUserFilterOptions();
     }
 }
 
@@ -9332,28 +9968,51 @@ function toggleNewUserForm() {
     window.toggleNewUserForm = toggleNewUserForm;
     const formContainer = document.getElementById("new-user-form-container");
     if (formContainer) {
-        formContainer.style.display = (formContainer.style.display === "none" || formContainer.style.display === "") ? "block" : "none";
+        const isOpening = (formContainer.style.display === "none" || formContainer.style.display === "");
+        formContainer.style.display = isOpening ? "block" : "none";
+        if (isOpening) {
+            const regForm = document.getElementById("form-firebase-register") || document.getElementById("form-supabase-register");
+            if (regForm) regForm.reset();
+            const errEl = document.getElementById("reg-error-msg");
+            if (errEl) errEl.style.display = "none";
+            const succEl = document.getElementById("reg-success-msg");
+            if (succEl) succEl.style.display = "none";
+        }
     }
 };
+
+function dedupeProfilesByEmail(list) {
+    const byEmail = new Map();
+    const order = [];
+    const ts = p => new Date(p.updated_at || p.created_at || 0).getTime() || 0;
+    (list || []).forEach(p => {
+        if (!p || !p.email) return;
+        const key = String(p.email).trim().toLowerCase();
+        const prev = byEmail.get(key);
+        if (!prev) {
+            byEmail.set(key, p);
+            order.push(key);
+            return;
+        }
+        // Conservar los datos más recientes, rellenando campos vacíos con los del otro documento
+        const newer = ts(p) >= ts(prev) ? p : prev;
+        const older = newer === p ? prev : p;
+        const merged = Object.assign({}, older, newer);
+        Object.keys(older).forEach(k => {
+            if ((merged[k] === undefined || merged[k] === null || merged[k] === '') && older[k]) merged[k] = older[k];
+        });
+        byEmail.set(key, merged);
+    });
+    return order.map(k => byEmail.get(k));
+}
+window.dedupeProfilesByEmail = dedupeProfilesByEmail;
 
 async function loadProfilesList() {
     window.loadProfilesList = loadProfilesList;
     const container = document.getElementById("profiles-list-container");
     
-    let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-    const deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
-
-    // Filtrar perfiles eliminados y no deseados
-    localProfiles = localProfiles.filter(p => {
-        if (!p || !p.email) return false;
-        const e = p.email.toLowerCase();
-        if (e === 'jennifer@rodipack.online' || e === 'diego.miranda@rodipack.com') return false;
-        if (deletedProfiles.includes(e)) return false;
-        return true;
-    });
-    localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
-    
-    let mergedProfiles = [...localProfiles];
+    const deletedProfiles = (JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]') || []).map(e => String(e).toLowerCase());
+    let firebaseProfiles = [];
     
     if (window.isFirebaseActive()) {
         try {
@@ -9364,29 +10023,70 @@ async function loadProfilesList() {
                 .order('created_at', { ascending: false });
                 
             if (dbProfiles && Array.isArray(dbProfiles) && !error) {
-                const cleanDbProfiles = dbProfiles.filter(p => {
-                    if (!p || !p.email) return false;
-                    const e = p.email.toLowerCase();
-                    if (e === 'jennifer@rodipack.online' || e === 'diego.miranda@rodipack.com') return false;
-                    if (deletedProfiles.includes(e)) return false;
-                    return true;
+                const cleanDbProfiles = [];
+                for (const p of dbProfiles) {
+                    if (!p || !p.email) continue;
+                    const e = String(p.email).trim().toLowerCase();
+                    if (deletedProfiles.includes(e)) continue;
+                    cleanDbProfiles.push(p);
+                }
+
+                // Reparar duplicados existentes en Firestore (mismo correo en varios documentos)
+                const groups = {};
+                cleanDbProfiles.forEach(p => {
+                    const k = String(p.email).trim().toLowerCase();
+                    (groups[k] = groups[k] || []).push(p);
                 });
-                mergedProfiles = [...cleanDbProfiles];
-                localProfiles.forEach(lp => {
-                    if (lp.email && !mergedProfiles.some(p => p.email && p.email.toLowerCase() === lp.email.toLowerCase())) {
-                        mergedProfiles.unshift(lp);
-                    }
-                });
+                for (const k of Object.keys(groups)) {
+                    const g = groups[k];
+                    if (g.length < 2) continue;
+                    const uidDoc = g.find(p => /^[A-Za-z0-9]{28}$/.test(String(p.id || '')));
+                    if (!uidDoc) continue;
+                    const mergedOne = dedupeProfilesByEmail(g)[0];
+                    try {
+                        await client.from('profiles').upsert(Object.assign({}, mergedOne, { id: uidDoc.id, email: k }));
+                        console.log(`🧹 Perfil duplicado unificado para ${k}`);
+                    } catch (err) {}
+                }
+                firebaseProfiles = dedupeProfilesByEmail(cleanDbProfiles);
+                try {
+                    localStorage.setItem('rp_local_profiles', JSON.stringify(firebaseProfiles));
+                    localStorage.setItem('rp_fb_col_profiles', JSON.stringify(firebaseProfiles));
+                } catch (e) {}
             }
         } catch (err) {
             console.warn("Error loading profiles from Firebase:", err);
         }
     }
-    
-    window.cachedProfilesList = mergedProfiles;
+
+    window.cachedProfilesList = firebaseProfiles;
+    window.cloudProfilesCache = firebaseProfiles;
+    if (typeof populateTaskUserFilterOptions === 'function') populateTaskUserFilterOptions();
+
+    if (appState.currentUser && appState.currentUser.email) {
+        const curEmail = appState.currentUser.email.toLowerCase();
+        const activeMatch = firebaseProfiles.find(p => p && p.email && p.email.toLowerCase() === curEmail);
+        if (activeMatch) {
+            let changedSession = false;
+            if (activeMatch.nombre && activeMatch.nombre !== appState.currentUser.nombre) {
+                appState.currentUser.nombre = activeMatch.nombre;
+                changedSession = true;
+            }
+            if (activeMatch.rol && activeMatch.rol !== appState.currentUser.rol) {
+                appState.currentUser.rol = activeMatch.rol;
+                setRole(activeMatch.rol);
+                changedSession = true;
+            }
+            if (changedSession) {
+                localStorage.setItem('rp_logged_user', JSON.stringify(appState.currentUser));
+                localStorage.setItem('rp_user_profile_name_' + curEmail, appState.currentUser.nombre);
+                if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
+            }
+        }
+    }
     
     if (container) {
-        renderProfiles(mergedProfiles);
+        renderProfiles(firebaseProfiles);
     }
     
     function renderProfiles(list) {
@@ -9394,21 +10094,16 @@ async function loadProfilesList() {
             const r = (p.rol || '').toLowerCase();
             return r === 'gerente' || r === 'manager' || r === 'director';
         });
-        const admins = list.filter(p => {
-            const r = (p.rol || '').toLowerCase();
-            return r === 'administrador' || r === 'admin' || r === 'administrativo';
-        });
-        const colaboradores = list.filter(p => !managers.includes(p) && !admins.includes(p));
+        const admins = list.filter(p => !managers.includes(p));
 
         const renderCard = (p) => {
             const initial = (p.nombre || p.email || 'U').charAt(0).toUpperCase();
             const r = (p.rol || '').toLowerCase();
             const isGerente = r === 'gerente' || r === 'manager' || r === 'director';
-            const isAdmin = r === 'administrador' || r === 'admin' || r === 'administrativo';
             
-            const roleColor = isGerente ? '#2563EB' : (isAdmin ? '#10B981' : '#64748B');
-            const roleBg = isGerente ? 'rgba(37, 99, 235, 0.1)' : (isAdmin ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)');
-            const roleLabel = isGerente ? 'Manager' : (isAdmin ? 'Administrativo' : 'Colaborador');
+            const roleColor = isGerente ? '#2563EB' : '#10B981';
+            const roleBg = isGerente ? 'rgba(37, 99, 235, 0.1)' : 'rgba(16, 185, 129, 0.1)';
+            const roleLabel = isGerente ? 'Manager' : 'Administrativo';
 
             const editBtnHtml = `
                 <button type="button" onclick="openEditProfileModal('${p.email}')" style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #2563EB; border-radius: 8px; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease;" title="Editar Perfil y Rol de ${p.nombre || p.email}">
@@ -9480,7 +10175,6 @@ async function loadProfilesList() {
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; align-items: start; width: 100%;">
                 ${renderColumn("Managers", "star", "#2563EB", "rgba(37, 99, 235, 0.12)", managers, "Sin perfiles de Manager")}
                 ${renderColumn("Administrativos", "admin_panel_settings", "#10B981", "rgba(16, 185, 129, 0.12)", admins, "Sin perfiles de Administrativo")}
-                ${renderColumn("Colaboradores", "group", "#64748B", "rgba(100, 116, 139, 0.12)", colaboradores, "Sin colaboradores registrados")}
             </div>
         `;
     }
@@ -9498,23 +10192,22 @@ async function handleFirebaseLogin(event) {
     
     if (errorEl) errorEl.style.display = "none";
     
-    const isDiego = email.toLowerCase() === 'diego@rodipack.com';
     const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
     const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
 
-    const doLocalOrDiegoLogin = async (client) => {
-
+    const doLocalLoginFallback = async () => {
         const userObj = {
-            id: (matchedProfile && matchedProfile.id) || (isDiego ? 'usr-diego-miranda' : `usr-${Date.now()}`),
+            id: (matchedProfile && matchedProfile.id) || `usr-${Date.now()}`,
             email: email,
-            nombre: isDiego ? 'Diego Miranda' : ((matchedProfile && matchedProfile.nombre) || email.split('@')[0]),
-            rol: isDiego ? 'administrativo' : ((matchedProfile && matchedProfile.rol) || 'colaborador'),
-            departamento: isDiego ? 'Administración' : ((matchedProfile && matchedProfile.departamento) || 'Operaciones'),
+            nombre: (matchedProfile && matchedProfile.nombre) || email.split('@')[0],
+            rol: (matchedProfile && matchedProfile.rol) || 'administrador',
+            departamento: (matchedProfile && matchedProfile.departamento) || 'Operaciones',
             password: password
         };
         appState.currentUser = userObj;
         sessionStorage.setItem("rp_session_pass", password);
         localStorage.setItem("rp_user_pass", password);
+        if (email) localStorage.setItem("rp_user_pass_" + email.toLowerCase(), password);
         localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
         localStorage.setItem("rp_session_active", "true");
         localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
@@ -9527,11 +10220,11 @@ async function handleFirebaseLogin(event) {
 
     if (!window.isSupabaseActive()) {
         if (matchedProfile && matchedProfile.password === password) {
-            await doLocalOrDiegoLogin(null);
+            await doLocalLoginFallback();
             return;
         }
         if (errorEl) {
-            errorEl.innerText = "Error: Correo o contraseña incorrectos, o configura tu conexión a Supabase.";
+            errorEl.innerText = "Error: Correo o contraseña incorrectos.";
             errorEl.style.display = "block";
         }
         return;
@@ -9545,14 +10238,9 @@ async function handleFirebaseLogin(event) {
         const { data, error } = await client.auth.signInWithPassword({ email, password });
         
         if (error) {
-            if (matchedProfile && matchedProfile.password === password) {
-                await doLocalOrDiegoLogin(client);
-                return;
-            }
-
             if (errorEl) {
                 let userMsg = error.message;
-                if (userMsg.includes("Invalid login credentials")) {
+                if (userMsg.includes("Invalid login credentials") || userMsg.includes("invalid-credential") || userMsg.includes("wrong-password") || userMsg.includes("user-not-found")) {
                     userMsg = "Correo electrónico o contraseña incorrectos.";
                 }
                 errorEl.innerText = `Error: ${userMsg}`;
@@ -9563,16 +10251,13 @@ async function handleFirebaseLogin(event) {
                 data.user.password = password;
                 sessionStorage.setItem("rp_session_pass", password);
                 localStorage.setItem("rp_user_pass", password);
+                if (email) localStorage.setItem("rp_user_pass_" + email.toLowerCase(), password);
             }
             await handleUserSession(data.user);
             openAuthModal(); // Refresh modal view to show logged-in info
             loadProfilesList();
         }
     } catch (err) {
-        if (matchedProfile && matchedProfile.password === password) {
-            await doLocalOrDiegoLogin(window.SUPABASE_CONFIG ? window.SUPABASE_CONFIG.client : null);
-            return;
-        }
         if (errorEl) {
             errorEl.innerText = `Error de conexión: ${err.message}`;
             errorEl.style.display = "block";
@@ -9588,11 +10273,17 @@ async function handleFirebaseRegister(event) {
     window.handleSupabaseRegister = handleFirebaseRegister;
     const handleSupabaseRegister = handleFirebaseRegister;
     event.preventDefault();
-    const nombre = document.getElementById("reg-nombre").value.trim();
+    let nombre = document.getElementById("reg-nombre").value.trim();
     const email = document.getElementById("reg-email").value.trim();
     const password = document.getElementById("reg-password").value;
     const rol = document.getElementById("reg-rol").value;
     const depto = document.getElementById("reg-depto").value.trim() || "Operaciones";
+    
+    const emailLower = email.toLowerCase();
+    if (!nombre) {
+        const prefix = emailLower.split('@')[0];
+        nombre = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
     
     const errorEl = document.getElementById("reg-error-msg");
     const successEl = document.getElementById("reg-success-msg");
@@ -9612,34 +10303,13 @@ async function handleFirebaseRegister(event) {
     }
 
     let newId = generateUUID();
-    const newProfileObj = { id: newId, nombre, email, rol, departamento: depto, password };
-
-    // 1. Desmarcar de eliminados si se vuelve a dar de alta
-    const emailLower = email.toLowerCase();
-    let deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
-    deletedProfiles = deletedProfiles.filter(e => e !== emailLower);
-    localStorage.setItem('rp_deleted_profiles', JSON.stringify(deletedProfiles));
-
-    // 2. Guardar localmente
-    const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-    const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
-    if (existingIdx >= 0) {
-        localProfiles[existingIdx] = { ...localProfiles[existingIdx], ...newProfileObj };
-    } else {
-        localProfiles.unshift(newProfileObj);
-    }
-    localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
-
     const regForm = document.getElementById("form-firebase-register") || document.getElementById("form-supabase-register");
 
     if (!window.isFirebaseActive()) {
-        if (successEl) {
-            successEl.innerText = `¡Perfil de "${nombre}" (${email}) registrado exitosamente!`;
-            successEl.style.display = "block";
+        if (errorEl) {
+            errorEl.innerText = "Error: Se requiere conexión activa a Firebase Authentication para registrar usuarios.";
+            errorEl.style.display = "block";
         }
-        if (regForm) regForm.reset();
-        loadProfilesList();
-        setTimeout(() => { toggleNewUserForm(); }, 1200);
         return;
     }
     
@@ -9648,28 +10318,49 @@ async function handleFirebaseRegister(event) {
     
     try {
         const client = window.FIREBASE_CONFIG.client;
-        
-        try {
-            const signUpRes = await client.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: { nombre, rol, departamento: depto }
-                }
-            });
-            if (signUpRes && signUpRes.data && signUpRes.data.user && signUpRes.data.user.id) {
-                newId = signUpRes.data.user.id;
-                newProfileObj.id = newId;
-                const updatedLocal = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-                const idx = updatedLocal.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
-                if (idx >= 0) {
-                    updatedLocal[idx].id = newId;
-                    localStorage.setItem('rp_local_profiles', JSON.stringify(updatedLocal));
-                }
+        const signUpRes = await client.auth.signUp({
+            email,
+            password,
+            options: {
+                data: { nombre, rol, departamento: depto }
             }
-        } catch (e) {
-            console.warn("Firebase signUp warning:", e);
+        });
+        if (signUpRes && signUpRes.error) {
+            let userMsg = signUpRes.error.message || "Error al registrar en Firebase";
+            if (userMsg.includes("ADMIN_ONLY_OPERATION") || signUpRes.error.code === 'auth/admin-restricted-operation') {
+                userMsg = "Firebase tiene deshabilitado el autoregistro (ADMIN_ONLY_OPERATION). Para habilitar el acceso a este usuario, créalo en la consola de Firebase con el botón 'Agregar usuario' o activa 'Permitir a los usuarios crear cuentas' en la pestaña Configuración de Firebase Authentication.";
+            } else if (userMsg.includes("email-already-in-use")) {
+                userMsg = "Este correo electrónico ya está registrado en Firebase.";
+            } else if (userMsg.includes("weak-password")) {
+                userMsg = "La contraseña debe tener al menos 6 caracteres.";
+            }
+            if (errorEl) {
+                errorEl.innerText = userMsg;
+                errorEl.style.display = "block";
+            }
+            return;
         }
+        if (signUpRes && signUpRes.data && signUpRes.data.user && signUpRes.data.user.id) {
+            newId = signUpRes.data.user.id;
+        }
+
+        const newProfileObj = { id: newId, nombre, email, rol, departamento: depto, password };
+
+        // 1. Desmarcar de eliminados si se vuelve a dar de alta
+        let deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
+        deletedProfiles = deletedProfiles.filter(e => e !== emailLower);
+        localStorage.setItem('rp_deleted_profiles', JSON.stringify(deletedProfiles));
+
+        // 2. Guardar localmente solo tras validación en Firebase Auth
+        localStorage.setItem('rp_user_profile_name_' + emailLower, nombre);
+        const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
+        const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
+        if (existingIdx >= 0) {
+            localProfiles[existingIdx] = { ...localProfiles[existingIdx], ...newProfileObj };
+        } else {
+            localProfiles.unshift(newProfileObj);
+        }
+        localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
 
         try {
             await client.from('profiles').upsert({
@@ -9689,13 +10380,22 @@ async function handleFirebaseRegister(event) {
             successEl.style.display = "block";
         }
         if (regForm) regForm.reset();
+        if (window.chatRealtimeChannel) {
+            try {
+                window.chatRealtimeChannel.send({
+                    type: 'broadcast',
+                    event: 'profiles_update',
+                    payload: { email, nombre, rol, departamento: depto, senderClientId: window._myClientId, timestamp: Date.now() }
+                });
+            } catch (e) {}
+        }
         loadProfilesList();
         setTimeout(() => {
             toggleNewUserForm();
         }, 1200);
     } catch (err) {
         if (errorEl) {
-            errorEl.innerText = `Guardado localmente. Error en nube: ${err.message}`;
+            errorEl.innerText = `Error al registrar en nube: ${err.message}`;
             errorEl.style.display = "block";
         }
     } finally {
@@ -9763,6 +10463,16 @@ async function handleDeleteProfile(email, nombre) {
         window.cachedProfilesList = window.cachedProfilesList.filter(p => (p.email || '').toLowerCase() !== emailLower);
     }
 
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'profiles_update',
+                payload: { deletedEmail: emailLower, senderClientId: window._myClientId, timestamp: Date.now() }
+            });
+        } catch (e) {}
+    }
+
     loadProfilesList();
 };
 
@@ -9790,11 +10500,9 @@ function openEditProfileModal(email) {
     if (nameInput) nameInput.value = profile.nombre || "";
     
     const r = (profile.rol || '').toLowerCase();
-    let normalizedRole = 'colaborador';
+    let normalizedRole = 'administrador';
     if (r === 'gerente' || r === 'manager' || r === 'director') {
         normalizedRole = 'gerente';
-    } else if (r === 'administrador' || r === 'admin' || r === 'administrativo') {
-        normalizedRole = 'administrador';
     }
     if (roleSelect) roleSelect.value = normalizedRole;
     if (deptInput) deptInput.value = profile.departamento || "";
@@ -9818,47 +10526,113 @@ async function handleSaveProfileEdit(event) {
     
     const email = emailInput ? emailInput.value.trim() : "";
     const nombre = nameInput ? nameInput.value.trim() : "";
-    const rol = roleSelect ? roleSelect.value : "colaborador";
+    const rol = roleSelect ? roleSelect.value : "administrador";
     const departamento = deptInput ? deptInput.value.trim() : "";
     
     if (!email) return;
+    const emailLower = email.toLowerCase();
+    const updatedAt = new Date().toISOString();
     
-    // 1. Guardar en localStorage
+    // 1. Guardar de forma permanente en localStorage
+    localStorage.setItem('rp_user_profile_name_' + emailLower, nombre);
+    
     let localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
     let found = false;
     localProfiles = localProfiles.map(p => {
-        if (p.email && p.email.toLowerCase() === email.toLowerCase()) {
+        if (p.email && p.email.toLowerCase() === emailLower) {
             found = true;
-            return { ...p, nombre, rol, departamento };
+            return { ...p, nombre, rol, departamento, email: emailLower, updated_at: updatedAt };
         }
         return p;
     });
     if (!found) {
-        localProfiles.push({ nombre, email, rol, departamento });
+        localProfiles.push({ nombre, email: emailLower, rol, departamento, updated_at: updatedAt });
     }
     localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
     
-    // 2. Actualizar en Supabase si la conexión está activa
-    if (window.isSupabaseActive()) {
+    // Si el usuario editado es el que tiene la sesión activa actual, actualizar inmediatamente appState y UI
+    if (appState.currentUser && appState.currentUser.email && appState.currentUser.email.toLowerCase() === emailLower) {
+        appState.currentUser.nombre = nombre;
+        appState.currentUser.rol = rol;
+        appState.currentUser.departamento = departamento;
+        localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
+        if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
+        if (typeof updateUserSessionUI === 'function') updateUserSessionUI();
+    }
+    
+    // 2. Guardar en Firebase / Firestore (entorno en producción)
+    if (window.isFirebaseActive && window.isFirebaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG.client;
-            await client.from('profiles').update({ nombre, rol, departamento }).eq('email', email);
+            const client = window.FIREBASE_CONFIG?.client;
+            if (client) {
+                await client.from('profiles').update({
+                    nombre,
+                    rol,
+                    departamento,
+                    updated_at: updatedAt
+                }).eq('email', emailLower);
+            }
+            const db = (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.db) || (window.firebase && firebase.firestore && firebase.firestore());
+            if (db) {
+                const snap = await db.collection('profiles').where('email', '==', emailLower).get();
+                if (!snap.empty) {
+                    snap.forEach(doc => {
+                        doc.ref.set({
+                            nombre,
+                            rol,
+                            departamento,
+                            updated_at: updatedAt
+                        }, { merge: true }).catch(() => {});
+                    });
+                }
+            }
+        } catch (err) {
+            console.warn("Firebase profile update warning:", err);
+        }
+    }
+    
+    // 3. Actualizar en Supabase si la conexión está activa
+    if (window.isSupabaseActive && window.isSupabaseActive()) {
+        try {
+            const client = window.SUPABASE_CONFIG?.client;
+            if (client) {
+                await client.from('profiles').update({ nombre, rol, departamento, updated_at: updatedAt }).eq('email', emailLower);
+            }
         } catch (err) {
             console.warn("Supabase profile update warning:", err);
         }
     }
     
-    // 3. Actualizar caché en memoria para renderizado inmediato
+    // 4. Actualizar cachés en memoria para renderizado instantáneo
     if (window.cachedProfilesList) {
         window.cachedProfilesList = window.cachedProfilesList.map(p => {
-            if (p.email && p.email.toLowerCase() === email.toLowerCase()) {
-                return { ...p, nombre, rol, departamento };
+            if (p.email && p.email.toLowerCase() === emailLower) {
+                return { ...p, nombre, rol, departamento, updated_at: updatedAt };
             }
             return p;
         });
     }
+    if (window.cloudProfilesCache) {
+        window.cloudProfilesCache.forEach(p => {
+            if (p && p.email && p.email.toLowerCase() === emailLower) {
+                p.nombre = nombre;
+                p.rol = rol;
+                p.departamento = departamento;
+                p.updated_at = updatedAt;
+            }
+        });
+    }
     
     closeEditProfileModal();
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'profiles_update',
+                payload: { email: emailLower, nombre, rol, departamento, senderClientId: window._myClientId, timestamp: Date.now() }
+            });
+        } catch (e) {}
+    }
     loadProfilesList();
 };
 
@@ -9880,85 +10654,13 @@ async function handleGlobalLoginSubmit(event) {
     if (errorEl) errorEl.style.display = "none";
     btnSubmit.disabled = true;
     btnSubmit.innerHTML = "<span class='material-symbols-outlined'>hourglass_empty</span> Validando...";
-    
-    const isDiego = email.toLowerCase() === 'diego@rodipack.com';
 
     try {
-
         if (window.isSupabaseActive()) {
             const client = window.SUPABASE_CONFIG.client;
             const { data, error } = await client.auth.signInWithPassword({ email, password });
             
             if (error) {
-
-                const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
-                const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
-                
-                if (matchedProfile) {
-                    if (matchedProfile.password !== password) {
-                        handleFailedLoginAttempt("Contraseña incorrecta.");
-                        return;
-                    }
-                    
-                    const userObj = {
-                        id: matchedProfile.id || `usr-${Date.now()}`,
-                        email: matchedProfile.email,
-                        nombre: matchedProfile.nombre || 'Colaborador',
-                        rol: matchedProfile.rol || 'colaborador',
-                        departamento: matchedProfile.departamento || 'Operaciones',
-                        password: password
-                    };
-                    appState.currentUser = userObj;
-                    sessionStorage.setItem("rp_session_pass", password);
-                    localStorage.setItem("rp_user_pass", password);
-                    localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
-                    localStorage.setItem("rp_session_active", "true");
-                    localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
-                    setRole(userObj.rol);
-                    hideGlobalLoginOverlay();
-                    updateUserSessionUI();
-                    if (typeof openAuthModal === 'function') openAuthModal();
-                    return;
-                }
-
-                if (error.message && error.message.includes("Email not confirmed")) {
-                    console.log("Supabase credentials valid, bypassing pending email confirmation for user:", email);
-                    let profileData = null;
-                    try {
-                        const { data: prof } = await client.from('profiles').select('*').ilike('email', email).maybeSingle();
-                        if (prof) profileData = prof;
-                    } catch (pErr) {
-                        console.warn("Could not fetch profile on email confirmation bypass:", pErr);
-                    }
-                    
-                    const matchedProfile = localProfiles.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
-                    const finalName = profileData?.nombre || matchedProfile?.nombre || email.split('@')[0];
-                    const finalRol = profileData?.rol || matchedProfile?.rol || 'colaborador';
-                    const finalDepto = profileData?.departamento || matchedProfile?.departamento || 'Operaciones';
-                    const finalId = profileData?.id || matchedProfile?.id || `usr-${Date.now()}`;
-                    
-                    const userObj = {
-                        id: finalId,
-                        email: email,
-                        nombre: finalName,
-                        rol: finalRol,
-                        departamento: finalDepto,
-                        password: password
-                    };
-                    
-                    appState.currentUser = userObj;
-                    sessionStorage.setItem("rp_session_pass", password);
-                    localStorage.setItem("rp_user_pass", password);
-                    localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
-                    localStorage.setItem("rp_session_active", "true");
-                    localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
-                    setRole(userObj.rol);
-                    hideGlobalLoginOverlay();
-                    updateUserSessionUI();
-                    if (typeof openAuthModal === 'function') openAuthModal();
-                    return;
-                }
-
                 let userMsg = error.message;
                 if (userMsg.includes("Invalid login credentials") || userMsg.includes("invalid-credential") || userMsg.includes("wrong-password") || userMsg.includes("user-not-found")) {
                     userMsg = "Correo electrónico o contraseña incorrectos.";
@@ -9985,11 +10687,11 @@ async function handleGlobalLoginSubmit(event) {
 
             const isManager = (roleSelect === 'gerente' || (matchedProfile && matchedProfile.rol === 'gerente'));
             const userObj = {
-                id: matchedProfile?.id || (isDiego ? 'usr-diego-miranda' : `usr-${Date.now()}`),
+                id: matchedProfile?.id || `usr-${Date.now()}`,
                 email: email,
-                nombre: isDiego ? 'Diego Miranda' : (matchedProfile?.nombre || (email ? email.split('@')[0] : 'Usuario')),
-                rol: isDiego ? 'administrativo' : (matchedProfile?.rol || (isManager ? 'gerente' : 'colaborador')),
-                departamento: isDiego ? 'Administración' : (matchedProfile?.departamento || 'Operaciones'),
+                nombre: matchedProfile?.nombre || (email ? email.split('@')[0] : 'Usuario'),
+                rol: matchedProfile?.rol || (isManager ? 'gerente' : 'administrador'),
+                departamento: matchedProfile?.departamento || 'Operaciones',
                 password: password || ''
             };
             appState.currentUser = userObj;
@@ -10033,9 +10735,11 @@ async function handleFirebaseLogout() {
     localStorage.setItem("rp_session_active", "false");
     localStorage.removeItem("rp_logged_user");
     localStorage.removeItem("rp_user_pass");
+    localStorage.removeItem("rp_custom_user_nombre");
     sessionStorage.removeItem("rp_session_pass");
     updateCloudStatusUI(false, null);
     updateUserSessionUI();
+    if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
     showGlobalLoginOverlay();
 };
 
@@ -10073,7 +10777,7 @@ function openInteractiveResetModal() {
     resetCodeState.smsCode = Math.floor(100000 + Math.random() * 900000).toString();
     
     const emailInput = document.getElementById("myprofile-edit-email");
-    const userEmail = (emailInput && emailInput.value) ? emailInput.value : (appState.currentUser?.email || "zalazardemiranda@gmail.com");
+    const userEmail = (emailInput && emailInput.value) ? emailInput.value : (appState.currentUser?.email || "");
     
     const step1 = document.getElementById("reset-step-1");
     const step2 = document.getElementById("reset-step-2");
@@ -10270,15 +10974,18 @@ function handleRecoverPasswordByEmail() {
 async function handleSaveMyProfile(event) {
     window.handleSaveMyProfile = handleSaveMyProfile;
     event.preventDefault();
-    const name = document.getElementById("myprofile-edit-name").value.trim();
+    const isGerente = typeof isManagerUser === 'function' ? isManagerUser() : false;
+    const rawName = document.getElementById("myprofile-edit-name").value.trim();
+    const name = isGerente ? rawName : (appState.currentUser?.nombre || rawName);
     const phone = document.getElementById("myprofile-edit-phone").value.trim();
     const msgEl = document.getElementById("myprofile-update-msg");
     
-    const email = (appState.currentUser?.email || (window.firebase?.auth && firebase.auth().currentUser ? firebase.auth().currentUser.email : '') || 'zalazardemiranda@gmail.com').toLowerCase();
-    const uid = (window.firebase?.auth && firebase.auth().currentUser ? firebase.auth().currentUser.uid : '') || (appState.currentUser?.id) || 'usr_zalazardemiranda';
+    const email = (appState.currentUser?.email || (window.firebase?.auth && firebase.auth().currentUser ? firebase.auth().currentUser.email : '') || '').toLowerCase();
+    const uid = (window.firebase?.auth && firebase.auth().currentUser ? firebase.auth().currentUser.uid : '') || (appState.currentUser?.id) || '';
+    if (!email) return;
 
     if (!appState.currentUser) {
-        appState.currentUser = { email: email, nombre: name, rol: appState.currentRole || 'gerente', departamento: 'Administración' };
+        appState.currentUser = { email: email, nombre: name, rol: appState.currentRole || 'administrador', departamento: 'Administración' };
     }
     
     appState.currentUser.id = uid;
@@ -10288,8 +10995,9 @@ async function handleSaveMyProfile(event) {
     
     // 1. Guardar de inmediato en almacenamiento local persistente
     localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
-    localStorage.setItem("rp_custom_user_nombre", name);
-    localStorage.setItem("rp_user_profile_name_" + email, name);
+    if (isGerente) {
+        localStorage.setItem("rp_user_profile_name_" + email, name);
+    }
     if (phone) localStorage.setItem("rp_user_profile_phone_" + email, phone);
 
     // 2. Actualizar en lista de perfiles locales
@@ -10304,7 +11012,25 @@ async function handleSaveMyProfile(event) {
         localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
     } catch (e) {}
 
-    // 3. Guardar en Supabase / Firestore wrapper
+    // 3. Guardar en Firebase / Supabase wrapper
+    if (window.isFirebaseActive && window.isFirebaseActive()) {
+        try {
+            const client = window.FIREBASE_CONFIG?.client;
+            if (client) {
+                await client.from('profiles').upsert({
+                    id: uid,
+                    email: email,
+                    nombre: name,
+                    telefono: phone,
+                    rol: appState.currentUser.rol || 'gerente',
+                    departamento: appState.currentUser.departamento || 'Administración',
+                    updated_at: new Date().toISOString()
+                });
+            }
+        } catch (err) {
+            console.warn("Firebase profile update error:", err);
+        }
+    }
     if (window.isSupabaseActive && window.isSupabaseActive()) {
         try {
             const client = window.SUPABASE_CONFIG?.client;
@@ -10325,18 +11051,17 @@ async function handleSaveMyProfile(event) {
     }
 
     // 4. Guardar directamente en Firebase Auth y Firestore si están disponibles
-    if (window.firebase) {
-        try {
-            if (firebase.auth && firebase.auth().currentUser) {
-                await firebase.auth().currentUser.updateProfile({ displayName: name });
-            }
-        } catch(e) {}
-        try {
-            if (firebase.firestore) {
-                const db = firebase.firestore();
-                const fUid = (firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.uid) || uid;
-                await db.collection('profiles').doc(fUid).set({
-                    id: fUid,
+    try {
+        if (isGerente && window.firebase && firebase.auth && firebase.auth().currentUser) {
+            await firebase.auth().currentUser.updateProfile({ displayName: name });
+        }
+    } catch(e) {}
+    try {
+        const db = (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.db) || (window.firebase && firebase.firestore && firebase.firestore());
+        if (db) {
+            const fUid = (window.firebase && firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.uid) || uid;
+            await db.collection('profiles').doc(String(fUid)).set({
+                    id: String(fUid),
                     email: email,
                     nombre: name,
                     telefono: phone,
@@ -10344,12 +11069,48 @@ async function handleSaveMyProfile(event) {
                     departamento: appState.currentUser.departamento || 'Administración',
                     updated_at: new Date().toISOString()
                 }, { merge: true });
+
+                const qSnap = await db.collection('profiles').where('email', '==', email).get();
+                if (!qSnap.empty) {
+                    qSnap.forEach(d => {
+                        d.ref.set({
+                            nombre: name,
+                            telefono: phone,
+                            updated_at: new Date().toISOString()
+                        }, { merge: true }).catch(() => {});
+                    });
+                }
             }
         } catch(e) {}
+
+    if (window.cloudProfilesCache) {
+        window.cloudProfilesCache.forEach(p => {
+            if (p && p.email && p.email.toLowerCase() === email) {
+                p.nombre = name;
+                p.telefono = phone;
+            }
+        });
+    }
+    if (window.cachedProfilesList) {
+        window.cachedProfilesList.forEach(p => {
+            if (p && p.email && p.email.toLowerCase() === email) {
+                p.nombre = name;
+                p.telefono = phone;
+            }
+        });
     }
     
     updateUserSessionUI();
     if (typeof updateUserProfileUI === 'function') updateUserProfileUI();
+    if (window.chatRealtimeChannel) {
+        try {
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'profiles_update',
+                payload: { email, nombre: name, telefono: phone, senderClientId: window._myClientId, timestamp: Date.now() }
+            });
+        } catch (e) {}
+    }
     
     if (msgEl) {
         msgEl.className = "auth-success-badge";
@@ -10402,25 +11163,29 @@ function updateUserProfileUI() {
     const resolvedName = isAuth ? ((appState.currentUser && appState.currentUser.nombre) || (appState.currentUser && appState.currentUser.email ? appState.currentUser.email.split('@')[0] : "Usuario")) : "Iniciar Sesión";
     const resolvedEmail = isAuth ? ((appState.currentUser && appState.currentUser.email) || "") : "";
 
-    const user = isAuth ? (appState.currentUser || { nombre: resolvedName, email: resolvedEmail, rol: appState.currentRole || "colaborador" }) : { nombre: "Iniciar Sesión", email: "", rol: "colaborador" };
-    const currentPass = isAuth ? ((user && user.password) || sessionStorage.getItem("rp_session_pass") || localStorage.getItem("rp_user_pass") || "") : "";
+    const user = isAuth ? (appState.currentUser || { nombre: resolvedName, email: resolvedEmail, rol: appState.currentRole || "administrador" }) : { nombre: "Iniciar Sesión", email: "", rol: "administrador" };
+    const userEmailKey = (user && user.email) ? user.email.toLowerCase() : "";
+    const currentPass = isAuth ? ((user && user.password) || (userEmailKey && localStorage.getItem("rp_user_pass_" + userEmailKey)) || sessionStorage.getItem("rp_session_pass") || "") : "";
+
+    const r = (user.rol || appState.currentRole || '').toLowerCase();
+    const isGerente = (r === 'gerente' || r === 'manager' || r === 'director') && (typeof isManagerUser === 'function' ? isManagerUser() : true);
 
     const displayName = isAuth ? (user.nombre || (user.email ? user.email.split('@')[0] : "Usuario")) : "Iniciar Sesión";
     const displayInitial = isAuth ? displayName.charAt(0).toUpperCase() : "?";
 
     if (footerName) footerName.innerText = displayName;
-    if (footerRole) footerRole.innerText = isAuth ? ((user.rol === 'gerente') ? "Rango: Gerente / Director" : ((user.rol === 'administrador') ? "Rango: Administrativo" : "Rango: Colaborador")) : "Sin autenticar";
+    if (footerRole) footerRole.innerText = isAuth ? (isGerente ? "Rango: Manager / Director" : "Rango: Administrativo") : "Sin autenticar";
     if (footerAvatar) {
         footerAvatar.innerText = displayInitial;
-        footerAvatar.style.borderColor = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#CBD5E1';
-        footerAvatar.style.color = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#94A3B8';
+        footerAvatar.style.borderColor = isAuth ? (isGerente ? '#2563EB' : '#10B981') : '#CBD5E1';
+        footerAvatar.style.color = isAuth ? (isGerente ? '#2563EB' : '#10B981') : '#94A3B8';
     }
 
     if (headerName) headerName.innerText = displayName;
     if (headerAvatar) {
         headerAvatar.innerText = displayInitial;
-        headerAvatar.style.borderColor = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#CBD5E1';
-        headerAvatar.style.color = isAuth ? (user.rol === 'gerente' ? '#2563EB' : (user.rol === 'administrador' ? '#10B981' : '#64748B')) : '#94A3B8';
+        headerAvatar.style.borderColor = isAuth ? (isGerente ? '#2563EB' : '#10B981') : '#CBD5E1';
+        headerAvatar.style.color = isAuth ? (isGerente ? '#2563EB' : '#10B981') : '#94A3B8';
     }
 
     const headerRoleTag = document.getElementById("modal-gerente-role-tag");
@@ -10429,29 +11194,37 @@ function updateUserProfileUI() {
             headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">no_accounts</span> No Autenticado`;
             headerRoleTag.style.background = 'rgba(100, 116, 139, 0.1)';
             headerRoleTag.style.color = '#64748B';
+        } else if (isGerente) {
+            headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">star</span> Manager / Director`;
+            headerRoleTag.style.background = 'rgba(37, 99, 235, 0.1)';
+            headerRoleTag.style.color = '#2563EB';
         } else {
-            const r = (user.rol || '').toLowerCase();
-            if (r === 'gerente' || r === 'manager') {
-                headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">star</span> Manager / Gerente`;
-                headerRoleTag.style.background = 'rgba(37, 99, 235, 0.1)';
-                headerRoleTag.style.color = '#2563EB';
-            } else if (r === 'administrador' || r === 'admin') {
-                headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">admin_panel_settings</span> Administrativo`;
-                headerRoleTag.style.background = 'rgba(16, 185, 129, 0.1)';
-                headerRoleTag.style.color = '#10B981';
-            } else {
-                headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">group</span> Colaborador`;
-                headerRoleTag.style.background = 'rgba(100, 116, 139, 0.1)';
-                headerRoleTag.style.color = '#475569';
-            }
+            headerRoleTag.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">admin_panel_settings</span> Administrativo`;
+            headerRoleTag.style.background = 'rgba(16, 185, 129, 0.1)';
+            headerRoleTag.style.color = '#10B981';
         }
     }
 
-    if (editNameInput) editNameInput.value = isAuth ? (user.nombre || "") : "";
-    if (editPhoneInput) editPhoneInput.value = isAuth ? (user.telefono || "") : "";
+    if (editNameInput) {
+        if (document.activeElement !== editNameInput) editNameInput.value = isAuth ? (user.nombre || "") : "";
+        if (!isGerente) {
+            editNameInput.readOnly = true;
+            editNameInput.style.background = '#F8FAFC';
+            editNameInput.style.color = '#64748B';
+            editNameInput.style.cursor = 'not-allowed';
+            editNameInput.title = 'Solo un Manager puede modificar el nombre de usuario';
+        } else {
+            editNameInput.readOnly = false;
+            editNameInput.style.background = '#FFFFFF';
+            editNameInput.style.color = '#0F172A';
+            editNameInput.style.cursor = 'text';
+            editNameInput.title = '';
+        }
+    }
+    if (editPhoneInput && document.activeElement !== editPhoneInput) editPhoneInput.value = isAuth ? (user.telefono || "") : "";
     if (editEmailInput) editEmailInput.value = isAuth ? (user.email || "") : "";
 
-    if (editPassInput) {
+    if (editPassInput && document.activeElement !== editPassInput) {
         if (isAuth && currentPass) {
             editPassInput.value = currentPass;
         } else {
@@ -10461,7 +11234,7 @@ function updateUserProfileUI() {
     }
 
     if (loggedEmailText) loggedEmailText.innerText = isAuth ? (user.email || "") : "Sin sesión activa";
-    if (loggedRoleText) loggedRoleText.innerText = isAuth ? (user.rol === 'gerente' ? "Gerente / Administrador" : "Colaborador de Operaciones") : "Debes autenticarte";
+    if (loggedRoleText) loggedRoleText.innerText = isAuth ? (isGerente ? "Manager / Director" : "Administrativo") : "Debes autenticarte";
 };
 
 // ==============================================================================
@@ -12437,11 +13210,11 @@ async function fetchConsecutivoFromCloud() {
 }
 window.fetchConsecutivoFromCloud = fetchConsecutivoFromCloud;
 
-function mergeConsecutivoFromCloud(cloudList) {
+function mergeConsecutivoFromCloud(cloudList, force = false) {
     window.mergeConsecutivoFromCloud = mergeConsecutivoFromCloud;
     if (!Array.isArray(cloudList) || cloudList.length === 0) return;
     if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
-    if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
+    if (!force && Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
     const purgedIds = window.purgedProjectIds || new Set();
 
     const validList = cloudList.filter(row => {
@@ -12498,13 +13271,14 @@ async function fetchOperacionesFromCloud() {
     if (!client) return;
 
     try {
-        let cloudProjects = null;
+        let dbProjects = [];
+        let snapProjects = [];
 
-        // 1. Intentar leer desde tabla dedicada operaciones
+        // 1. Leer desde tabla dedicada operaciones
         try {
-            const { data: dbOps, error: opErr } = await client.from('operaciones').select('*').order('updated_at', { ascending: false });
+            const { data: dbOps } = await client.from('operaciones').select('*').order('updated_at', { ascending: false });
             if (dbOps && dbOps.length > 0) {
-                cloudProjects = dbOps.map(row => {
+                dbProjects = dbOps.map(row => {
                     let d = row.datos;
                     if (typeof d === 'string') {
                         try { d = JSON.parse(d); } catch (e) { d = null; }
@@ -12529,34 +13303,52 @@ async function fetchOperacionesFromCloud() {
             }
         } catch (e) {}
 
-        // 2. Si no hay registros en operaciones, recuperar el snapshot más reciente de messages
-        if (!cloudProjects || cloudProjects.length === 0) {
-            const { data: snapMsgs, error: snapErr } = await client.from('messages')
+        // 2. Leer SIEMPRE los snapshots recientes de messages (__cloud_sync_operaciones__) para no perder proyectos nuevos
+        try {
+            const { data: snapMsgs } = await client.from('messages')
                 .select('contenido, created_at')
                 .eq('chat_id', '__cloud_sync_operaciones__')
                 .order('created_at', { ascending: false })
-                .limit(1);
+                .limit(5);
 
-            if (snapMsgs && snapMsgs.length > 0 && snapMsgs[0].contenido) {
-                try {
-                    let parsed = JSON.parse(snapMsgs[0].contenido);
-                    if (typeof parsed === 'string') {
-                        try { parsed = JSON.parse(parsed); } catch (e) {}
-                    }
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        cloudProjects = parsed.map(p => {
-                            if (p && typeof p === 'object' && p.generado === undefined) {
-                                p.generado = true;
-                            }
-                            return p;
-                        });
-                    }
-                } catch (e) {}
+            if (snapMsgs && snapMsgs.length > 0) {
+                for (const msg of snapMsgs) {
+                    if (!msg || !msg.contenido) continue;
+                    try {
+                        let parsed = JSON.parse(msg.contenido);
+                        if (typeof parsed === 'string') {
+                            try { parsed = JSON.parse(parsed); } catch (e) {}
+                        }
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            parsed.forEach(p => {
+                                if (p && typeof p === 'object') {
+                                    if (p.generado === undefined) p.generado = true;
+                                    const pConsec = String(p.consecutivo || p.numProyecto || p.id || '').trim().toUpperCase();
+                                    const alreadyInSnap = snapProjects.some(sp => {
+                                        const spConsec = String(sp.consecutivo || sp.numProyecto || sp.id || '').trim().toUpperCase();
+                                        return spConsec === pConsec;
+                                    });
+                                    if (!alreadyInSnap) {
+                                        snapProjects.push(p);
+                                    }
+                                }
+                            });
+                        }
+                    } catch (e) {}
+                }
             }
-        }
+        } catch (e) {}
 
-        if (cloudProjects && Array.isArray(cloudProjects)) {
-            window.mergeOperacionesProjects(cloudProjects);
+        const combinedCloud = [...snapProjects];
+        dbProjects.forEach(dp => {
+            const dpConsec = String(dp.consecutivo || dp.numProyecto || dp.id || '').trim().toUpperCase();
+            if (!combinedCloud.some(cp => String(cp.consecutivo || cp.numProyecto || cp.id || '').trim().toUpperCase() === dpConsec)) {
+                combinedCloud.push(dp);
+            }
+        });
+
+        if (combinedCloud.length > 0) {
+            window.mergeOperacionesProjects(combinedCloud);
             if (!appState.isEditingOperacionesDetail) {
                 try {
                     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
@@ -13178,7 +13970,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutos de respaldo ante cierre inesperado
-const SYSTEM_RELEASE_VERSION = 'release_2026_10_12_op_locks_v1';
+const SYSTEM_RELEASE_VERSION = 'release_2026_10_19_roles_v2';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -13278,7 +14070,7 @@ function isLockOwnedByMe(lock) {
         return true;
     }
 
-    // 5. Coincidencia por prefijo de correo (ej. "zalazardemiranda" vs "zalazardemiranda@gmail.com")
+    // 5. Coincidencia por prefijo de correo
     const myPrefix = (myInfo.userPrefix || '').toLowerCase();
     const lockPrefix = (lock.userPrefix || (lockEmail.includes('@') ? lockEmail.split('@')[0] : '')).toLowerCase();
     if (myPrefix && (lockName === myPrefix || lockPrefix === myPrefix)) {
@@ -13288,13 +14080,6 @@ function isLockOwnedByMe(lock) {
         return true;
     }
     if (myName && lockEmail && (lockEmail.startsWith(myName + '@') || lockEmail === myName)) {
-        return true;
-    }
-
-    // 6. Cuenta de administración principal Roberto Miranda / zalazardemiranda
-    const isMainAdmin = myEmail === 'zalazardemiranda@gmail.com' || myName.includes('zalazar') || myPrefix === 'zalazardemiranda';
-    const isLockMainAdmin = lockEmail === 'zalazardemiranda@gmail.com' || lockName.includes('zalazar') || lockName === 'zalazardemiranda' || String(lock.userId || '').toLowerCase().includes('zalazardemiranda');
-    if (isMainAdmin && isLockMainAdmin) {
         return true;
     }
 
@@ -14594,7 +15379,9 @@ function openOperacionesDetail(projectId, clickTimestamp = null) {
         const listPane = document.getElementById("operaciones-view-list");
         const detailPane = document.getElementById("operaciones-view-detail");
         const topbarBack = document.getElementById("op-detail-topbar");
+        const opKpisRow = document.getElementById("operaciones-kpis-row");
 
+        if (opKpisRow) opKpisRow.style.display = "none";
         if (listPane) {
             listPane.style.display = "none";
             listPane.classList.remove("active");
@@ -14881,7 +15668,12 @@ function closeOperacionesDetail(options = {}) {
     const listPane = document.getElementById("operaciones-view-list");
     const detailPane = document.getElementById("operaciones-view-detail");
     const topbarBack = document.getElementById("op-detail-topbar");
+    const opKpisRow = document.getElementById("operaciones-kpis-row");
+    const curFicha = appState.currentAdminFicha || 'operaciones';
 
+    if (opKpisRow && (curFicha === 'operaciones' || curFicha === 'proveedores' || curFicha === 'consecutivo')) {
+        opKpisRow.style.display = "grid";
+    }
     if (listPane) {
         listPane.style.display = "block";
         listPane.classList.add("active");

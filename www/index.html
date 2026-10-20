@@ -79,7 +79,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <link rel="stylesheet" href="styles.css?v=33db01eb">
+    <link rel="stylesheet" href="styles.css?v=f62e5d41">
 
     <script>
 
@@ -233,18 +233,6 @@
                             <span class="material-symbols-outlined">analytics</span>
 
                             <span class="nav-text-label">Administración</span>
-
-                        </a>
-
-                    </li>
-
-                    <li>
-
-                        <a href="#" class="nav-item" id="nav-meetings" onclick="switchTab('meetings')" title="Reuniones">
-
-                            <span class="material-symbols-outlined">calendar_today</span>
-
-                            <span class="nav-text-label">Reuniones</span>
 
                         </a>
 
@@ -975,104 +963,6 @@
 
                 </section>
 
-
-
-                <!-- TAB 3: REUNIONES -->
-
-                <section id="tab-meetings" class="tab-pane">
-
-                    <div class="meetings-layout">
-
-                        <!-- Left pane: Schedule a Meeting -->
-
-                        <div class="meetings-form-container">
-
-                            <div class="card form-card">
-
-                                <h3><span class="material-symbols-outlined">calendar_month</span> Agendar Nueva Reunión</h3>
-
-                                <form id="meeting-form" onsubmit="handleCreateMeeting(event)">
-
-                                    <div class="form-group">
-
-                                        <label for="meeting-title">Asunto de la Reunión</label>
-
-                                        <input type="text" id="meeting-title" required placeholder="Ej: Coordinación del embarque de mañana">
-
-                                    </div>
-
-                                    
-
-                                    <div class="form-row">
-
-                                        <div class="form-group">
-
-                                            <label for="meeting-date">Fecha</label>
-
-                                            <input type="date" id="meeting-date" required>
-
-                                        </div>
-
-                                        <div class="form-group">
-
-                                            <label for="meeting-time">Hora</label>
-
-                                            <input type="time" id="meeting-time" required>
-
-                                        </div>
-
-                                    </div>
-
-
-
-                                    <div class="form-group">
-
-                                        <label for="meeting-link">Enlace de Videollamada (Opcional)</label>
-
-                                        <input type="url" id="meeting-link" placeholder="https://meet.google.com/xyz-abc-123">
-
-                                    </div>
-
-
-
-                                    <button type="submit" class="btn btn-primary">
-
-                                        <span class="material-symbols-outlined">calendar_today</span> Agendar Reunión
-
-                                    </button>
-
-                                </form>
-
-                            </div>
-
-                        </div>
-
-
-
-                        <!-- Right pane: Meeting List -->
-
-                        <div class="meetings-list-container">
-
-                            <div class="card list-card">
-
-                                <h3>Próximas Reuniones Agendadas</h3>
-
-                                <div class="meetings-grid" id="meetings-list-container">
-
-                                    <!-- Dynamic meetings here -->
-
-                                </div>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </section>
-
-                
-
                 <!-- TAB 4: ADMINISTRACIÓN -->
 
                 <section id="tab-administracion" class="tab-pane">
@@ -1132,30 +1022,6 @@
                                 <div class="ficha-text">
 
                                     <h4>Administración</h4>
-
-                                </div>
-
-                            </button>
-
-                            <button class="admin-ficha-card" id="ficha-btn-proveedores" onclick="switchAdminFicha('proveedores')">
-
-                                <div class="ficha-icon"><span class="material-symbols-outlined">local_shipping</span></div>
-
-                                <div class="ficha-text">
-
-                                    <h4>Proveedores</h4>
-
-                                </div>
-
-                            </button>
-
-                            <button class="admin-ficha-card" id="ficha-btn-consecutivo" onclick="switchAdminFicha('consecutivo')">
-
-                                <div class="ficha-icon"><span class="material-symbols-outlined">receipt_long</span></div>
-
-                                <div class="ficha-text">
-
-                                    <h4>Consecutivo</h4>
 
                                 </div>
 
@@ -1530,14 +1396,6 @@
 
                                     <div class="table-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;" id="nomina-action-buttons">
 
-                                        <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-nominas" onclick="startEditingNominas()" title="Habilitar edición en Nóminas">
-                                            <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
-                                        </button>
-
-                                        <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-nominas" onclick="saveEditingNominas()" disabled title="Guardar cambios en Nóminas y liberar la tabla para otros usuarios">
-                                            <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
-                                        </button>
-
                                         <button class="btn btn-secondary" onclick="openModalArchivoDigital()" id="btn-archivo-digital">
 
                                             <span class="material-symbols-outlined">folder</span> Archivo digital
@@ -1737,6 +1595,57 @@
                         </div>
 
 
+
+                        <!-- Fila de Registros de Operación (Izquierda - Imagen 5) + Proveedores y Consecutivo (Derecha - Imagen 4) -->
+                        <div class="operaciones-kpis-grid" id="operaciones-kpis-row" style="display: none;">
+                            <div class="operaciones-kpis-left-group">
+                                <div class="card operaciones-kpi-card" onclick="switchAdminFicha('operaciones')" style="cursor: pointer;" title="Ver Operaciones">
+                                    <div class="operaciones-kpi-icon icon-closed">
+                                        <span class="material-symbols-outlined">folder</span>
+                                    </div>
+                                    <div class="operaciones-kpi-info">
+                                        <span class="kpi-label">Total de carpetas cerradas</span>
+                                        <h2 class="kpi-value" id="op-kpi-closed">4</h2>
+                                    </div>
+                                </div>
+
+                                <div class="card operaciones-kpi-card" onclick="switchAdminFicha('operaciones')" style="cursor: pointer;" title="Ver Operaciones">
+                                    <div class="operaciones-kpi-icon icon-open">
+                                        <span class="material-symbols-outlined">folder_open</span>
+                                    </div>
+                                    <div class="operaciones-kpi-info">
+                                        <span class="kpi-label">Total de carpetas pendientes</span>
+                                        <h2 class="kpi-value" id="op-kpi-open">3</h2>
+                                    </div>
+                                </div>
+
+                                <div class="card operaciones-kpi-card" onclick="switchAdminFicha('operaciones')" style="cursor: pointer;" title="Ver Operaciones">
+                                    <div class="operaciones-kpi-icon icon-total">
+                                        <span class="material-symbols-outlined">bar_chart</span>
+                                    </div>
+                                    <div class="operaciones-kpi-info">
+                                        <span class="kpi-label">Total de proyectos</span>
+                                        <h2 class="kpi-value" id="op-kpi-total">7</h2>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="operaciones-nav-right-group">
+                                <button class="admin-ficha-card operaciones-subnav-card" id="ficha-btn-proveedores" onclick="switchAdminFicha('proveedores')">
+                                    <div class="ficha-icon"><span class="material-symbols-outlined">local_shipping</span></div>
+                                    <div class="ficha-text">
+                                        <h4>Proveedores</h4>
+                                    </div>
+                                </button>
+
+                                <button class="admin-ficha-card operaciones-subnav-card" id="ficha-btn-consecutivo" onclick="switchAdminFicha('consecutivo')">
+                                    <div class="ficha-icon"><span class="material-symbols-outlined">receipt_long</span></div>
+                                    <div class="ficha-text">
+                                        <h4>Consecutivo</h4>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
 
                         <!-- SUB-FICHA 3: PROVEEDORES (Imagen 4) -->
 
@@ -2205,74 +2114,6 @@
                             <!-- SUB-VISTA A: LISTA DE OPERACIONES / PROYECTOS (Imagen 2) -->
 
                             <div id="operaciones-view-list" class="operaciones-subview active">
-
-
-
-                                <!-- 3 KPIs Cards Header -->
-
-                                <div class="operaciones-kpis-grid">
-
-                                    <div class="card operaciones-kpi-card">
-
-                                        <div class="operaciones-kpi-icon icon-closed">
-
-                                            <span class="material-symbols-outlined">folder</span>
-
-                                        </div>
-
-                                        <div class="operaciones-kpi-info">
-
-                                            <span class="kpi-label">Total de carpetas cerradas</span>
-
-                                            <h2 class="kpi-value" id="op-kpi-closed">4</h2>
-
-                                        </div>
-
-                                    </div>
-
-
-
-                                    <div class="card operaciones-kpi-card">
-
-                                        <div class="operaciones-kpi-icon icon-open">
-
-                                            <span class="material-symbols-outlined">folder_open</span>
-
-                                        </div>
-
-                                        <div class="operaciones-kpi-info">
-
-                                            <span class="kpi-label">Total de carpetas pendientes</span>
-
-                                            <h2 class="kpi-value" id="op-kpi-open">3</h2>
-
-                                        </div>
-
-                                    </div>
-
-
-
-                                    <div class="card operaciones-kpi-card">
-
-                                        <div class="operaciones-kpi-icon icon-total">
-
-                                            <span class="material-symbols-outlined">bar_chart</span>
-
-                                        </div>
-
-                                        <div class="operaciones-kpi-info">
-
-                                            <span class="kpi-label">Total de proyectos</span>
-
-                                            <h2 class="kpi-value" id="op-kpi-total">7</h2>
-
-                                        </div>
-
-                                    </div>
-
-                                </div>
-
-
 
                                 <!-- Search, Filter & Add Button Bar -->
 
@@ -3686,11 +3527,9 @@
 
                                         <select id="reg-rol" class="custom-excel-select">
 
-                                            <option value="gerente">Gerente / Director (Acceso Total)</option>
+                                            <option value="gerente">Manager / Director (Acceso Total)</option>
 
-                                            <option value="administrador">Administrador (Finanzas & Nómina)</option>
-
-                                            <option value="colaborador" selected>Colaborador de Operaciones (Tareas & Chat)</option>
+                                            <option value="administrador" selected>Administrativo (Finanzas &amp; Nómina)</option>
 
                                         </select>
 
@@ -4419,11 +4258,9 @@
 
                     <select id="edit-profile-role" class="custom-excel-select" required>
 
-                        <option value="colaborador">Colaborador (Operaciones, Tareas & Chat)</option>
+                        <option value="administrador">Administrativo (Finanzas &amp; Nómina)</option>
 
-                        <option value="administrador">Administrativo (Finanzas & Nómina)</option>
-
-                        <option value="gerente">Gerente / Director (Acceso Total)</option>
+                        <option value="gerente">Manager / Director (Acceso Total)</option>
 
                     </select>
 
@@ -5470,13 +5307,13 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-    <script src="firebase_config.js?v=55bd0886"></script>
-    <script src="backup_data.js?v=20261015_lockout_v2"></script>
+    <script src="firebase_config.js?v=7562e647"></script>
+    <script src="backup_data.js?v=9130e33f"></script>
 
     <script src="consecutivo_data.js?v=285df872"></script>
 
-    <script src="schema.js?v=009b3ea9"></script>
-    <script src="app.js?v=c9e8091c"></script>
+    <script src="schema.js?v=c644e61d"></script>
+    <script src="app.js?v=fca9d7d6"></script>
 
 </body>
 

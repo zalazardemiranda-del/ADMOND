@@ -2533,7 +2533,7 @@
             'sin asignar'
         ]);
 
-        // 1. Obtener de getAvailableAssignees() de app.js (Sección 2)
+        // 1. Obtener exclusivamente de getAvailableAssignees() (usuarios registrados en Firebase)
         if (typeof window.getAvailableAssignees === 'function') {
             try {
                 const appAssignees = window.getAvailableAssignees();
@@ -2551,30 +2551,6 @@
             } catch (e) {
                 console.warn('Error al obtener getAvailableAssignees:', e);
             }
-        }
-
-        // 2. Respaldo corporativo real únicamente si getAvailableAssignees aún no está disponible
-        if (collabs.length === 0) {
-            const systemUsers = [
-                { nombre: 'Roberto Miranda', email: 'info@rodipack.com.mx', rol: 'gerente', departamento: 'IT' },
-                { nombre: 'Manuel Miranda', email: 'roberto@rodipack.com', rol: 'gerente', departamento: 'Administración' },
-                { nombre: 'Maria Perez', email: 'facturas@rodipack.com', rol: 'administrador', departamento: 'Finanzas' },
-                { nombre: 'Diego', email: 'diego@rodipack.com', rol: 'administrativo', departamento: 'Logística' }
-            ];
-
-            systemUsers.forEach(su => {
-                if (!seenNames.has(su.nombre.toLowerCase())) {
-                    seenNames.add(su.nombre.toLowerCase());
-                    collabs.push({
-                        id: 'sys-' + collabs.length,
-                        nombre: su.nombre,
-                        email: su.email || '',
-                        rol: su.rol,
-                        departamento: su.departamento,
-                        isSelf: false
-                    });
-                }
-            });
         }
 
         return collabs;
