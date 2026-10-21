@@ -14286,7 +14286,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_10_20_operaciones_v3';
+const SYSTEM_RELEASE_VERSION = 'release_2026_10_21_operaciones_v5';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -15799,6 +15799,16 @@ function updateOperacionesDetailEditUI() {
                 textEl.innerHTML = `Modo lectura · Haz clic en <strong>"Editar"</strong> para modificar este proyecto`;
             }
         }
+    }
+
+    // Ocultar botón Archivar si el expediente ya está archivado o cerrado
+    const activeProj = (typeof getActiveOperacionesProject === 'function')
+        ? getActiveOperacionesProject()
+        : ((appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject);
+    const isProjArchivado = activeProj && (activeProj.archivado === true || activeProj.estatus === 'CERRADO');
+    const archivarContainer = document.getElementById("doc-archivar-box") || document.querySelector(".doc-archivar-box");
+    if (archivarContainer) {
+        archivarContainer.style.display = isProjArchivado ? 'none' : 'block';
     }
 }
 window.updateOperacionesDetailEditUI = updateOperacionesDetailEditUI;
@@ -18711,6 +18721,13 @@ function renderDocumentosStatus(p) {
     window.renderDocumentosStatus = renderDocumentosStatus;
     if (!p) return;
     if (!p.documentos) p.documentos = {};
+
+    // Si el expediente ya está archivado o cerrado, ocultar completamente el botón y contenedor de archivar
+    const isArchivado = p.archivado === true || p.estatus === 'CERRADO';
+    const archivarBox = document.getElementById("doc-archivar-box") || document.querySelector(".doc-archivar-box");
+    if (archivarBox) {
+        archivarBox.style.display = isArchivado ? 'none' : 'block';
+    }
 
     const docKeys = ['factura1', 'factura2', 'factura3', 'pod1', 'pod2'];
     let uploadedCount = 0;
