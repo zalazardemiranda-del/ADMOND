@@ -13269,8 +13269,9 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
 
 function saveOperacionesStorage(skipProveedoresSync = false) {
     window.saveOperacionesStorage = saveOperacionesStorage;
+    const purgedIds = window.purgedProjectIds || new Set();
     const list = appState.operacionesProyectos || [];
-    const validList = list.filter(p => isProjectGenerado(p));
+    const validList = list.filter(p => p && isProjectGenerado(p) && !purgedIds.has(p.id) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.numConsecutivo));
     try {
         localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(validList));
     } catch (e) {
@@ -13352,7 +13353,8 @@ function syncOperacionesToCloud(forceImmediate = false) {
         window._myClientId = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
     }
 
-    const validProyectos = (appState.operacionesProyectos || []).filter(p => isProjectGenerado(p));
+    const purgedIds = window.purgedProjectIds || new Set();
+    const validProyectos = (appState.operacionesProyectos || []).filter(p => p && isProjectGenerado(p) && !purgedIds.has(p.id) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.numConsecutivo));
     const safePayload = cleanProjectsForCloud(validProyectos);
 
     // 1. Broadcast instantáneo por WebSockets (sub-50ms) a otros dispositivos activos (iPad, PC)
@@ -13390,7 +13392,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
 
     const doSync = async () => {
         try {
-            const list = (appState.operacionesProyectos || []).filter(p => isProjectGenerado(p));
+            const list = (appState.operacionesProyectos || []).filter(p => p && isProjectGenerado(p) && !purgedIds.has(p.id) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.numConsecutivo));
             const safeList = cleanProjectsForCloud(list);
 
             // A. Guardar snapshot en tabla messages con chat_id especial para garantizar persistencia universal
@@ -15215,18 +15217,18 @@ function renderOperaciones() {
     }
 
     // Purga automática inicial si existen datos fantasma guardados previamente en LocalStorage
-    if (!localStorage.getItem('rp_purge_accidental_oct_v5')) {
+    if (!localStorage.getItem('rp_purge_accidental_oct_v6')) {
         try {
             const storedInitial = localStorage.getItem('rp_operaciones_proyectos');
             if (storedInitial) {
                 let parsed = JSON.parse(storedInitial);
                 if (Array.isArray(parsed)) {
-                    parsed = parsed.filter(p => p && isProjectGenerado(p) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(p)));
+                    parsed = parsed.filter(p => p && isProjectGenerado(p) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(p)) && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
                     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(parsed));
                     appState.operacionesProyectos = parsed;
                 }
             }
-            localStorage.setItem('rp_purge_accidental_oct_v5', 'true');
+            localStorage.setItem('rp_purge_accidental_oct_v6', 'true');
         } catch(e) {}
     }
 
