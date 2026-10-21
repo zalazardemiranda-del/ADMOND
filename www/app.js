@@ -284,6 +284,7 @@ const runInitialAppSetup = async () => {
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
         'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
         'RDP261074-', 'RDP261075-',
+        'RDP2610182-F', 'RDP2610182',
         'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
     ]);
     window.purgedProjectIds = purgedProjectIds;
@@ -13021,6 +13022,7 @@ function syncAllOperacionesToConsecutivo() {
         'RDP2609126F', 'RDP2609128F', 'RDP2609127F', 'RDP2609129F', 'RDP2609130F',
         'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
         'RDP261074-', 'RDP261075-',
+        'RDP2610182-F', 'RDP2610182',
         'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
     ]);
 
@@ -13681,7 +13683,7 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
     if (!Array.isArray(cloudList)) return;
     if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
 
-    const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F']);
+    const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F', 'RDP2610182-F', 'RDP2610182']);
 
     if (cloudList.length === 0) {
         appState.operacionesProyectos = (appState.operacionesProyectos || []).filter(p => 
@@ -15228,7 +15230,7 @@ function renderOperaciones() {
         } catch(e) {}
     }
 
-    const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F']);
+    const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F', 'RDP2610182-F', 'RDP2610182']);
     const stored = localStorage.getItem('rp_operaciones_proyectos');
     if (stored) {
         try {
