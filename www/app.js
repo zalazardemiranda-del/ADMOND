@@ -14886,8 +14886,22 @@ function evictUserFromProjectOnSystemUpdate(releaseId, reasonMessage) {
 function handleIncomingSystemReleaseUpdate(payload) {
     window.handleIncomingSystemReleaseUpdate = handleIncomingSystemReleaseUpdate;
     if (!payload || !payload.releaseId) return;
+
+    // Prevención estricta de bucle: si ya se aplicó este releaseId en este navegador, nunca volver a recargar
     const lastApplied = localStorage.getItem('rp_applied_system_release');
-    if (lastApplied === String(payload.releaseId) && !payload.force) return;
+    if (lastApplied === String(payload.releaseId)) return;
+
+    // Cooldown de seguridad: máximo 1 recarga automática cada 20 segundos por dispositivo
+    const now = Date.now();
+    const lastReload = Number(sessionStorage.getItem('rp_last_auto_reload_ts') || 0);
+    if (now - lastReload < 20000) {
+        try { localStorage.setItem('rp_applied_system_release', String(payload.releaseId)); } catch (e) {}
+        return;
+    }
+    try {
+        sessionStorage.setItem('rp_last_auto_reload_ts', String(now));
+        localStorage.setItem('rp_applied_system_release', String(payload.releaseId));
+    } catch (e) {}
 
     evictUserFromProjectOnSystemUpdate(payload.releaseId, payload.message);
     if (typeof window.fetchOperacionesFromCloud === 'function') {
@@ -14921,6 +14935,9 @@ async function checkLiveDeploymentVersion() {
         const remoteMatch = html.match(/app\.js\?v=([^"'\s&>]+)/);
         const remoteHash = remoteMatch ? remoteMatch[1] : null;
         if (remoteHash && remoteHash !== currentHash) {
+            const lastReload = Number(sessionStorage.getItem('rp_last_auto_reload_ts') || 0);
+            if (Date.now() - lastReload < 20000) return;
+            try { sessionStorage.setItem('rp_last_auto_reload_ts', String(Date.now())); } catch (e) {}
             console.log(`🔄 Nueva actualización en línea detectada (${currentHash} -> ${remoteHash}). Aplicando automáticamente...`);
             window.location.reload();
         }
