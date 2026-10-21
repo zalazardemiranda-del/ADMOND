@@ -29,7 +29,8 @@ service cloud.firestore {
 
     // Expedientes y operaciones
     match /operaciones/{operacionId} {
-      allow read, write: if true;
+      allow read, delete: if true;
+      allow create, update: if operacionId != 'RDP2610182' && operacionId != 'RDP2610182-F';
     }
 
     // Consecutivo de facturación
