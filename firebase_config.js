@@ -34,8 +34,16 @@
         },
         saveCollection: function(colName, items) {
             try {
-                localStorage.setItem('rp_fb_col_' + colName, JSON.stringify(items || []));
-            } catch (e) {}
+                let listToSave = Array.isArray(items) ? items : [];
+                if (colName === 'messages' && listToSave.length > 40) {
+                    listToSave = listToSave.slice(0, 40);
+                }
+                localStorage.setItem('rp_fb_col_' + colName, JSON.stringify(listToSave));
+            } catch (e) {
+                try {
+                    localStorage.removeItem('rp_fb_col_' + colName);
+                } catch (e2) {}
+            }
         }
     };
 
@@ -329,11 +337,11 @@
                                 // Guardar en Firestore si está disponible
                                 if (db) {
                                     try {
-                                        await db.collection(collectionName).doc(String(id)).set(fullItem, { merge: true });
                                         if (collectionName === 'messages' && item.chat_id && String(item.chat_id).startsWith('__cloud_sync_')) {
                                             const safeSnapId = String(item.chat_id).replace(/^__+|__+$/g, '');
                                             await db.collection('sync_snapshots').doc(safeSnapId).set(fullItem, { merge: true });
                                         }
+                                        await db.collection(collectionName).doc(String(id)).set(fullItem, { merge: true });
                                         if (collectionName === 'profiles' && item.email) {
                                             const emailNorm = String(item.email).trim().toLowerCase();
                                             const isAuthUid = /^[A-Za-z0-9]{28}$/.test(String(id));
@@ -378,7 +386,8 @@
                                     }
                                 }
 
-                                const existingIdx = localItems.findIndex(x => x.id === id || (item.email && x.email && x.email.toLowerCase() === item.email.toLowerCase()));
+                                const isSyncSnapMsg = collectionName === 'messages' && item.chat_id && String(item.chat_id).startsWith('__cloud_sync_');
+                                const existingIdx = localItems.findIndex(x => x.id === id || (isSyncSnapMsg && x.chat_id === item.chat_id) || (item.email && x.email && x.email.toLowerCase() === item.email.toLowerCase()));
                                 if (existingIdx >= 0) {
                                     localItems[existingIdx] = Object.assign({}, localItems[existingIdx], fullItem);
                                 } else {

@@ -7181,8 +7181,7 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
 #operaciones-view-detail.op-detail-readonly .btn-duplicate-contenedor,
 #operaciones-view-detail.op-detail-readonly .btn-delete-contenedor,
 #operaciones-view-detail.op-detail-readonly button[onclick*="addPartidaConceptoRow"],
-#operaciones-view-detail.op-detail-readonly button[onclick*="addProveedorClavesRow"],
-#operaciones-view-detail.op-detail-readonly .btn-archivar-expediente {
+#operaciones-view-detail.op-detail-readonly button[onclick*="addProveedorClavesRow"] {
     pointer-events: none !important;
     opacity: 0.68 !important;
     cursor: not-allowed !important;

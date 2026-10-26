@@ -8135,8 +8135,9 @@ function selectStOption(index, value, event) {
             String(p.numProyecto || p.consecutivo || p.numConsecutivo || p.id).trim().toLowerCase() === refId
         );
         if (proj) {
+            const wasArchivado = proj.archivado === true || proj.estatus === 'CERRADO';
             if (finalVal === 'PP' || finalVal === 'PROG') {
-                proj.estatus = 'POR PROGRAMAR';
+                proj.estatus = wasArchivado ? 'CERRADO' : 'POR PROGRAMAR';
                 proj.cancelado = false;
                 proj.fechaPago = '';
                 proj.listoParaArchivar = false;
@@ -8144,19 +8145,24 @@ function selectStOption(index, value, event) {
                 proj.fechaPago = row.fechaPago;
                 proj.listoParaArchivar = true;
                 proj.cancelado = false;
-                proj.estatus = 'PAGADO';
+                proj.estatus = wasArchivado ? 'CERRADO' : 'PAGADO';
             } else if (finalVal === 'C') {
                 proj.cancelado = false;
                 proj.fechaPago = '';
                 proj.listoParaArchivar = false;
-                if (proj.estatus === 'CANCELADO' || proj.estatus === 'POR PROGRAMAR' || proj.estatus === 'PAGADO') {
+                if (wasArchivado) {
+                    proj.estatus = 'CERRADO';
+                } else if (proj.estatus === 'CANCELADO' || proj.estatus === 'POR PROGRAMAR' || proj.estatus === 'PAGADO') {
                     proj.estatus = 'PENDIENTE';
                 }
             } else {
                 proj.cancelado = false;
                 proj.fechaPago = '';
                 proj.listoParaArchivar = false;
-                proj.estatus = computeProjectStatus(proj);
+                proj.estatus = wasArchivado ? 'CERRADO' : computeProjectStatus(proj);
+            }
+            if (wasArchivado) {
+                proj.archivado = true;
             }
             if (!appState.isEditingConsecutivo) {
                 try {
@@ -13267,32 +13273,50 @@ function syncProjectToConsecutivo(p, shouldRender = false) {
     }
 }
 
+function stripLargeDocsFromProjectList(projList) {
+    return (projList || []).map(p => {
+        if (!p) return p;
+        const copy = Object.assign({}, p);
+        if (p.archivado === true || p.estatus === 'CERRADO') {
+            copy.archivado = true;
+            copy.estatus = 'CERRADO';
+        }
+        if (copy.documentos) {
+            const safeDocs = {};
+            Object.keys(copy.documentos).forEach(k => {
+                const d = copy.documentos[k];
+                if (d) {
+                    safeDocs[k] = {
+                        uploaded: !!d.uploaded,
+                        fileName: d.fileName || `${k}.pdf`,
+                        fileSize: d.fileSize || 0,
+                        fileType: d.fileType || 'application/pdf',
+                        lastModified: d.lastModified || Date.now(),
+                        uploadedAt: d.uploadedAt || new Date().toISOString(),
+                        dataUrl: ''
+                    };
+                }
+            });
+            copy.documentos = safeDocs;
+        }
+        return copy;
+    });
+}
+window.stripLargeDocsFromProjectList = stripLargeDocsFromProjectList;
+
 function saveOperacionesStorage(skipProveedoresSync = false) {
     window.saveOperacionesStorage = saveOperacionesStorage;
     const purgedIds = window.purgedProjectIds || new Set();
     const list = appState.operacionesProyectos || [];
     const validList = list.filter(p => p && isProjectGenerado(p) && !purgedIds.has(p.id) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.numConsecutivo));
+    const safeList = stripLargeDocsFromProjectList(validList);
     try {
-        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(validList));
+        localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(safeList));
     } catch (e) {
-        console.warn("Storage quota exceeded or error, stripping large dataUrls for localStorage:", e);
+        console.warn("Storage quota exceeded, freeing cache keys and retrying:", e);
         try {
-            const safeList = validList.map(p => {
-                if (!p.documentos) return p;
-                const safeDocs = {};
-                Object.keys(p.documentos).forEach(k => {
-                    const d = p.documentos[k];
-                    safeDocs[k] = {
-                        uploaded: d.uploaded,
-                        fileName: d.fileName,
-                        fileSize: d.fileSize,
-                        fileType: d.fileType,
-                        lastModified: d.lastModified,
-                        uploadedAt: d.uploadedAt
-                    };
-                });
-                return Object.assign({}, p, { documentos: safeDocs });
-            });
+            localStorage.removeItem('rp_fb_col_messages');
+            localStorage.removeItem('rp_fb_col_operaciones');
             localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(safeList));
         } catch (e2) {
             console.error("Critical error saving operaciones locally:", e2);
@@ -13304,10 +13328,10 @@ function saveOperacionesStorage(skipProveedoresSync = false) {
             if (!appState.isEditingConsecutivo && p && typeof window.syncProjectToConsecutivo === 'function') {
                 window.syncProjectToConsecutivo(p);
             }
-            if (!skipProveedoresSync && !appState.isEditingProveedores && p && typeof window.syncProjectToProveedores === 'function') {
-                window.syncProjectToProveedores(p);
-            }
         });
+        if (!skipProveedoresSync && !appState.isEditingProveedores && typeof window.syncAllOperacionesToProveedores === 'function') {
+            window.syncAllOperacionesToProveedores();
+        }
     }
 
     if (typeof window.syncOperacionesToCloud === 'function') {
@@ -13322,35 +13346,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
-    const cleanProjectsForCloud = (projList) => {
-        return (projList || []).map(p => {
-            if (!p) return p;
-            const copy = Object.assign({}, p);
-            if (p.archivado === true || p.estatus === 'CERRADO') {
-                copy.archivado = true;
-                copy.estatus = 'CERRADO';
-            }
-            if (copy.documentos) {
-                const cleanDocs = {};
-                Object.keys(copy.documentos).forEach(k => {
-                    const d = copy.documentos[k];
-                    if (d) {
-                        cleanDocs[k] = {
-                            uploaded: !!d.uploaded,
-                            fileName: d.fileName || `${k}.pdf`,
-                            fileSize: d.fileSize || 0,
-                            fileType: d.fileType || 'application/pdf',
-                            lastModified: d.lastModified || Date.now(),
-                            uploadedAt: d.uploadedAt || new Date().toISOString(),
-                            dataUrl: (d.dataUrl && d.dataUrl.length < 5000000 ? d.dataUrl : '')
-                        };
-                    }
-                });
-                copy.documentos = cleanDocs;
-            }
-            return copy;
-        });
-    };
+    const cleanProjectsForCloud = (projList) => stripLargeDocsFromProjectList(projList);
 
     window._lastLocalOperacionesSyncTime = Date.now();
     if (!window._myClientId) {
@@ -13364,26 +13360,11 @@ function syncOperacionesToCloud(forceImmediate = false) {
     // 1. Broadcast instantáneo por WebSockets (sub-50ms) a otros dispositivos activos (iPad, PC)
     if (window.chatRealtimeChannel) {
         try {
-            // Mantener payload ligero para WebSocket (límite 256KB de Supabase realtime)
-            const wsPayload = safePayload.map(p => {
-                const c = Object.assign({}, p);
-                if (c.documentos) {
-                    c.documentos = Object.assign({}, c.documentos);
-                    Object.keys(c.documentos).forEach(dk => {
-                        const doc = Object.assign({}, c.documentos[dk]);
-                        if (doc.dataUrl && doc.dataUrl.length > 50000) {
-                            doc.dataUrl = '';
-                        }
-                        c.documentos[dk] = doc;
-                    });
-                }
-                return c;
-            });
             window.chatRealtimeChannel.send({
                 type: 'broadcast',
                 event: 'operaciones_update',
                 payload: {
-                    proyectos: wsPayload,
+                    proyectos: safePayload,
                     sender: appState.currentUser?.email || 'operaciones',
                     senderId: window._myClientId,
                     timestamp: new Date().toISOString()
@@ -13396,10 +13377,11 @@ function syncOperacionesToCloud(forceImmediate = false) {
 
     const doSync = async () => {
         try {
+            window._lastLocalOperacionesSyncTime = Date.now();
             const list = (appState.operacionesProyectos || []).filter(p => p && isProjectGenerado(p) && !purgedIds.has(p.id) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.numConsecutivo));
             const safeList = cleanProjectsForCloud(list);
 
-            // A. Guardar snapshot en tabla messages con chat_id especial para garantizar persistencia universal
+            // A. Guardar snapshot en tabla messages con chat_id especial para garantizar persistencia universal (< 100KB, nunca excede el límite de 1MB de Firestore)
             try {
                 await client.from('messages').insert({
                     chat_id: '__cloud_sync_operaciones__',
@@ -13411,9 +13393,9 @@ function syncOperacionesToCloud(forceImmediate = false) {
                 console.warn("⚠️ Error saving snapshot to messages:", errSnap);
             }
 
-            // B. Si existe la tabla operaciones en Supabase, guardar cada proyecto
-            try {
-                for (const proj of list) {
+            // B. Si existe la tabla operaciones en Firebase/Supabase, guardar cada proyecto de forma independiente
+            for (const proj of safeList) {
+                try {
                     const cNum = proj.consecutivo || proj.numConsecutivo || proj.id;
                     const isProjClosed = proj.archivado === true || proj.estatus === 'CERRADO';
                     await client.from('operaciones').upsert({
@@ -13429,8 +13411,10 @@ function syncOperacionesToCloud(forceImmediate = false) {
                         }),
                         updated_at: new Date().toISOString()
                     }, { onConflict: 'id' });
+                } catch (errDb) {
+                    console.warn("⚠️ Error upserting individual project to operaciones:", errDb);
                 }
-            } catch (errDb) {}
+            }
         } catch (err) {
             console.warn("⚠️ Error persisting operaciones to Supabase:", err);
         }
@@ -13582,6 +13566,7 @@ async function fetchOperacionesFromCloud() {
     window.fetchOperacionesFromCloud = fetchOperacionesFromCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     if (appState.isEditingOperacionesDetail) return;
+    if (Date.now() - (window._lastLocalOperacionesSyncTime || 0) < 5000) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
 
@@ -13670,7 +13655,10 @@ async function fetchOperacionesFromCloud() {
             window.mergeOperacionesProjects(combinedCloud);
             if (!appState.isEditingOperacionesDetail) {
                 try {
-                    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+                    const safeToStore = typeof stripLargeDocsFromProjectList === 'function'
+                        ? stripLargeDocsFromProjectList(appState.operacionesProyectos)
+                        : appState.operacionesProyectos;
+                    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(safeToStore));
                 } catch (e) {}
             }
             if (appState.currentAdminFicha === 'operaciones') {
@@ -14176,7 +14164,20 @@ function cleanOperacionesLegacyData(proyectos) {
             merged.numConsecutivo = canonical;
             merged.numProyecto = canonical;
 
+            const isExArchivado = existing.archivado === true || existing.estatus === 'CERRADO';
+            const isPArchivado = p.archivado === true || p.estatus === 'CERRADO';
+            if (isExArchivado || isPArchivado) {
+                merged.archivado = true;
+                merged.estatus = 'CERRADO';
+                merged.fechaArchivado = existing.fechaArchivado || p.fechaArchivado || new Date().toISOString();
+                merged.fechaArchivadoDisplay = existing.fechaArchivadoDisplay || p.fechaArchivadoDisplay || new Date().toLocaleDateString('es-MX');
+            }
+
             ['numFactura', 'factura', 'numOC', 'cliente', 'nombreCliente', 'tipoProyecto', 'servicioName', 'fechaInicio', 'fechaInicioDisplay', 'estatus'].forEach(f => {
+                if (f === 'estatus' && merged.archivado === true) {
+                    merged.estatus = 'CERRADO';
+                    return;
+                }
                 const exVal = (existing[f] !== undefined && existing[f] !== null) ? String(existing[f]).trim() : '';
                 const pVal = (p[f] !== undefined && p[f] !== null) ? String(p[f]).trim() : '';
                 if (exVal && (!pVal || pVal === '-')) merged[f] = existing[f];
@@ -14313,7 +14314,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_10_26_archivar_v2';
+const SYSTEM_RELEASE_VERSION = 'release_2026_10_26_archivar_v3';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -15277,14 +15278,23 @@ function renderOperaciones() {
     }
 
     const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F', 'RDP2610182-F', 'RDP2610182']);
+    const inMemoryClosedIds = new Set();
+    if (Array.isArray(appState.operacionesProyectos)) {
+        appState.operacionesProyectos.forEach(p => {
+            if (p && (p.archivado === true || p.estatus === 'CERRADO')) {
+                [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].forEach(k => {
+                    if (k) inMemoryClosedIds.add(String(k).trim().toUpperCase());
+                });
+            }
+        });
+    }
     const stored = localStorage.getItem('rp_operaciones_proyectos');
-    if (stored) {
+    if (stored && (!appState.operacionesProyectos || appState.operacionesProyectos.length === 0)) {
         try {
             let parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
                 parsed = parsed.filter(p => p && isProjectGenerado(p) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(p)) && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.numProyecto) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numConsecutivo));
                 appState.operacionesProyectos = parsed;
-                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(parsed));
             }
         } catch (e) {
             appState.operacionesProyectos = [];
@@ -15292,6 +15302,16 @@ function renderOperaciones() {
     }
     if (!appState.operacionesProyectos) {
         appState.operacionesProyectos = [];
+    }
+    if (inMemoryClosedIds.size > 0) {
+        appState.operacionesProyectos.forEach(p => {
+            if (!p) return;
+            const keys = [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean).map(k => String(k).trim().toUpperCase());
+            if (keys.some(k => inMemoryClosedIds.has(k))) {
+                p.archivado = true;
+                p.estatus = 'CERRADO';
+            }
+        });
     }
     cleanOperacionesLegacyData(appState.operacionesProyectos);
 
@@ -15629,18 +15649,60 @@ function archivarExpedienteActivo() {
         return;
     }
 
-    // Aplicar estado archivado/cerrado
+    // Persistir valores del formulario si el usuario los escribió antes de archivar
+    if (clienteVal) {
+        p.cliente = clienteVal;
+        p.nombreCliente = clienteVal;
+        if (p.infoLavado) p.infoLavado.clienteFacturar = clienteVal;
+    }
+    if (numFacturaVal && numFacturaVal !== '-') {
+        p.numFactura = numFacturaVal;
+        p.factura = numFacturaVal;
+    }
+    const ocInput = document.getElementById("op-step1-oc-num");
+    if (ocInput && ocInput.value && ocInput.value.trim()) {
+        p.numOC = ocInput.value.trim();
+    }
+
+    // Aplicar estado archivado/cerrado tanto en p como en todas las coincidencias de operacionesProyectos
+    const nowIso = new Date().toISOString();
+    const nowDisplay = new Date().toLocaleDateString('es-MX');
     p.archivado = true;
     p.estatus = 'CERRADO';
-    p.fechaArchivado = new Date().toISOString();
-    p.fechaArchivadoDisplay = new Date().toLocaleDateString('es-MX');
+    p.fechaArchivado = nowIso;
+    p.fechaArchivadoDisplay = nowDisplay;
+    p.generado = true;
+    p.isDraft = false;
+    p.isNewProject = false;
+
+    if (Array.isArray(appState.operacionesProyectos)) {
+        appState.operacionesProyectos.forEach(item => {
+            if (!item) return;
+            if (item === p || (typeof areProjectsSame === 'function' && areProjectsSame(item, p))) {
+                item.archivado = true;
+                item.estatus = 'CERRADO';
+                item.fechaArchivado = nowIso;
+                item.fechaArchivadoDisplay = nowDisplay;
+                if (clienteVal) {
+                    item.cliente = clienteVal;
+                    item.nombreCliente = clienteVal;
+                }
+                if (numFacturaVal && numFacturaVal !== '-') {
+                    item.numFactura = numFacturaVal;
+                    item.factura = numFacturaVal;
+                }
+            }
+        });
+    }
 
     // Trasladar la vista de Operaciones automáticamente al modo "EXPEDIENTE"
     appState.operacionesViewMode = 'expedientes';
 
     appState.isEditingOperacionesDetail = false;
     appState._operacionesDetailSnapshot = null;
+    try { sessionStorage.removeItem('rp_active_operaciones_editing'); } catch (e) {}
 
+    window._lastLocalOperacionesSyncTime = Date.now();
     saveOperacionesStorage();
     if (typeof window.syncOperacionesToCloud === 'function') {
         window.syncOperacionesToCloud(true);
@@ -16367,7 +16429,10 @@ function closeOperacionesDetail(options = {}) {
     if (Array.isArray(appState.operacionesProyectos)) {
         cleanOperacionesLegacyData(appState.operacionesProyectos);
         try {
-            localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
+            const safeToStore = typeof stripLargeDocsFromProjectList === 'function'
+                ? stripLargeDocsFromProjectList(appState.operacionesProyectos)
+                : appState.operacionesProyectos;
+            localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(safeToStore));
         } catch (e) {}
     }
 
@@ -18698,10 +18763,12 @@ window.DocStorage = {
             }
         }
         if (restoredAny) {
-            saveOperacionesStorage();
-            if (typeof window.syncOperacionesToCloud === 'function') {
-                window.syncOperacionesToCloud(true);
-            }
+            try {
+                const safeToStore = typeof stripLargeDocsFromProjectList === 'function'
+                    ? stripLargeDocsFromProjectList(appState.operacionesProyectos)
+                    : appState.operacionesProyectos;
+                localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(safeToStore));
+            } catch (e) {}
         }
         return restoredAny;
     }
@@ -19118,10 +19185,15 @@ function finishOperacionesWizard() {
             alert("⚠️ No se puede cerrar el expediente sin los datos completos:\n\n" + valResult.errors.map(e => "• " + e).join("\n"));
             return;
         }
+        p.archivado = true;
         p.estatus = 'CERRADO';
         appState.isEditingOperacionesDetail = false;
         appState._operacionesDetailSnapshot = null;
+        window._lastLocalOperacionesSyncTime = Date.now();
         saveOperacionesStorage();
+        if (typeof window.syncOperacionesToCloud === 'function') {
+            window.syncOperacionesToCloud(true);
+        }
     }
     alert("¡Expediente operativo completado y CERRADO con éxito!");
     closeOperacionesDetail();
