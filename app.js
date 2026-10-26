@@ -13326,6 +13326,10 @@ function syncOperacionesToCloud(forceImmediate = false) {
         return (projList || []).map(p => {
             if (!p) return p;
             const copy = Object.assign({}, p);
+            if (p.archivado === true || p.estatus === 'CERRADO') {
+                copy.archivado = true;
+                copy.estatus = 'CERRADO';
+            }
             if (copy.documentos) {
                 const cleanDocs = {};
                 Object.keys(copy.documentos).forEach(k => {
@@ -13411,14 +13415,18 @@ function syncOperacionesToCloud(forceImmediate = false) {
             try {
                 for (const proj of list) {
                     const cNum = proj.consecutivo || proj.numConsecutivo || proj.id;
+                    const isProjClosed = proj.archivado === true || proj.estatus === 'CERRADO';
                     await client.from('operaciones').upsert({
                         id: String(proj.id || cNum),
                         consecutivo: String(cNum),
                         tipo_proyecto: proj.tipoProyecto || 'servicio_local',
-                        estatus: proj.estatus || 'PENDIENTE',
+                        estatus: isProjClosed ? 'CERRADO' : (proj.estatus || 'PENDIENTE'),
                         factura: proj.factura || proj.numFactura || '',
                         orden_compra: proj.numOC || '',
-                        datos: proj,
+                        datos: Object.assign({}, proj, {
+                            archivado: isProjClosed,
+                            estatus: isProjClosed ? 'CERRADO' : proj.estatus
+                        }),
                         updated_at: new Date().toISOString()
                     }, { onConflict: 'id' });
                 }
@@ -13605,6 +13613,10 @@ async function fetchOperacionesFromCloud() {
                     if (row.consecutivo && !d.consecutivo) d.consecutivo = row.consecutivo;
                     if (row.id && !d.id) d.id = row.id;
                     if (d.generado === undefined) d.generado = true;
+                    if (row.estatus === 'CERRADO' || d.estatus === 'CERRADO' || d.archivado === true) {
+                        d.archivado = true;
+                        d.estatus = 'CERRADO';
+                    }
                     return d;
                 }).filter(Boolean);
             }
@@ -13750,8 +13762,23 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
             // Fusión inteligente campo a campo: NO sobreescribir datos válidos locales con vacíos entrantes, ni viceversa
             const merged = Object.assign({}, local, cp);
 
+            // Preservación estricta de estado ARCHIVADO / CERRADO:
+            // Si el proyecto ya fue archivado o cerrado (local o en la nube), NUNCA debe desarchivarse por sincronizaciones obsoletas
+            const isLocalArchivado = local.archivado === true || local.estatus === 'CERRADO';
+            const isCloudArchivado = cp.archivado === true || cp.estatus === 'CERRADO';
+            if (isLocalArchivado || isCloudArchivado) {
+                merged.archivado = true;
+                merged.estatus = 'CERRADO';
+                merged.fechaArchivado = local.fechaArchivado || cp.fechaArchivado || new Date().toISOString();
+                merged.fechaArchivadoDisplay = local.fechaArchivadoDisplay || cp.fechaArchivadoDisplay || new Date().toLocaleDateString('es-MX');
+            }
+
             // 1. Campos de cabecera (Factura, OC, Consecutivo, Cliente)
             ['numFactura', 'factura', 'numOC', 'cliente', 'nombreCliente', 'tipoProyecto', 'servicioName', 'fechaInicio', 'fechaInicioDisplay', 'estatus'].forEach(f => {
+                if (f === 'estatus' && merged.archivado === true) {
+                    merged.estatus = 'CERRADO';
+                    return;
+                }
                 const lVal = (local[f] !== undefined && local[f] !== null) ? String(local[f]).trim() : '';
                 const cVal = (cp[f] !== undefined && cp[f] !== null) ? String(cp[f]).trim() : '';
                 const isReal = (v) => v !== '' && v !== '-';
@@ -14286,7 +14313,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_10_21_operaciones_v5';
+const SYSTEM_RELEASE_VERSION = 'release_2026_10_26_archivar_v2';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -15318,8 +15345,9 @@ function renderOperaciones() {
 
         if (p.cancelado || p.estatus === 'CANCELADO') {
             p.estatus = 'CANCELADO';
-        } else if (p.archivado) {
+        } else if (p.archivado === true || p.estatus === 'CERRADO') {
             p.estatus = 'CERRADO';
+            p.archivado = true;
         } else {
             if (rowInConsecutivo && String(rowInConsecutivo.st || '').toLowerCase().includes('cancel')) {
                 p.estatus = 'CANCELADO';
@@ -15528,11 +15556,15 @@ function eliminarProyectoOperaciones(projectId, event) {
 
 function archivarExpedienteActivo() {
     window.archivarExpedienteActivo = archivarExpedienteActivo;
-    if (!appState.isEditingOperacionesDetail) {
-        alert("Haz clic en 'Editar' en la parte superior para poder archivar o modificar este expediente.");
-        return;
-    }
-    const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId);
+    const p = (typeof getActiveOperacionesProject === 'function')
+        ? getActiveOperacionesProject()
+        : ((appState.operacionesProyectos || []).find(x => x && (
+            x.id === appState.activeOperacionesProjectId ||
+            x.consecutivo === appState.activeOperacionesProjectId ||
+            x.numConsecutivo === appState.activeOperacionesProjectId ||
+            x.numProyecto === appState.activeOperacionesProjectId
+        )) || appState.draftOperacionesProject);
+
     if (!p) {
         alert("No se encontró ningún expediente activo para archivar.");
         return;
@@ -15545,15 +15577,15 @@ function archivarExpedienteActivo() {
         return;
     }
 
-    // 1. REQUISITO IMAGEN 4: Número de factura escrita en Datos de proyecto (Paso 2)
+    // 1. REQUISITO: Número de factura en Datos de proyecto (Paso 2)
     const facturaInput = document.getElementById("op-step1-factura-num");
-    const numFacturaVal = ((facturaInput ? facturaInput.value : p.numFactura) || "").trim();
+    const numFacturaVal = ((facturaInput ? facturaInput.value : (p.numFactura || p.factura)) || "").trim();
     if (!numFacturaVal || numFacturaVal === '-') {
         alert("⚠️ No se puede archivar el expediente:\n\nDebe ingresar un Número de Factura en la sección 'Datos de proyecto' (Paso 2).");
         return;
     }
 
-    // 2. REQUISITO IMAGEN 3: Factura # y Concepto por cada proveedor en la tabla (Paso 3 - Prefactura)
+    // 2. REQUISITO: Factura # y Concepto por cada proveedor en la tabla (Paso 3 - Prefactura)
     const provItems = p.proveedoresClaves || [];
     for (let i = 0; i < provItems.length; i++) {
         const item = provItems[i];
@@ -15576,38 +15608,46 @@ function archivarExpedienteActivo() {
         }
     }
 
-    // 3. REQUISITO IMAGEN 1 & 2: Las 3 facturas anexadas en la sección Facturas (Paso 4 - Documentos)
+    // 3. Verificación de documentos cargados (Paso 4 - Documentos)
     const docs = p.documentos || {};
     const f1Uploaded = docs.factura1 && docs.factura1.uploaded === true;
     const f2Uploaded = docs.factura2 && docs.factura2.uploaded === true;
     const f3Uploaded = docs.factura3 && docs.factura3.uploaded === true;
+    const faltantes = [];
+    if (!f1Uploaded) faltantes.push("Factura 1");
+    if (!f2Uploaded) faltantes.push("Factura 2");
+    if (!f3Uploaded) faltantes.push("Factura 3");
 
-    if (!f1Uploaded || !f2Uploaded || !f3Uploaded) {
-        const faltantes = [];
-        if (!f1Uploaded) faltantes.push("Factura 1");
-        if (!f2Uploaded) faltantes.push("Factura 2");
-        if (!f3Uploaded) faltantes.push("Factura 3");
-
-        alert(`⚠️ No se puede archivar el expediente:\n\nDebe anexar/subir las 3 facturas en la sección 'Facturas' (Paso 4 - Documentos).\n\nDocumentos pendientes: ${faltantes.join(", ")}.`);
-        return;
-    }
-
-    // Confirmación final si cumple con todos los requisitos
     const consecutivo = p.consecutivo || p.numConsecutivo || p.numProyecto || 'este expediente';
-    if (!confirm(`¿Deseas ARCHIVAR el expediente ${consecutivo}?\n\nEl expediente cumple con todos los requisitos y se guardará como cerrado en la sección "EXPEDIENTE".`)) {
+
+    let promptConfirmacion = `¿Deseas ARCHIVAR el expediente ${consecutivo}?\n\nEl expediente se cerrará y se trasladará directamente a la sección "EXPEDIENTE".`;
+    if (faltantes.length > 0) {
+        promptConfirmacion = `⚠️ El expediente ${consecutivo} tiene facturas pendientes de subir: ${faltantes.join(", ")}.\n\n¿Deseas ARCHIVARLO de todas formas y trasladarlo a la sección "EXPEDIENTE"?`;
+    }
+
+    if (!confirm(promptConfirmacion)) {
         return;
     }
 
+    // Aplicar estado archivado/cerrado
     p.archivado = true;
     p.estatus = 'CERRADO';
     p.fechaArchivado = new Date().toISOString();
     p.fechaArchivadoDisplay = new Date().toLocaleDateString('es-MX');
 
+    // Trasladar la vista de Operaciones automáticamente al modo "EXPEDIENTE"
+    appState.operacionesViewMode = 'expedientes';
+
     appState.isEditingOperacionesDetail = false;
     appState._operacionesDetailSnapshot = null;
+
     saveOperacionesStorage();
+    if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(true);
+    }
     closeOperacionesDetail();
-    alert(`✅ Expediente ${consecutivo} archivado con éxito.\nPuedes revisarlo en cualquier momento desde la sección "EXPEDIENTE".`);
+
+    alert(`✅ Expediente ${consecutivo} archivado con éxito.\nSe ha trasladado a la sección "EXPEDIENTE".`);
 };
 
 function handleOperacionesSearch(query) {
