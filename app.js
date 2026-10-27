@@ -3488,7 +3488,6 @@ function renderProveedorChips() {
     window.renderProveedorChips = renderProveedorChips;
     const container = document.getElementById("proveedor-chips-container");
     if (!container) return;
-    container.innerHTML = "";
     
     // Purga y normalización activa del catálogo (resolviendo duplicado/falso de "TRASNPORTES RAMIRES" -> "TRANSPORTES RAMIREZ")
     if (appState.proveedorNamesList && Array.isArray(appState.proveedorNamesList)) {
@@ -3532,6 +3531,24 @@ function renderProveedorChips() {
         (p.total && p.total > 0) ||
         (p.servicio && String(p.servicio).trim() !== '')
     ));
+
+    // Evitar recrear los chips en el DOM si no hubo ningún cambio (previene parpadeo/pestañeo)
+    const chipsSig = JSON.stringify({
+        sel: appState.selectedProveedorFilter || 'all',
+        edit: Boolean(appState.isEditingProveedores),
+        total: validLinked.length,
+        items: (appState.proveedorNamesList || []).map(name => {
+            const low = String(name || '').trim().toLowerCase();
+            const count = validLinked.filter(p => p.proveedor && p.proveedor.toLowerCase() === low).length;
+            return `${name}:${count}`;
+        })
+    });
+    if (container.children.length > 0 && container.dataset.lastChipsSig === chipsSig) {
+        updateProveedorStatusCounts();
+        return;
+    }
+    container.dataset.lastChipsSig = chipsSig;
+    container.innerHTML = "";
 
     // "Todos" Chip
     const allChip = document.createElement("button");
@@ -3838,13 +3855,29 @@ async function fetchProveedoresCatalogFromCloud() {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    appState.proveedorNamesList = parsed;
-                    localStorage.setItem('rp_proveedor_names', JSON.stringify(parsed));
-                    if (typeof window.renderProveedorChips === 'function') {
-                        window.renderProveedorChips();
-                    }
-                    if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') {
-                        window.renderProveedores();
+                    const seen = new Set();
+                    const cleanParsed = [];
+                    parsed.forEach(raw => {
+                        let n = String(raw || '').trim();
+                        const low = n.toLowerCase();
+                        if (!n || low === 'jennifer' || low === 'rama' || low.includes('-- seleccionar')) return;
+                        if (low === 'trasnportes ramires' || low === 'transportes ramires') {
+                            n = 'TRANSPORTES RAMIREZ';
+                        }
+                        const cleanLow = n.toLowerCase();
+                        if (!seen.has(cleanLow)) {
+                            seen.add(cleanLow);
+                            cleanParsed.push(n);
+                        }
+                    });
+                    const currentCatalogStr = JSON.stringify(appState.proveedorNamesList || []);
+                    const nextCatalogStr = JSON.stringify(cleanParsed);
+                    if (currentCatalogStr !== nextCatalogStr) {
+                        appState.proveedorNamesList = cleanParsed;
+                        localStorage.setItem('rp_proveedor_names', nextCatalogStr);
+                        if (typeof window.renderProveedorChips === 'function') {
+                            window.renderProveedorChips();
+                        }
                     }
                 }
             } catch (e) {}
@@ -3937,46 +3970,60 @@ async function fetchProveedoresDataFromCloud() {
                         if (r.opRefId) rowMap.set(r.opRefId, r);
                         if (r.projectId && r.opRowIndex !== undefined) rowMap.set(`${r.projectId}_${r.opRowIndex}`, r);
                         if (r.op && r.opRowIndex !== undefined) rowMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, r);
-                        if (r.op && r.proveedor) rowMap.set(`${String(r.op).trim().toLowerCase()}_${String(r.proveedor).trim().toLowerCase()}`, r);
+                        if (r.op && r.opRowIndex === undefined && r.proveedor) rowMap.set(`${String(r.op).trim().toLowerCase()}_${String(r.proveedor).trim().toLowerCase()}`, r);
                     });
 
                     let anyChanged = false;
                     (appState.proveedores || []).forEach(localR => {
-                        const key = localR.opRefId || (localR.projectId && localR.opRowIndex !== undefined ? `${localR.projectId}_${localR.opRowIndex}` : null) || (localR.op ? `${String(localR.op).trim().toLowerCase()}_${localR.opRowIndex}` : null);
-                        const provKey = (localR.op && localR.proveedor) ? `${String(localR.op).trim().toLowerCase()}_${String(localR.proveedor).trim().toLowerCase()}` : null;
+                        const key = localR.opRefId || (localR.projectId && localR.opRowIndex !== undefined ? `${localR.projectId}_${localR.opRowIndex}` : null) || (localR.op && localR.opRowIndex !== undefined ? `${String(localR.op).trim().toLowerCase()}_${localR.opRowIndex}` : null);
+                        const provKey = (!key && localR.op && localR.proveedor) ? `${String(localR.op).trim().toLowerCase()}_${String(localR.proveedor).trim().toLowerCase()}` : null;
                         const match = (key && rowMap.has(key)) ? rowMap.get(key) : (provKey && rowMap.has(provKey) ? rowMap.get(provKey) : null);
                         if (match) {
+                            let rowChanged = false;
                             if (match.p !== undefined || match.estatus !== undefined) {
-                                const st = match.p || match.estatus;
-                                if (localR.p !== st) { localR.p = st; localR.estatus = st; anyChanged = true; }
+                                const rawSt = match.p || match.estatus;
+                                const normSt = String(rawSt || '').trim().toLowerCase() === 'pagado' ? 'PAGADO' : 'PROG';
+                                const curSt = String(localR.p || localR.estatus || '').trim().toLowerCase() === 'pagado' ? 'PAGADO' : 'PROG';
+                                if (curSt !== normSt || localR.p !== normSt || localR.estatus !== normSt) {
+                                    localR.p = normSt;
+                                    localR.estatus = normSt;
+                                    rowChanged = true;
+                                    anyChanged = true;
+                                }
                             }
                             const isPagado = String(localR.p || localR.estatus || '').trim().toLowerCase() === 'pagado';
                             const targetFecha = isPagado ? (match.fechaPago !== undefined ? match.fechaPago : localR.fechaPago) : '';
-                            if (targetFecha !== localR.fechaPago) {
-                                localR.fechaPago = targetFecha;
+                            if ((targetFecha || '') !== (localR.fechaPago || '')) {
+                                localR.fechaPago = targetFecha || '';
+                                rowChanged = true;
                                 anyChanged = true;
                             }
-                            if (match.facturaProveedor !== undefined && match.facturaProveedor !== localR.facturaProveedor) {
-                                localR.facturaProveedor = match.facturaProveedor;
-                                localR.folioFF = match.facturaProveedor;
-                                localR.facturaNum = match.facturaProveedor;
-                                anyChanged = true;
-                            }
-                            if (match.servicio !== undefined && match.servicio !== localR.servicio) {
-                                localR.servicio = match.servicio;
-                                anyChanged = true;
-                            }
-                            if (match.subtotal !== undefined && match.subtotal !== localR.subtotal) {
-                                localR.subtotal = match.subtotal;
-                                localR.iva = match.iva;
-                                localR.ret4 = match.ret4;
-                                localR.retIsr = match.retIsr;
-                                localR.total = match.total;
-                                anyChanged = true;
-                            }
-                            if (match.proveedor && match.proveedor !== localR.proveedor) {
-                                localR.proveedor = match.proveedor;
-                                anyChanged = true;
+                            const isLinkedToOp = Boolean(localR.opRefId || localR.projectId || localR.op);
+                            if (!isLinkedToOp) {
+                                if (match.facturaProveedor !== undefined && match.facturaProveedor !== localR.facturaProveedor) {
+                                    localR.facturaProveedor = match.facturaProveedor;
+                                    localR.folioFF = match.facturaProveedor;
+                                    localR.facturaNum = match.facturaProveedor;
+                                    anyChanged = true;
+                                }
+                                if (match.servicio !== undefined && match.servicio !== localR.servicio) {
+                                    localR.servicio = match.servicio;
+                                    anyChanged = true;
+                                }
+                                if (match.subtotal !== undefined && match.subtotal !== localR.subtotal) {
+                                    localR.subtotal = match.subtotal;
+                                    localR.iva = match.iva;
+                                    localR.ret4 = match.ret4;
+                                    localR.retIsr = match.retIsr;
+                                    localR.total = match.total;
+                                    anyChanged = true;
+                                }
+                                if (match.proveedor && match.proveedor !== localR.proveedor) {
+                                    localR.proveedor = match.proveedor;
+                                    anyChanged = true;
+                                }
+                            } else if (rowChanged && typeof window.syncProveedorRowBackToOperaciones === 'function') {
+                                window.syncProveedorRowBackToOperaciones(localR);
                             }
                         }
                     });
@@ -4166,9 +4213,10 @@ function syncAllOperacionesToProveedores() {
         appState.proveedores = [];
     }
 
-    // Preservar estatus (Programar a pago / Pagado) y Fecha de Pago
+    // Preservar estatus (Programar a pago / Pagado), Fecha de Pago y Servicio previo
     const statusMap = new Map();
     const fechaPagoMap = new Map();
+    const servicioMap = new Map();
     appState.proveedores.forEach(r => {
         if (!r) return;
         const rawSt = r.p || r.estatus;
@@ -4180,6 +4228,12 @@ function syncAllOperacionesToProveedores() {
         if (r.opRefId) fechaPagoMap.set(r.opRefId, fp);
         if (r.projectId && r.opRowIndex !== undefined) fechaPagoMap.set(`${r.projectId}_${r.opRowIndex}`, fp);
         if (r.op && r.opRowIndex !== undefined) fechaPagoMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, fp);
+        if (r.servicio && String(r.servicio).trim() !== '') {
+            const srv = String(r.servicio).trim();
+            if (r.opRefId) servicioMap.set(r.opRefId, srv);
+            if (r.projectId && r.opRowIndex !== undefined) servicioMap.set(`${r.projectId}_${r.opRowIndex}`, srv);
+            if (r.op && r.opRowIndex !== undefined) servicioMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, srv);
+        }
     });
 
     const newProveedoresList = [];
@@ -4271,6 +4325,12 @@ function syncAllOperacionesToProveedores() {
                 item.estatus = savedStatus;
                 item.fechaPago = savedFechaPago;
 
+                const savedServicio = concepto ||
+                                      servicioMap.get(opRefId) ||
+                                      servicioMap.get(`${p.id}_${idx}`) ||
+                                      servicioMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) ||
+                                      "Logistic";
+
                 newProveedoresList.push({
                     folioFF: facturaProveedor,
                     facturaProveedor: facturaProveedor,
@@ -4279,7 +4339,7 @@ function syncAllOperacionesToProveedores() {
                     fecha: p.fecha || (p.infoViaje && p.infoViaje.fecha) || new Date().toISOString().split('T')[0],
                     fechaPago: savedFechaPago,
                     archivado: Boolean(p.archivado || p.estatus === 'CERRADO'),
-                    servicio: concepto || "Logistic",
+                    servicio: savedServicio,
                     subtotal: sub,
                     iva: iva,
                     ret4: retIvaAmount,
@@ -4310,8 +4370,13 @@ function syncAllOperacionesToProveedores() {
         }
         return r;
     });
-    appState.proveedores = [...newProveedoresList, ...existingManualRows];
-    saveToStorage();
+    const combinedList = [...newProveedoresList, ...existingManualRows];
+    const prevJson = JSON.stringify(appState.proveedores || []);
+    const nextJson = JSON.stringify(combinedList);
+    appState.proveedores = combinedList;
+    if (prevJson !== nextJson) {
+        saveToStorage();
+    }
     if (typeof updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
     if (typeof renderProveedorChips === 'function') renderProveedorChips();
 }
@@ -4802,11 +4867,12 @@ async function fetchProveedoresLockFromCloud() {
                 const parsed = JSON.parse(msgs[0].contenido);
                 const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
                 const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+                const prevLockSig = appState.proveedoresLockedBy ? `${Boolean(appState.proveedoresLockedBy.isLocked)}_${appState.proveedoresLockedBy.userId || ''}_${appState.proveedoresLockedBy.userName || ''}` : 'unlocked';
 
                 if (parsed.isLocked) {
                     // Si el candado es más antiguo o igual al último desbloqueo conocido, IGNORARLO
                     if (parsed.timestamp && parsed.timestamp <= (window._lastProveedoresUnlockTime || 0)) {
-                        if (!appState.isEditingProveedores) {
+                        if (!appState.isEditingProveedores && appState.proveedoresLockedBy !== null) {
                             appState.proveedoresLockedBy = null;
                             updateProveedoresEditButtonsUI();
                             if (typeof window.renderProveedorChips === 'function') window.renderProveedorChips();
@@ -4837,9 +4903,12 @@ async function fetchProveedoresLockFromCloud() {
                         appState.proveedoresLockedBy = null;
                     }
                 }
-                updateProveedoresEditButtonsUI();
-                if (typeof window.renderProveedorChips === 'function') {
-                    window.renderProveedorChips();
+                const nextLockSig = appState.proveedoresLockedBy ? `${Boolean(appState.proveedoresLockedBy.isLocked)}_${appState.proveedoresLockedBy.userId || ''}_${appState.proveedoresLockedBy.userName || ''}` : 'unlocked';
+                if (prevLockSig !== nextLockSig) {
+                    updateProveedoresEditButtonsUI();
+                    if (typeof window.renderProveedorChips === 'function') {
+                        window.renderProveedorChips();
+                    }
                 }
             } catch (e) {}
         }
@@ -5015,6 +5084,39 @@ function renderProveedores() {
             return st === filterVal;
         });
     }
+
+    // Evitar reemplazar el DOM de la tabla si los datos y el modo de edición son idénticos (previene parpadeo/pestañeo)
+    const renderSig = JSON.stringify({
+        edit: Boolean(appState.isEditingProveedores),
+        provFilter: appState.selectedProveedorFilter || 'all',
+        stFilter: appState.proveedorStatusFilter || 'all',
+        rows: list.map(item => ({
+            idx: appState.proveedores.indexOf(item),
+            fp: item.facturaProveedor || item.folioFF || item.facturaNum || '',
+            prov: item.proveedor || '',
+            arch: Boolean(item.archivado),
+            f: item.fecha || '',
+            srv: item.servicio || '',
+            sub: Number(item.subtotal) || 0,
+            iva: Number(item.iva) || 0,
+            r4: Number(item.ret4) || 0,
+            risr: Number(item.retIsr) || 0,
+            tot: Number(item.total) || 0,
+            st: (item.p || item.estatus || 'PROG').trim().toLowerCase(),
+            fPago: item.fechaPago || '',
+            fe: (item.folioFE && item.folioFE !== 'FE-') ? item.folioFE : (item.facturaProyecto || ''),
+            op: item.op || ''
+        }))
+    });
+    if (tbody.children.length > 0 && tbody.dataset.lastRenderSig === renderSig) {
+        recalculateProveedoresTableTotals();
+        updateProveedorStatusCounts();
+        if (typeof updateProveedoresEditButtonsUI === 'function') {
+            updateProveedoresEditButtonsUI();
+        }
+        return;
+    }
+    tbody.dataset.lastRenderSig = renderSig;
     
     list.forEach((item, index) => {
         const realIndex = appState.proveedores.indexOf(item);
@@ -5128,19 +5230,11 @@ function recalculateProveedoresTableTotals() {
         list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === selLow);
     }
 
-    if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
-        const filterVal = appState.proveedorStatusFilter.toLowerCase();
-        list = list.filter(p => {
-            const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
-            if (filterVal === 'pagado') {
-                return st === 'pagado';
-            }
-            if (filterVal === 'prog' || filterVal === 'c' || filterVal === 'p') {
-                return st !== 'pagado';
-            }
-            return st === filterVal;
-        });
-    }
+    // Solo sumar las filas que están programadas a pagar (excluir las que ya están en estatus "Pagado")
+    list = list.filter(p => {
+        const st = String(p.p || p.estatus || 'PROG').trim().toLowerCase();
+        return st !== 'pagado';
+    });
     
     list.forEach(item => {
         sumSubtotal += Number(item.subtotal) || 0;
@@ -9213,40 +9307,15 @@ function setupRealtimeSubscriptions() {
                 }
             }
             if (channelKey === '__cloud_sync_proveedores_catalog__') {
-                if (row.contenido) {
-                    try {
-                        const parsed = JSON.parse(row.contenido);
-                        if (Array.isArray(parsed)) {
-                            appState.proveedorNamesList = parsed;
-                            try { localStorage.setItem('rp_proveedor_names', JSON.stringify(parsed)); } catch (e) {}
-                            if (typeof window.renderProveedorChips === 'function') window.renderProveedorChips();
-                            if (appState.currentAdminFicha === 'proveedores' && typeof window.renderProveedores === 'function') renderProveedores();
-                        }
-                    } catch (e) {}
-                }
                 if (typeof window.fetchProveedoresCatalogFromCloud === 'function') {
                     window.fetchProveedoresCatalogFromCloud();
                 }
             }
             if (channelKey === '__cloud_sync_proveedores_data__') {
-                if (row.contenido && !appState.isEditingProveedores) {
-                    try {
-                        const parsed = JSON.parse(row.contenido);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            appState.proveedores = parsed;
-                            saveToStorage();
-                            try { localStorage.setItem('rp_proveedores_data', JSON.stringify(appState.proveedores)); } catch (e) {}
-                            if (appState.currentAdminFicha === 'proveedores') {
-                                if (typeof window.updateProveedorStatusCounts === 'function') updateProveedorStatusCounts();
-                                if (typeof window.renderProveedoresTable === 'function') renderProveedoresTable();
-                                if (typeof window.renderProveedores === 'function') renderProveedores();
-                            }
-                            if (typeof window.renderVisualizacion === 'function') renderVisualizacion();
-                        }
-                    } catch (e) {}
-                }
-                if (typeof window.fetchProveedoresDataFromCloud === 'function') {
-                    window.fetchProveedoresDataFromCloud();
+                if (Date.now() - (window._lastLocalProveedoresSyncTime || 0) >= 3000 && !appState.isEditingProveedores) {
+                    if (typeof window.fetchProveedoresDataFromCloud === 'function') {
+                        window.fetchProveedoresDataFromCloud();
+                    }
                 }
             }
             if (channelKey === '__cloud_sync_nominas__') {
@@ -14314,7 +14383,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_10_26_archivar_v3';
+const SYSTEM_RELEASE_VERSION = 'release_2026_10_27_proveedores_v4';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
