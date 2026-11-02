@@ -2491,26 +2491,63 @@ select option {
     box-shadow: 0 2px 6px rgba(9, 30, 66, 0.25);
 }
 
+/* Filtro 1: Pagados (Verde) - Imagen 3 */
+.btn-status-filter.btn-status-pagado {
+    border-color: #A7F3D0;
+    color: #059669;
+    background: #ECFDF5;
+}
+.btn-status-filter.btn-status-pagado:hover {
+    background: #D1FAE5;
+    border-color: #059669;
+}
+.btn-status-filter.btn-status-pagado.active {
+    background: #059669 !important;
+    color: #FFFFFF !important;
+    border-color: #059669 !important;
+    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.35);
+}
+
+/* Filtro 2: Pendientes (Azul) - Imagen 3 */
+.btn-status-filter.btn-status-pendientes {
+    border-color: #93C5FD;
+    color: #2563EB;
+    background: #EFF6FF;
+}
+.btn-status-filter.btn-status-pendientes:hover {
+    background: #DBEAFE;
+    border-color: #2563EB;
+}
+.btn-status-filter.btn-status-pendientes.active {
+    background: #2563EB !important;
+    color: #FFFFFF !important;
+    border-color: #2563EB !important;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
+/* Filtro 3: Programado (Azul) - Imagen 3 */
+.btn-status-filter.btn-status-prog {
+    border-color: #93C5FD;
+    color: #2563EB;
+    background: #EFF6FF;
+}
+.btn-status-filter.btn-status-prog:hover {
+    background: #DBEAFE;
+    border-color: #2563EB;
+}
+.btn-status-filter.btn-status-prog.active,
+.btn-status-filter.btn-status-c.active {
+    background: #2563EB !important;
+    color: #FFFFFF !important;
+    border-color: #2563EB !important;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
 .btn-status-filter.btn-status-p.active {
     background: #D97706;
     color: #FFFFFF;
     border-color: #D97706;
     box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3);
-}
-
-.btn-status-filter.btn-status-prog.active,
-.btn-status-filter.btn-status-c.active {
-    background: #2563EB;
-    color: #FFFFFF;
-    border-color: #2563EB;
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
-}
-
-.btn-status-filter.btn-status-pagado.active {
-    background: #059669;
-    color: #FFFFFF;
-    border-color: #059669;
-    box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
 }
 
 .btn-status-filter.btn-status-cancelado.active {
@@ -2556,6 +2593,12 @@ select option {
     background: #FEF3C7 !important;
     color: #B45309 !important;
     border: 1px solid #FCD34D !important;
+}
+
+.prov-estatus-trigger.estatus-pendiente {
+    background: #EFF6FF !important;
+    color: #2563EB !important;
+    border: 1px solid #93C5FD !important;
 }
 
 .prov-estatus-trigger.estatus-prog,
@@ -3539,10 +3582,77 @@ input.excel-p-flag-x {
 }
 
 .consecutivo-table .st-badge {
-    font-size: 9.5px !important;
-    padding: 1px 2px !important;
-    border-radius: 3px;
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+    border-radius: 4px;
     line-height: 1.2;
+    white-space: nowrap;
+}
+
+.consecutivo-table .st-badge-trigger {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    padding: 3px 8px !important;
+    border-radius: 6px !important;
+    font-size: 10.5px !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+}
+
+.proveedores-archivo-card {
+    padding: 6px 14px !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    background: #FFFFFF !important;
+    border: 1px solid #CBD5E1 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+.proveedores-archivo-card span.material-symbols-outlined {
+    font-size: 20px !important;
+    padding: 4px !important;
+    background: #EFF6FF !important;
+    color: #2563EB !important;
+    border-radius: 6px !important;
+}
+.proveedores-archivo-card .kpi-title {
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    color: #64748B !important;
+    text-transform: uppercase !important;
+    margin-bottom: 1px !important;
+    display: block;
+    line-height: 1.1;
+}
+.proveedores-archivo-card h4 {
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    color: #0F172A !important;
+    margin: 0 !important;
+    line-height: 1.1;
+}
+.proveedores-archivo-card:hover {
+    border-color: #2563EB !important;
+    background: #EFF6FF !important;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.12) !important;
+}
+.proveedores-archivo-card.active {
+    background: linear-gradient(135deg, #1E40AF 0%, #2563EB 100%) !important;
+    border-color: #1D4ED8 !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25) !important;
+}
+.proveedores-archivo-card.active .kpi-title,
+.proveedores-archivo-card.active h4,
+.proveedores-archivo-card.active span.material-symbols-outlined {
+    color: #FFFFFF !important;
+}
+.proveedores-archivo-card.active span.material-symbols-outlined {
+    background: rgba(255, 255, 255, 0.2) !important;
 }
 
 .consecutivo-table .btn-delete-task {

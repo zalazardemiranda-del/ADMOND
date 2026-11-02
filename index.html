@@ -1653,6 +1653,13 @@
                                     </div>
 
                                     <div class="table-actions" style="display: flex; gap: 10px; align-items: center;" id="proveedores-action-buttons">
+                                        <button type="button" class="kpi-mini-card kpi-archivo-card proveedores-archivo-card" id="btn-proveedores-archivo" onclick="toggleProveedoresArchivoView()" title="Ver sección de Archivo (Proveedores Pagados)">
+                                            <span class="material-symbols-outlined">inventory_2</span>
+                                            <div>
+                                                <span class="kpi-title">Archivo (Pagados)</span>
+                                                <h4 id="proveedores-archivo-count">Ver Archivo (0)</h4>
+                                            </div>
+                                        </button>
                                         <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-proveedores" onclick="startEditingProveedores()" title="Habilitar edición de estatus en la tabla">
                                             <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
                                         </button>
@@ -1684,32 +1691,46 @@
 
 
 
-                                    <!-- Filtros de Estatus: Todos, Programar a pago, Pagado -->
+                                    <!-- Filtros de Estatus: 3 Filtros (Pendientes azul, Programado azul, Pagados verde) -->
 
                                     <div class="proveedor-status-filter-group" id="proveedor-status-filter-group">
 
                                         <span class="chips-label">Estatus:</span>
 
-                                        <button type="button" class="btn-status-filter active" id="btn-status-filter-all" onclick="filterProveedoresByStatus('all', this)" title="Visualizar todos los documentos">
+                                        <button type="button" class="btn-status-filter btn-status-pendientes" id="btn-status-filter-pendientes" onclick="filterProveedoresByStatus('PENDIENTE', this)" title="Filtrar Pendientes">
 
-                                            Todos (<span id="count-status-all">0</span>)
-
-                                        </button>
-
-                                        <button type="button" class="btn-status-filter btn-status-prog" id="btn-status-filter-prog" onclick="filterProveedoresByStatus('PROG', this)" title="Filtrar Programar a pago">
-
-                                            Programar a pago (<span id="count-status-prog">0</span>)
+                                            Pendientes (<span id="count-status-pendientes">0</span>)
 
                                         </button>
 
-                                        <button type="button" class="btn-status-filter btn-status-pagado" id="btn-status-filter-pagado" onclick="filterProveedoresByStatus('PAGADO', this)" title="Filtrar Pagado">
+                                        <button type="button" class="btn-status-filter btn-status-prog active" id="btn-status-filter-prog" onclick="filterProveedoresByStatus('PROG', this)" title="Filtrar Programado">
 
-                                            Pagado (<span id="count-status-pagado">0</span>)
+                                            Programado (<span id="count-status-prog">0</span>)
+
+                                        </button>
+
+                                        <button type="button" class="btn-status-filter btn-status-pagado" id="btn-status-filter-pagado" onclick="filterProveedoresByStatus('PAGADO', this)" title="Filtrar Pagados">
+
+                                            Pagados (<span id="count-status-pagado">0</span>)
 
                                         </button>
 
                                     </div>
 
+                                </div>
+
+                                <!-- Banner activo de Sección Archivo de Proveedores -->
+                                <div id="proveedores-archivo-banner" class="consecutivo-archivo-banner proveedores-archivo-banner" style="display: none; margin: 12px 20px 0 20px;">
+                                    <div class="archivo-banner-info">
+                                        <span class="material-symbols-outlined">folder_managed</span>
+                                        <div>
+                                            <strong>Sección de Archivo — Proveedores Pagados</strong>
+                                            <span>Mostrando únicamente los gastos y facturas de proveedores con estatus Pagado.</span>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleProveedoresArchivoView(false)">
+                                        <span class="material-symbols-outlined" style="font-size: 16px;">arrow_back</span> Ver proveedores activos
+                                    </button>
                                 </div>
 
                                 <!-- Banner de bloqueo en tiempo real cuando otro usuario está editando -->
@@ -1857,10 +1878,10 @@
 
                                     </div>
 
-                                    <button type="button" class="kpi-mini-card kpi-archivo-card" id="btn-consecutivo-archivo" onclick="toggleConsecutivoArchivoView()" title="Ver sección de Archivo (Todos los proyectos Pagados)">
+                                    <button type="button" class="kpi-mini-card kpi-archivo-card" id="btn-consecutivo-archivo" onclick="toggleConsecutivoArchivoView()" title="Ver sección de Archivo (Todos los proyectos Cobrados)">
                                         <span class="material-symbols-outlined">inventory_2</span>
                                         <div>
-                                            <span class="kpi-title">Archivo (Pagados)</span>
+                                            <span class="kpi-title">Archivo (Cobrados)</span>
                                             <h4 id="consecutivo-archivo-count">Ver Archivo (0)</h4>
                                         </div>
                                     </button>
@@ -1872,8 +1893,8 @@
                                      <div class="archivo-banner-info">
                                          <span class="material-symbols-outlined">folder_managed</span>
                                          <div>
-                                             <strong>Sección de Archivo — Proyectos Pagados (P)</strong>
-                                             <span>Mostrando únicamente los expedientes y facturas con estatus Pagado (P).</span>
+                                             <strong>Sección de Archivo — Proyectos Cobrados</strong>
+                                             <span>Mostrando únicamente los expedientes y facturas con estatus Cobrado.</span>
                                          </div>
                                      </div>
                                      <button type="button" class="btn btn-secondary btn-sm" onclick="toggleConsecutivoArchivoView(false)">
@@ -1903,11 +1924,11 @@
 
                                         <button class="consecutivo-filter-btn active" data-st="all" onclick="filterConsecutivoByST('all', this)">Todos</button>
 
-                                        <button class="consecutivo-filter-btn" data-st="P" onclick="filterConsecutivoByST('P', this)">Pagados (P)</button>
+                                        <button class="consecutivo-filter-btn" data-st="P" onclick="filterConsecutivoByST('P', this)" title="Cobrado">Cobrado</button>
 
-                                        <button class="consecutivo-filter-btn" data-st="C" onclick="filterConsecutivoByST('C', this)">Por Cobrar / C</button>
+                                        <button class="consecutivo-filter-btn" data-st="C" onclick="filterConsecutivoByST('C', this)" title="Pendiente Cobro">Pendiente Cobro</button>
 
-                                        <button class="consecutivo-filter-btn" data-st="PP" onclick="filterConsecutivoByST('PP', this)" title="Por programar (PP)">PP</button>
+                                        <button class="consecutivo-filter-btn" data-st="PP" onclick="filterConsecutivoByST('PP', this)" title="Por programar">Por Programar</button>
 
                                     </div>
 
@@ -2004,23 +2025,23 @@
 
                                                 <th style="width: 8%;" title="Folio de Factura">Factura</th>
 
-                                                <th style="width: 9%;" title="Fecha de Emisión">Emisión</th>
+                                                <th style="width: 8%; text-align: center;" title="Fecha de Emisión">Emisión</th>
 
                                                 <th style="width: 12%;" title="Cliente">Cliente</th>
 
-                                                <th style="width: 7%;" title="Número de Orden de Compra (OC)">OC</th>
+                                                <th style="width: 7%; text-align: center;" title="Número de Orden de Compra (OC)">OC</th>
 
-                                                <th style="width: 10%; text-align: right;" title="Subtotal Rodipak">Subtotal</th>
+                                                <th style="width: 9%; text-align: right;" title="Subtotal Rodipak">Subtotal</th>
 
-                                                <th style="width: 9%; text-align: right;" title="IVA 16%">IVA 16%</th>
+                                                <th style="width: 8%; text-align: right;" title="IVA 16%">IVA 16%</th>
 
-                                                <th style="width: 11%; text-align: right;" title="Total Factura (Subtotal + IVA)">Total</th>
+                                                <th style="width: 10%; text-align: right;" title="Total Factura (Subtotal + IVA)">Total</th>
 
-                                                <th style="width: 5%; text-align: center;" title="Estado (P = Pagado, C = Por Cobrar)">ST</th>
+                                                <th style="width: 9%; text-align: center;" title="Estatus">Estatus</th>
 
-                                                <th style="width: 9%;" title="Fecha de Pago">F. Pago</th>
+                                                <th style="width: 9%; text-align: center;" title="Fecha de Pago">F. Pago</th>
 
-                                                <th style="width: 9%;" title="Referencia de Orden de Pago">Ref. OP</th>
+                                                <th style="width: 9%; text-align: center;" title="Referencia de Orden de Pago">Ref. OP</th>
 
                                                 <th style="width: 7%;" title="Tipo de Servicio">Servicio</th>
 
@@ -5190,7 +5211,7 @@
     <script src="consecutivo_data.js?v=285df872"></script>
 
     <script src="schema.js?v=c644e61d"></script>
-    <script src="app.js?v=3475eed6"></script>
+    <script src="app.js?v=e5209c12"></script>
 
 </body>
 

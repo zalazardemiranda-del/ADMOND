@@ -240,10 +240,10 @@ test("5. Estatus Pagados (P) añade automáticamente la fecha de pago", async ({
 test("6. Sin Estatus eliminado y todos los proyectos por defecto empiezan en 'PP' (Por programar)", async ({ page }) => {
   await openAppAsAdmin(page);
 
-  // Verificar que el botón de filtro dice 'PP'
+  // Verificar que el botón de filtro dice 'Por Programar'
   const ppBtn = page.locator(".consecutivo-filter-btn[data-st='PP']");
   await expect(ppBtn).toBeVisible();
-  await expect(ppBtn).toContainText("PP");
+  await expect(ppBtn).toContainText("Por Programar");
 
   // Sincronizar un proyecto desde Operaciones a Consecutivo y verificar que empieza en 'PP' (Por programar)
   await page.evaluate(() => {
@@ -271,7 +271,16 @@ test("6. Sin Estatus eliminado y todos los proyectos por defecto empiezan en 'PP
   const sinEstatusCount = await page.locator("#tbody-consecutivo .st-dropdown-menu .option-name:has-text('Sin Estatus')").count();
   expect(sinEstatusCount).toBe(0);
 
-  // KPI cards reflejan los montos de 'por cobrar' + 'por programar'
+  // KPI cards reflejan los montos de expedientes en 'Pendiente Cobro' (C)
+  await page.evaluate(() => {
+    const item = window.appState.consecutivo.find(c => c.referenciaOp === 'RDP2610903-F');
+    if (item) {
+      item.st = 'C';
+      window.renderConsecutivo();
+    }
+  });
+  await page.waitForTimeout(200);
+
   const kpiTotal = page.locator("#consecutivo-kpi-total");
   await expect(kpiTotal).toBeVisible();
   const kpiText = await kpiTotal.innerText();
@@ -309,7 +318,7 @@ test("7. Cambiar estatus asigna fecha de pago, preserva el filtro activo y no ca
   // Verificar que la fila con badge PP es visible
   const ppBadge = page.locator("#tbody-consecutivo .st-badge-trigger.st-badge-pp");
   await expect(ppBadge).toBeVisible();
-  await expect(ppBadge).toContainText("PP");
+  await expect(ppBadge).toContainText("Por Programar");
 
   // Abrir el menú dropdown de ST
   await ppBadge.click();
@@ -318,8 +327,8 @@ test("7. Cambiar estatus asigna fecha de pago, preserva el filtro activo y no ca
   // Verificar que el menú se abre y contiene las opciones
   const menu = page.locator("#st-menu-0");
   await expect(menu).toBeVisible();
-  await expect(menu.locator(".option-name:has-text('Por programar (PP)')")).toBeVisible();
-  await expect(menu.locator(".option-name:has-text('Pagado (P)')")).toBeVisible();
+  await expect(menu.locator(".st-dropdown-option:has-text('Por Programar')")).toBeVisible();
+  await expect(menu.locator(".st-dropdown-option:has-text('Cobrado')")).toBeVisible();
 
   // Simular que corre fetchConsecutivoFromCloud en segundo plano y verificar que NO cierra el dropdown
   await page.evaluate(async () => {
@@ -330,8 +339,8 @@ test("7. Cambiar estatus asigna fecha de pago, preserva el filtro activo y no ca
   await page.waitForTimeout(300);
   await expect(menu).toBeVisible();
 
-  // Seleccionar la opción 'Pagado (P)'
-  const optionP = menu.locator(".st-dropdown-option:has-text('Pagado (P)')");
+  // Seleccionar la opción 'Cobrado'
+  const optionP = menu.locator(".st-dropdown-option:has-text('Cobrado')");
   await optionP.click();
   await page.waitForTimeout(300);
 
@@ -342,7 +351,7 @@ test("7. Cambiar estatus asigna fecha de pago, preserva el filtro activo y no ca
   // La fila sigue visible en la tabla con el badge P y fecha asignada
   const pBadge = page.locator("#tbody-consecutivo .st-badge-trigger.st-badge-p");
   await expect(pBadge).toBeVisible();
-  await expect(pBadge).toContainText("P");
+  await expect(pBadge).toContainText("Cobrado");
 
   const row = await page.evaluate(() => window.appState.consecutivo[0]);
   expect(row.st).toBe("P");
@@ -793,25 +802,25 @@ test("13. Visualización: Fórmulas exactas (Bancos + fecha, Ingresos = C + PP, 
 
   // Verificar cálculos exactos:
   // Bancos = 10,000
-  // Ingresos (C + PP) = 11,600 + 5,800 = 17,400 (excluye P = 23,200)
-  // 1 Balance parcial = 10,000 + 17,400 = 27,400
+  // Ingresos = resultado del total de Consecutivo (solo Pendiente Cobro C = 11,600)
+  // 1 Balance parcial = 10,000 + 11,600 = 21,600
   // Gastos proveedores (solo por pagar / PROG) = 3,480
-  // 2 Balance parcial = 27,400 - 3,480 = 23,920
+  // 2 Balance parcial = 21,600 - 3,480 = 18,120
   // Gastos Indirectos = 1,000
-  // 3 Balance parcial = 23,920 - 1,000 = 22,920
+  // 3 Balance parcial = 18,120 - 1,000 = 17,120
   // Nominas = 2,000
-  // 4 Balance parcial = 22,920 - 2,000 = 20,920
+  // 4 Balance parcial = 17,120 - 2,000 = 15,120
   // Impuestos = 500
-  // TOTAL GENERAL = 20,920 - 500 = 20,420
-  await expect(page.locator("#concept-ingresos-val")).toHaveText("$17,400.00");
-  await expect(page.locator("#balance-subtotal-1")).toHaveText("$27,400.00");
+  // TOTAL GENERAL = 15,120 - 500 = 14,620
+  await expect(page.locator("#concept-ingresos-val")).toHaveText("$11,600.00");
+  await expect(page.locator("#balance-subtotal-1")).toHaveText("$21,600.00");
   await expect(page.locator("#concept-gastos-prov-val")).toHaveText("$3,480.00");
-  await expect(page.locator("#balance-subtotal-2")).toHaveText("$23,920.00");
+  await expect(page.locator("#balance-subtotal-2")).toHaveText("$18,120.00");
   await expect(page.locator("#concept-gastos-ind-val")).toHaveText("$1,000.00");
-  await expect(page.locator("#balance-subtotal-3")).toHaveText("$22,920.00");
+  await expect(page.locator("#balance-subtotal-3")).toHaveText("$17,120.00");
   await expect(page.locator("#concept-nominas-val")).toHaveText("$2,000.00");
-  await expect(page.locator("#balance-subtotal-4")).toHaveText("$20,920.00");
-  await expect(page.locator("#concept-total-final")).toHaveText("$20,420.00");
+  await expect(page.locator("#balance-subtotal-4")).toHaveText("$15,120.00");
+  await expect(page.locator("#concept-total-final")).toHaveText("$14,620.00");
 
   // Verificar títulos y clases de colores solicitados
   await expect(page.locator("#row-vis-balance-1")).toContainText("1 Balance parcial");
@@ -1471,3 +1480,159 @@ test("18. Control de Proveedores: Añadir o quitar proveedores requiere 'Editar'
 
 
 
+
+
+test("19. Consecutivo KPI y fila Total reflejan 'Pendiente Cobro', y Retención ISR en Operaciones es número directo", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  // 1. Consecutivo: Cargar items y verificar que Total Facturado y Footer Total reflejan Pendiente Cobro (C)
+  await page.evaluate(() => {
+    window.appState.consecutivo = [
+      { consecutivo: 1, factura: 'FE-101', subtotal: 10000, iva: 1600, total: 11600, st: 'C' },
+      { consecutivo: 2, factura: 'FE-102', subtotal: 20000, iva: 3200, total: 23200, st: 'C' },
+      { consecutivo: 3, factura: 'FE-103', subtotal: 5000, iva: 800, total: 5800, st: 'PP' },
+      { consecutivo: 4, factura: 'FE-104', subtotal: 4000, iva: 640, total: 4640, st: 'P' }
+    ];
+    window.appState.consecutivoStFilter = 'all';
+    window.renderConsecutivo();
+  });
+  await page.waitForTimeout(300);
+
+  // Total facturado (KPI card) = 11600 + 23200 = 34800 (solo C)
+  const kpiTot = page.locator("#consecutivo-kpi-total");
+  await expect(kpiTot).toContainText("$34,800.00");
+
+  // Footer Totals Row en la vista general: Columna Total = 34800 (solo C)
+  const totalsRow = page.locator("#excel-consecutivo-totals-row");
+  await expect(totalsRow).toContainText("$34,800.00");
+
+  // 2. Operaciones: Retención ISR es un número directo (no porcentaje)
+  await page.evaluate(() => {
+    const dummyProject = {
+      id: 'OP-TEST-ISR',
+      numProyecto: 'OP-TEST-ISR',
+      numFactura: 'FE-999',
+      folioCliente: '1234',
+      estatus: 'ABIERTO',
+      generado: true,
+      proveedoresClaves: [
+        {
+          proveedor: 'RAMA MULTIMODAL S DE RL DE CV',
+          facturaNum: '608',
+          num: 1,
+          concepto: 'Coordinacion Logistica',
+          cantidad: 1,
+          unitario: 10000,
+          subtotal: 10000,
+          iva: 1600,
+          retencionIvaPct: 4,
+          retencionIva: 4,
+          retencionIvaMonto: 400,
+          ret4: 400,
+          retencionIsr: 250, // número directo: 250 pesos
+          retencionIsrMonto: 250,
+          retIsr: 250,
+          total: 10950 // 10000 + 1600 - 400 - 250
+        }
+      ]
+    };
+    window.appState.operacionesProyectos = [dummyProject];
+    window.appState.activeOperacionesProjectId = 'OP-TEST-ISR';
+    window.appState.isEditingOperacionesDetail = true;
+    window.renderProveedorClavesTable(dummyProject);
+  });
+  await page.waitForTimeout(200);
+
+  // Verificar que el input de Retención ISR no tiene el símbolo '%' en su celda
+  const tbodyProv = page.locator("#tbody-proveedor-claves");
+  const isrInput = tbodyProv.locator("tr").first().locator("input").nth(4);
+  expect(await isrInput.inputValue()).toBe("250");
+
+  // La celda td no debe contener '%'
+  const isrCell = tbodyProv.locator("tr").first().locator("td").nth(9);
+  const cellHtml = await isrCell.innerHTML();
+  expect(cellHtml).not.toContain("%");
+
+  // Simular ingreso de un nuevo valor numérico en Retención ISR (ej. 500 pesos)
+  await page.evaluate(() => {
+    window.updateProveedorClavesFieldFast(0, 'retencionIsr', '500');
+  });
+  await page.waitForTimeout(200);
+
+  // Total de la fila: 10000 + 1600 - 400 - 500 = 10,700.00
+  const totCell = page.locator("#prov-tot-0");
+  await expect(totCell).toContainText("$10,700.00");
+
+  // Footer Totales de Operaciones: Retención ISR = $500.00
+  const totIsrFooter = page.locator("#op-prov-tot-ret-isr");
+  await expect(totIsrFooter).toContainText("$500.00");
+});
+
+test("20. Bloqueo estricto entre múltiples usuarios en Nóminas y Gastos Indirectos: primer usuario bloquea al segundo hasta dar Guardar", async ({ page, context }) => {
+  await openAppAsAdmin(page);
+  const pageB = await context.newPage();
+  await openAppAsAdmin(pageB);
+
+  // Ir a sección Administración (Nóminas) en ambas páginas
+  await page.evaluate(() => {
+    window.appState.nominas = [{ folio: '1', empleado: 'Juan', fecha: '2026-10-12', nomina: 2000, servicio: 2000, iva: 0, retencion4: 0, retencionIsr: 0, total: 2000 }];
+    localStorage.setItem('rp_nominas_data', JSON.stringify(window.appState.nominas));
+    window.switchAdminFicha('quincenal');
+    window.switchAdminSubSection('quincenas');
+  });
+  await pageB.evaluate(() => {
+    window.appState.nominas = [{ folio: '1', empleado: 'Juan', fecha: '2026-10-12', nomina: 2000, servicio: 2000, iva: 0, retencion4: 0, retencionIsr: 0, total: 2000 }];
+    localStorage.setItem('rp_nominas_data', JSON.stringify(window.appState.nominas));
+    window.switchAdminFicha('quincenal');
+    window.switchAdminSubSection('quincenas');
+  });
+  await page.waitForTimeout(300);
+  await pageB.waitForTimeout(300);
+
+  // Usuario A da clic en 'Editar'
+  await page.click("#btn-edit-admin-top");
+  await page.waitForTimeout(400);
+
+  // Usuario A ve que su botón Editar dice 'Editando...' y Guardar está habilitado
+  await expect(page.locator("#btn-edit-admin-top")).toHaveText(/Editando/);
+  await expect(page.locator("#btn-save-admin-top")).toBeEnabled();
+
+  // Usuario B recibe la notificación de bloqueo en tiempo real:
+  // Su botón Editar debe mostrar '[ Bloqueado ]' y estar deshabilitado
+  await expect(pageB.locator("#btn-edit-admin-top")).toBeDisabled();
+  await expect(pageB.locator("#btn-edit-admin-top")).toHaveText(/Bloqueado/);
+  await expect(pageB.locator("#btn-save-admin-top")).toBeDisabled();
+  // El banner de bloqueo debe estar visible
+  await expect(pageB.locator("#nominas-lock-banner")).toBeVisible();
+
+  // Usuario B intenta hacer clic en Editar y no puede iniciar edición
+  await pageB.click("#btn-edit-admin-top", { force: true });
+  await pageB.waitForTimeout(200);
+  const isEditingB = await pageB.evaluate(() => window.appState.isEditingNominas);
+  expect(isEditingB).toBe(false);
+
+  // Ahora Usuario A da clic en 'Guardar'
+  await page.click("#btn-save-admin-top");
+  await page.waitForTimeout(600);
+
+  // Usuario A ve que se guardó y su botón vuelve a 'Editar'
+  await expect(page.locator("#btn-edit-admin-top")).toBeEnabled();
+  await expect(page.locator("#btn-edit-admin-top")).toHaveText(/Editar/);
+
+  // Usuario B se desbloquea en tiempo real
+  await expect(pageB.locator("#btn-edit-admin-top")).toBeEnabled();
+  await expect(pageB.locator("#btn-edit-admin-top")).toHaveText(/Editar/);
+  await expect(pageB.locator("#nominas-lock-banner")).toBeHidden();
+
+  // Ahora Usuario B sí puede dar clic en 'Editar'
+  await pageB.click("#btn-edit-admin-top");
+  await pageB.waitForTimeout(400);
+  await expect(pageB.locator("#btn-edit-admin-top")).toHaveText(/Editando/);
+  await expect(page.locator("#btn-edit-admin-top")).toBeDisabled();
+  await expect(page.locator("#btn-edit-admin-top")).toHaveText(/Bloqueado/);
+
+  // Limpiar: Usuario B guarda para liberar
+  await pageB.click("#btn-save-admin-top");
+  await pageB.waitForTimeout(300);
+  await pageB.close();
+});
