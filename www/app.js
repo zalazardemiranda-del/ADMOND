@@ -79,7 +79,8 @@ let appState = {
     currentTab: 'tasks', // 'tasks', 'chat', 'meetings', 'administracion'
     currentAdminFicha: 'visualizacion', // 'visualizacion', 'quincenal', 'proveedores', 'consecutivo'
     selectedProveedorFilter: 'all', // 'all' or specific name
-    proveedorStatusFilter: 'all', // 'all', 'P', 'C'
+    proveedorStatusFilter: 'PROG', // 'PENDIENTE', 'PROG', 'PAGADO', 'all'
+    proveedoresArchivoMode: false,
     currentChannel: 'general',
     currentFilter: 'all',
     currentTaskUserFilter: 'all', // 'all' or collaborator name
@@ -1413,23 +1414,23 @@ function calculateAdminTotals() {
         ? (Number(appState.concepts.bancos) || 0)
         : 10000;
 
-    // Ingresos: resultado del total de todos los proyectos en "Por cobrar" (C) y "Por programar" (PP) en Consecutivo
+    // Ingresos: resultado del total que aparece en Consecutivo (Total de Pendiente Cobro / Imagen 2)
     let ingresos = 0;
-    if (Array.isArray(appState.consecutivo)) {
+    if (typeof getConsecutivoPendienteCobroTotals === 'function') {
+        ingresos = getConsecutivoPendienteCobroTotals().total;
+    } else if (Array.isArray(appState.consecutivo)) {
         appState.consecutivo.forEach(item => {
             if (!item) return;
             const stVal = String(item.st || 'PP').trim().toUpperCase();
-            if (stVal === 'C' || stVal === 'POR COBRAR' || stVal === 'PP' || stVal === 'PROG' || stVal === 'POR PROGRAMAR' || stVal !== 'P') {
-                if (stVal !== 'P') {
-                    const sub = Number(item.subtotal) || 0;
-                    const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined)
-                        ? Number(item.iva)
-                        : (sub > 0 ? Math.round(sub * 0.16 * 100) / 100 : 0);
-                    const tot = (item.total !== '' && item.total !== null && item.total !== undefined && Number(item.total) > 0)
-                        ? Number(item.total)
-                        : (sub + iv);
-                    ingresos += tot;
-                }
+            if (stVal === 'C' || stVal === 'PENDIENTE COBRO' || stVal === 'POR COBRAR' || stVal === 'PENDIENTE') {
+                const sub = Number(item.subtotal) || 0;
+                const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined)
+                    ? Number(item.iva)
+                    : (sub > 0 ? Math.round(sub * 0.16 * 100) / 100 : 0);
+                const tot = (item.total !== '' && item.total !== null && item.total !== undefined && Number(item.total) > 0)
+                    ? Number(item.total)
+                    : (sub + iv);
+                ingresos += tot;
             }
         });
     }
@@ -1914,33 +1915,74 @@ window.handleAdminQuincenalTopSave = handleAdminQuincenalTopSave;
 
 let _editNominasTimeout = null;
 
+function getMyClientId() {
+    if (typeof window === 'undefined') return 'server';
+    if (!window._myClientId) {
+        try {
+            window._myClientId = sessionStorage.getItem('rp_session_client_id');
+        } catch (e) {}
+        if (!window._myClientId) {
+            window._myClientId = 'client_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+            try { sessionStorage.setItem('rp_session_client_id', window._myClientId); } catch (e) {}
+        }
+    }
+    return window._myClientId;
+}
+window.getMyClientId = getMyClientId;
+if (typeof window !== 'undefined' && !window._myClientId) {
+    window._myClientId = getMyClientId();
+}
+
 function isLockOwnedByCurrentUser(lockObj) {
     if (!lockObj) return false;
-    const currentUserId = (appState.currentUser?.id || appState.currentUser?.email || 'admin').toLowerCase();
+    const myClientId = (typeof window !== 'undefined' && window._myClientId) ? window._myClientId : (typeof getMyClientId === 'function' ? getMyClientId() : '');
+    
+    // Si yo estoy activamente editando en esta pestaña/sesión, el bloqueo es mío
+    if (appState.isEditingNominas || appState.isEditingGastosIndirectos || appState.isEditingProveedores || appState.isEditingConsecutivo) {
+        if (lockObj.clientId && myClientId && lockObj.clientId === myClientId) return true;
+        if (!lockObj.clientId) return true;
+    }
+
+    // 1. Coincidencia por clientId de navegador/sesión (determina si es la misma pestaña/dispositivo)
+    if (lockObj.clientId && myClientId) {
+        return lockObj.clientId === myClientId;
+    }
+
+    // 2. Si no hay clientId (por ejemplo en tests sintéticos), comparar userId/userName
+    const currentUserId = (appState.currentUser?.id || '').toLowerCase();
     const currentUserEmail = (appState.currentUser?.email || '').toLowerCase();
-    const currentUserName = (appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador').toLowerCase();
+    const currentUserName = (appState.currentUser?.nombre || '').toLowerCase();
     const lockId = (lockObj.userId || '').toLowerCase();
     const lockName = (lockObj.userName || '').toLowerCase();
-    return Boolean(
-        (lockId && (lockId === currentUserId || (currentUserEmail && lockId === currentUserEmail))) ||
-        (lockName && lockName === currentUserName)
-    );
+
+    // Si los IDs no son genéricos (ej: 'admin', 'administrador')
+    if (lockId && lockId !== 'admin' && lockId !== 'administrador') {
+        if (currentUserId && lockId === currentUserId) return true;
+        if (currentUserEmail && lockId === currentUserEmail) return true;
+    }
+    if (lockName && lockName !== 'administrador' && lockName !== 'admin') {
+        if (currentUserName && lockName === currentUserName) return true;
+    }
+
+    return false;
 }
 window.isLockOwnedByCurrentUser = isLockOwnedByCurrentUser;
 
 async function startEditingNominas() {
     window.startEditingNominas = startEditingNominas;
+    const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : (window._myClientId || 'client_main');
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
 
-    // 1. Verificar si localmente está bloqueado por otro usuario (< 5 min)
+    // 1. Verificar si localmente está bloqueado por otro usuario (< 30 min)
     if (appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.nominasLockedBy)) {
         const elapsed = Date.now() - (appState.nominasLockedBy.timestamp || 0);
-        if (elapsed < 5 * 60 * 1000) {
+        if (elapsed < 30 * 60 * 1000) {
             alert(`⚠️ Esta tabla está siendo editada por ${appState.nominasLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
             updateNominasEditButtonsUI();
             return;
         }
+        appState.nominasLockedBy = null;
     }
 
     // Respaldar estado previo a la edición para que los cambios NO se guarden hasta dar clic en 'Guardar'
@@ -1972,9 +2014,13 @@ async function startEditingNominas() {
     appState.nominasLockedBy = {
         userId: currentUserId,
         userName: currentUserName,
+        clientId: myClientId,
         timestamp: lockTime,
         isLocked: true
     };
+    try {
+        localStorage.setItem('rp_nominas_lock', JSON.stringify(appState.nominasLockedBy));
+    } catch (e) {}
 
     updateNominasEditButtonsUI();
     renderNominas();
@@ -2000,28 +2046,51 @@ async function startEditingNominas() {
         }
     } catch (e) {}
 
-    broadcastNominasLockState(true, currentUserName, currentUserId, lockTime);
-    await syncNominasLockToCloud(true, currentUserName, currentUserId, lockTime);
+    broadcastNominasLockState(true, currentUserName, currentUserId, lockTime, myClientId);
+    await syncNominasLockToCloud(true, currentUserName, currentUserId, lockTime, myClientId);
+
+    // Heartbeat de bloqueo cada 15 segundos mientras esté editando
+    if (window._nominasLockHeartbeatTimer) clearInterval(window._nominasLockHeartbeatTimer);
+    window._nominasLockHeartbeatTimer = setInterval(() => {
+        if (appState.isEditingNominas) {
+            const now = Date.now();
+            if (appState.nominasLockedBy) appState.nominasLockedBy.timestamp = now;
+            syncNominasLockToCloud(true, currentUserName, currentUserId, now, myClientId);
+        } else {
+            clearInterval(window._nominasLockHeartbeatTimer);
+            window._nominasLockHeartbeatTimer = null;
+        }
+    }, 15000);
 
     if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
     _editNominasTimeout = setTimeout(() => {
         if (appState.isEditingNominas) {
             cancelEditingNominas();
         }
-    }, 5 * 60 * 1000);
+    }, 30 * 60 * 1000);
 }
 window.startEditingNominas = startEditingNominas;
 
 async function saveEditingNominas(isAuto = false) {
     window.saveEditingNominas = saveEditingNominas;
     if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
+    if (window._nominasLockHeartbeatTimer) {
+        clearInterval(window._nominasLockHeartbeatTimer);
+        window._nominasLockHeartbeatTimer = null;
+    }
 
+    const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : (window._myClientId || 'client_main');
     window._lastLocalNominasSyncTime = Date.now();
+    window._lastNominasUnlockTime = Date.now();
 
     appState.isEditingNominas = false;
     appState.nominasLockedBy = null;
     appState._nominasSnapshot = null;
     appState._archivosQuincenalesSnapshot = null;
+
+    try {
+        localStorage.removeItem('rp_nominas_lock');
+    } catch (e) {}
 
     registerSectionMovementDate('nominas');
     saveToStorage();
@@ -2040,8 +2109,8 @@ async function saveEditingNominas(isAuto = false) {
         syncNominasToCloud(true);
     }
 
-    broadcastNominasLockState(false, null, null);
-    await syncNominasLockToCloud(false, null, null);
+    broadcastNominasLockState(false, null, null, Date.now(), myClientId);
+    await syncNominasLockToCloud(false, null, null, Date.now(), myClientId);
 
     if (!isAuto && typeof showCustomNotification === 'function') {
         showCustomNotification("Cambios de Nóminas guardados y tabla liberada con éxito.", "success");
@@ -2052,9 +2121,19 @@ window.saveEditingNominas = saveEditingNominas;
 async function cancelEditingNominas() {
     window.cancelEditingNominas = cancelEditingNominas;
     if (_editNominasTimeout) clearTimeout(_editNominasTimeout);
+    if (window._nominasLockHeartbeatTimer) {
+        clearInterval(window._nominasLockHeartbeatTimer);
+        window._nominasLockHeartbeatTimer = null;
+    }
 
+    const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : (window._myClientId || 'client_main');
+    window._lastNominasUnlockTime = Date.now();
     appState.isEditingNominas = false;
     appState.nominasLockedBy = null;
+
+    try {
+        localStorage.removeItem('rp_nominas_lock');
+    } catch (e) {}
 
     if (appState._nominasSnapshot) {
         appState.nominas = JSON.parse(JSON.stringify(appState._nominasSnapshot));
@@ -2069,8 +2148,8 @@ async function cancelEditingNominas() {
     renderNominas();
     renderVisualizacion();
 
-    broadcastNominasLockState(false, null, null);
-    await syncNominasLockToCloud(false, null, null);
+    broadcastNominasLockState(false, null, null, Date.now(), myClientId);
+    await syncNominasLockToCloud(false, null, null, Date.now(), myClientId);
 }
 window.cancelEditingNominas = cancelEditingNominas;
 
@@ -2182,10 +2261,11 @@ function updateNominasEditButtonsUI() {
 }
 window.updateNominasEditButtonsUI = updateNominasEditButtonsUI;
 
-function broadcastNominasLockState(isLocked, userName, userId, timestamp) {
+function broadcastNominasLockState(isLocked, userName, userId, timestamp, clientId) {
     window.broadcastNominasLockState = broadcastNominasLockState;
     if (!window.chatRealtimeChannel) return;
     try {
+        const cId = clientId || (typeof getMyClientId === 'function' ? getMyClientId() : window._myClientId);
         window.chatRealtimeChannel.send({
             type: 'broadcast',
             event: 'nominas_lock_update',
@@ -2193,6 +2273,7 @@ function broadcastNominasLockState(isLocked, userName, userId, timestamp) {
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
+                clientId: cId,
                 timestamp: timestamp || Date.now()
             }
         });
@@ -2202,18 +2283,20 @@ function broadcastNominasLockState(isLocked, userName, userId, timestamp) {
 }
 window.broadcastNominasLockState = broadcastNominasLockState;
 
-async function syncNominasLockToCloud(isLocked, userName, userId, timestamp) {
+async function syncNominasLockToCloud(isLocked, userName, userId, timestamp, clientId) {
     window.syncNominasLockToCloud = syncNominasLockToCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
     try {
+        const cId = clientId || (typeof getMyClientId === 'function' ? getMyClientId() : window._myClientId);
         await client.from('messages').insert({
             chat_id: '__cloud_sync_nominas_lock__',
             contenido: JSON.stringify({
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
+                clientId: cId,
                 timestamp: timestamp || Date.now()
             }),
             emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
@@ -2227,6 +2310,21 @@ window.syncNominasLockToCloud = syncNominasLockToCloud;
 
 async function fetchNominasLockFromCloud() {
     window.fetchNominasLockFromCloud = fetchNominasLockFromCloud;
+    // Revisar bloqueo local guardado si existe
+    try {
+        const rawLocal = localStorage.getItem('rp_nominas_lock');
+        if (rawLocal) {
+            const parsedLocal = JSON.parse(rawLocal);
+            if (parsedLocal && parsedLocal.isLocked && !isLockOwnedByCurrentUser(parsedLocal)) {
+                const elap = Date.now() - (parsedLocal.timestamp || 0);
+                if (elap < 30 * 60 * 1000 && (parsedLocal.timestamp || 0) > (window._lastNominasUnlockTime || 0)) {
+                    appState.nominasLockedBy = parsedLocal;
+                    updateNominasEditButtonsUI();
+                }
+            }
+        }
+    } catch (e) {}
+
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
@@ -2240,19 +2338,32 @@ async function fetchNominasLockFromCloud() {
         if (msgs && msgs.length > 0 && msgs[0].contenido) {
             try {
                 const parsed = JSON.parse(msgs[0].contenido);
+                const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : window._myClientId;
                 const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
                 const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
 
                 if (parsed.isLocked) {
+                    if ((parsed.timestamp || 0) <= (window._lastNominasUnlockTime || 0)) {
+                        return;
+                    }
                     const elapsed = Date.now() - (parsed.timestamp || 0);
-                    if (elapsed < 5 * 60 * 1000) {
+                    if (elapsed < 30 * 60 * 1000) {
                         if (!isLockOwnedByCurrentUser(parsed)) {
                             if (appState.isEditingNominas) {
-                                // Preferencia absoluta: mantener mi sesión activa hasta que yo de clic en Guardar
+                                // Preferencia al que dio clic primero
                                 const myLockTime = appState.nominasLockedBy?.timestamp || Date.now();
-                                syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                                broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
-                                return;
+                                if ((parsed.timestamp || 0) < myLockTime) {
+                                    appState.isEditingNominas = false;
+                                    appState.nominasLockedBy = parsed;
+                                    if (appState._nominasSnapshot) {
+                                        appState.nominas = JSON.parse(JSON.stringify(appState._nominasSnapshot));
+                                        appState._nominasSnapshot = null;
+                                    }
+                                } else {
+                                    syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime, myClientId);
+                                    broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime, myClientId);
+                                    return;
+                                }
                             }
                             appState.nominasLockedBy = parsed;
                         }
@@ -2278,6 +2389,10 @@ window.fetchNominasLockFromCloud = fetchNominasLockFromCloud;
 async function handleNominaCellClick(index, fieldId) {
     window.handleNominaCellClick = handleNominaCellClick;
     if (!appState.isEditingNominas) {
+        if (appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.nominasLockedBy)) {
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.nominasLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            return;
+        }
         await startEditingNominas();
         if (appState.isEditingNominas && fieldId) {
             setTimeout(() => {
@@ -2665,17 +2780,19 @@ let _editGastosIndirectosTimeout = null;
 
 async function startEditingGastosIndirectos() {
     window.startEditingGastosIndirectos = startEditingGastosIndirectos;
+    const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : (window._myClientId || 'client_main');
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
 
-    // 1. Verificar si localmente está bloqueado por otro usuario (< 5 min)
-    if (appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.isLocked !== false && appState.gastosIndirectosLockedBy.userId !== currentUserId) {
+    // 1. Verificar si localmente está bloqueado por otro usuario (< 30 min)
+    if (appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.gastosIndirectosLockedBy)) {
         const elapsed = Date.now() - (appState.gastosIndirectosLockedBy.timestamp || 0);
-        if (elapsed < 5 * 60 * 1000) {
+        if (elapsed < 30 * 60 * 1000) {
             alert(`⚠️ Esta tabla está siendo editada por ${appState.gastosIndirectosLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
             updateGastosIndirectosEditButtonsUI();
             return;
         }
+        appState.gastosIndirectosLockedBy = null;
     }
 
     appState._gastosIndirectosSnapshot = JSON.parse(JSON.stringify(appState.gastosIndirectos || []));
@@ -2685,9 +2802,13 @@ async function startEditingGastosIndirectos() {
     appState.gastosIndirectosLockedBy = {
         userId: currentUserId,
         userName: currentUserName,
+        clientId: myClientId,
         timestamp: lockTime,
         isLocked: true
     };
+    try {
+        localStorage.setItem('rp_gastos_indirectos_lock', JSON.stringify(appState.gastosIndirectosLockedBy));
+    } catch (e) {}
 
     updateGastosIndirectosEditButtonsUI();
     renderGastosIndirectos();
@@ -2695,7 +2816,7 @@ async function startEditingGastosIndirectos() {
     // 2. Verificación atómica en la nube ANTES de asumir o sobreescribir el bloqueo hacia otros equipos
     try {
         const activeCloudLock = await checkCloudLockActive('__cloud_sync_gastos_indirectos_lock__', currentUserId);
-        if (activeCloudLock && activeCloudLock.isLocked && activeCloudLock.userId !== currentUserId) {
+        if (activeCloudLock && activeCloudLock.isLocked && !isLockOwnedByCurrentUser(activeCloudLock)) {
             appState.isEditingGastosIndirectos = false;
             appState.gastosIndirectosLockedBy = activeCloudLock;
             if (appState._gastosIndirectosSnapshot) {
@@ -2709,15 +2830,15 @@ async function startEditingGastosIndirectos() {
         }
     } catch (e) {}
 
-    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, lockTime);
-    await syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, lockTime);
+    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, lockTime, myClientId);
+    await syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, lockTime, myClientId);
 
     if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
     _editGastosIndirectosTimeout = setTimeout(() => {
         if (appState.isEditingGastosIndirectos) {
             cancelEditingGastosIndirectos();
         }
-    }, 5 * 60 * 1000);
+    }, 30 * 60 * 1000);
 }
 window.startEditingGastosIndirectos = startEditingGastosIndirectos;
 
@@ -2883,10 +3004,11 @@ function updateGastosIndirectosEditButtonsUI() {
 }
 window.updateGastosIndirectosEditButtonsUI = updateGastosIndirectosEditButtonsUI;
 
-function broadcastGastosIndirectosLockState(isLocked, userName, userId, timestamp) {
+function broadcastGastosIndirectosLockState(isLocked, userName, userId, timestamp, clientId) {
     window.broadcastGastosIndirectosLockState = broadcastGastosIndirectosLockState;
     if (!window.chatRealtimeChannel) return;
     try {
+        const cId = clientId || (typeof getMyClientId === 'function' ? getMyClientId() : window._myClientId);
         window.chatRealtimeChannel.send({
             type: 'broadcast',
             event: 'gastos_indirectos_lock_update',
@@ -2894,6 +3016,7 @@ function broadcastGastosIndirectosLockState(isLocked, userName, userId, timestam
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
+                clientId: cId,
                 timestamp: timestamp || Date.now()
             }
         });
@@ -2903,18 +3026,20 @@ function broadcastGastosIndirectosLockState(isLocked, userName, userId, timestam
 }
 window.broadcastGastosIndirectosLockState = broadcastGastosIndirectosLockState;
 
-async function syncGastosIndirectosLockToCloud(isLocked, userName, userId, timestamp) {
+async function syncGastosIndirectosLockToCloud(isLocked, userName, userId, timestamp, clientId) {
     window.syncGastosIndirectosLockToCloud = syncGastosIndirectosLockToCloud;
     if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
     const client = window.SUPABASE_CONFIG?.client;
     if (!client) return;
     try {
+        const cId = clientId || (typeof getMyClientId === 'function' ? getMyClientId() : window._myClientId);
         await client.from('messages').insert({
             chat_id: '__cloud_sync_gastos_indirectos_lock__',
             contenido: JSON.stringify({
                 isLocked: Boolean(isLocked),
                 userName: userName || null,
                 userId: userId || null,
+                clientId: cId,
                 timestamp: timestamp || Date.now()
             }),
             emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
@@ -4111,10 +4236,42 @@ function handleProveedorSelectChange(tableType, index, val) {
 }
 window.handleProveedorSelectChange = handleProveedorSelectChange;
 
-// Filtros de Estatus en Control de Proveedores: P = Por pagar, Programar a pago, Pagado, Cancelado (Imágenes 1 y 3)
+// Filtros de Estatus en Control de Proveedores: 3 Filtros (Pendientes azul, Programado azul, Pagados verde) (Imágenes 1, 2 y 3)
+function toggleProveedoresArchivoView(forceState) {
+    window.toggleProveedoresArchivoView = toggleProveedoresArchivoView;
+    const nextState = typeof forceState === 'boolean' ? forceState : !appState.proveedoresArchivoMode;
+    appState.proveedoresArchivoMode = nextState;
+
+    const group = document.getElementById("proveedor-status-filter-group");
+    if (group) {
+        group.querySelectorAll(".btn-status-filter").forEach(b => b.classList.remove("active"));
+    }
+
+    if (nextState) {
+        appState.proveedorStatusFilter = 'PAGADO';
+        const btnPagado = document.getElementById("btn-status-filter-pagado");
+        if (btnPagado) btnPagado.classList.add("active");
+    } else {
+        appState.proveedorStatusFilter = 'PROG';
+        const btnProg = document.getElementById("btn-status-filter-prog");
+        if (btnProg) btnProg.classList.add("active");
+    }
+
+    renderProveedores();
+}
+window.toggleProveedoresArchivoView = toggleProveedoresArchivoView;
+
 function filterProveedoresByStatus(status, btnEl) {
     window.filterProveedoresByStatus = filterProveedoresByStatus;
-    appState.proveedorStatusFilter = status || 'all';
+    const stNorm = String(status || 'PROG').toUpperCase();
+    appState.proveedorStatusFilter = stNorm;
+
+    // Si hace clic en Pagados, entra al modo Archivo (donde viven los expedientes Pagados)
+    if (stNorm === 'PAGADO') {
+        appState.proveedoresArchivoMode = true;
+    } else {
+        appState.proveedoresArchivoMode = false;
+    }
 
     const group = document.getElementById("proveedor-status-filter-group");
     if (group) {
@@ -4123,9 +4280,10 @@ function filterProveedoresByStatus(status, btnEl) {
     if (btnEl) {
         btnEl.classList.add("active");
     } else {
-        const sLow = String(status).toLowerCase();
+        const sLow = stNorm.toLowerCase();
         let targetId = `btn-status-filter-${sLow}`;
-        if (sLow === 'prog' || sLow === 'c') targetId = 'btn-status-filter-prog';
+        if (sLow === 'prog' || sLow === 'programado' || sLow === 'c') targetId = 'btn-status-filter-prog';
+        if (sLow === 'pendiente') targetId = 'btn-status-filter-pendientes';
         const targetBtn = document.getElementById(targetId) || document.getElementById(`btn-status-filter-${sLow}`);
         if (targetBtn) targetBtn.classList.add("active");
     }
@@ -4149,9 +4307,13 @@ function updateProveedorStatusCounts() {
         list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === appState.selectedProveedorFilter.toLowerCase());
     }
     const countAll = list.length;
+    const countPendientes = list.filter(p => {
+        const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
+        return st === 'pendiente';
+    }).length;
     const countProg = list.filter(p => {
         const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
-        return st !== 'pagado';
+        return st !== 'pagado' && st !== 'pendiente';
     }).length;
     const countPagado = list.filter(p => {
         const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
@@ -4159,10 +4321,12 @@ function updateProveedorStatusCounts() {
     }).length;
 
     const elAll = document.getElementById("count-status-all");
+    const elPendientes = document.getElementById("count-status-pendientes");
     const elProg = document.getElementById("count-status-prog");
     const elC = document.getElementById("count-status-c");
     const elPagado = document.getElementById("count-status-pagado");
     if (elAll) elAll.textContent = countAll;
+    if (elPendientes) elPendientes.textContent = countPendientes;
     if (elProg) elProg.textContent = countProg;
     if (elC) elC.textContent = countProg;
     if (elPagado) elPagado.textContent = countPagado;
@@ -4219,8 +4383,8 @@ function syncAllOperacionesToProveedores() {
     const servicioMap = new Map();
     appState.proveedores.forEach(r => {
         if (!r) return;
-        const rawSt = r.p || r.estatus;
-        const st = (String(rawSt || '').trim().toLowerCase() === 'pagado') ? 'PAGADO' : 'PROG';
+        const rawSt = String(r.p || r.estatus || '').trim().toLowerCase();
+        const st = (rawSt === 'pagado') ? 'PAGADO' : (rawSt === 'pendiente' ? 'PENDIENTE' : 'PROG');
         if (r.opRefId) statusMap.set(r.opRefId, st);
         if (r.projectId && r.opRowIndex !== undefined) statusMap.set(`${r.projectId}_${r.opRowIndex}`, st);
         if (r.op && r.opRowIndex !== undefined) statusMap.set(`${String(r.op).trim().toLowerCase()}_${r.opRowIndex}`, st);
@@ -4256,9 +4420,9 @@ function syncAllOperacionesToProveedores() {
                 const retIvaPct = (rawRetIva === '' || rawRetIva === null || rawRetIva === undefined) ? 0 : (parseFloat(rawRetIva) || 0);
                 const retIvaAmount = sub > 0 ? (sub * (retIvaPct / 100)) : 0;
 
-                const rawRetIsr = item.retencionIsrPct !== undefined && item.retencionIsrPct !== '' ? item.retencionIsrPct : (item.retencionIsr !== undefined && item.retencionIsr !== '' ? item.retencionIsr : (item.retIsr !== undefined && item.retIsr !== '' ? item.retIsr : ''));
-                const retIsrPct = (rawRetIsr === '' || rawRetIsr === null || rawRetIsr === undefined) ? 0 : (parseFloat(rawRetIsr) || 0);
-                const retIsrAmount = sub > 0 ? (sub * (retIsrPct / 100)) : 0;
+                const rawRetIsr = item.retencionIsr !== undefined && item.retencionIsr !== '' ? item.retencionIsr : (item.retencionIsrMonto !== undefined && item.retencionIsrMonto !== '' ? item.retencionIsrMonto : (item.retIsr !== undefined && item.retIsr !== '' ? item.retIsr : ''));
+                const retIsrAmount = (rawRetIsr === '' || rawRetIsr === null || rawRetIsr === undefined) ? 0 : Math.max(0, parseFloat(rawRetIsr) || 0);
+                const retIsrPct = 0;
 
                 const iva = sub > 0 ? (sub * 0.16) : 0;
                 const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
@@ -4309,8 +4473,16 @@ function syncAllOperacionesToProveedores() {
                                  statusMap.get(`${p.id}_${idx}`) || 
                                  statusMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
                                  item.p || item.estatus || 'PROG';
-                const isPagado = String(rawSaved || '').trim().toLowerCase() === 'pagado';
-                const savedStatus = isPagado ? 'PAGADO' : 'PROG';
+                const rawSavedLower = String(rawSaved || '').trim().toLowerCase();
+                let savedStatus = 'PROG';
+                if (rawSavedLower === 'pagado') {
+                    savedStatus = 'PAGADO';
+                } else if (rawSavedLower === 'pendiente') {
+                    savedStatus = 'PENDIENTE';
+                } else {
+                    savedStatus = 'PROG';
+                }
+                const isPagado = savedStatus === 'PAGADO';
                 const rawFp = fechaPagoMap.has(opRefId) ? fechaPagoMap.get(opRefId) :
                               (fechaPagoMap.has(`${p.id}_${idx}`) ? fechaPagoMap.get(`${p.id}_${idx}`) :
                               (fechaPagoMap.has(`${String(projOp).trim().toLowerCase()}_${idx}`) ? fechaPagoMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) :
@@ -4498,8 +4670,14 @@ async function checkCloudLockActive(lockChatId, currentUserId) {
                 if (lockChatId === '__cloud_sync_proveedores_lock__' && parsed.timestamp && parsed.timestamp <= (window._lastProveedoresUnlockTime || 0)) {
                     return null;
                 }
+                if (lockChatId === '__cloud_sync_nominas_lock__' && parsed.timestamp && parsed.timestamp <= (window._lastNominasUnlockTime || 0)) {
+                    return null;
+                }
+                if (lockChatId === '__cloud_sync_gastos_indirectos_lock__' && parsed.timestamp && parsed.timestamp <= (window._lastGastosIndirectosUnlockTime || 0)) {
+                    return null;
+                }
                 const elapsed = Date.now() - (parsed.timestamp || 0);
-                if (elapsed < 90 * 1000 && parsed.userId !== currentUserId && !isLockOwnedByCurrentUser(parsed)) {
+                if (elapsed < 30 * 60 * 1000 && !isLockOwnedByCurrentUser(parsed)) {
                     return parsed;
                 }
             }
@@ -4933,12 +5111,16 @@ function toggleProvEstatusDropdown(index, event) {
         document.body.appendChild(menu);
     }
     menu.innerHTML = `
+        <div class="prov-dropdown-option option-pendiente" onclick="selectGlobalProvEstatus('PENDIENTE', event)">
+            <span class="prov-badge-dot badge-dot-pendiente" style="background:#2563EB;"></span>
+            <span class="option-name">Pendiente</span>
+        </div>
         <div class="prov-dropdown-option option-prog" onclick="selectGlobalProvEstatus('PROG', event)">
-            <span class="prov-badge-dot badge-dot-prog"></span>
-            <span class="option-name">Programar a pago</span>
+            <span class="prov-badge-dot badge-dot-prog" style="background:#2563EB;"></span>
+            <span class="option-name">Programado</span>
         </div>
         <div class="prov-dropdown-option option-pagado" onclick="selectGlobalProvEstatus('PAGADO', event)">
-            <span class="prov-badge-dot badge-dot-pagado"></span>
+            <span class="prov-badge-dot badge-dot-pagado" style="background:#059669;"></span>
             <span class="option-name">Pagado</span>
         </div>
     `;
@@ -4957,6 +5139,9 @@ function toggleProvEstatusDropdown(index, event) {
     if (currentSt === 'pagado') {
         const oPag = menu.querySelector(".option-pagado");
         if (oPag) oPag.classList.add("selected");
+    } else if (currentSt === 'pendiente') {
+        const oPend = menu.querySelector(".option-pendiente");
+        if (oPend) oPend.classList.add("selected");
     } else {
         const oProg = menu.querySelector(".option-prog");
         if (oProg) oProg.classList.add("selected");
@@ -4989,23 +5174,15 @@ function selectGlobalProvEstatus(newStatus, event) {
     if (isNaN(idx) || !appState.proveedores[idx]) return;
 
     const stLower = String(newStatus).toLowerCase();
-    const normStatus = (stLower === 'pagado') ? 'PAGADO' : 'PROG';
-
-    // Actualización visual inmediata en el DOM del badge / trigger
-    const trigger = document.getElementById(`prov-estatus-trigger-${idx}`);
-    if (trigger) {
-        let estClass = 'estatus-prog';
-        let dLabel = 'Prog';
-        if (normStatus === 'PAGADO') {
-            estClass = 'estatus-pagado';
-            dLabel = 'Pagado';
-        }
-        trigger.className = `prov-estatus-trigger ${estClass}`;
-        const spanLabel = trigger.querySelector('span:first-child');
-        if (spanLabel) spanLabel.innerText = dLabel;
-        trigger.title = `Estatus: ${normStatus === 'PAGADO' ? 'Pagado' : 'Programar a pago'}. Haz clic para cambiar el estatus.`;
+    let normStatus = 'PROG';
+    if (stLower === 'pagado') {
+        normStatus = 'PAGADO';
+    } else if (stLower === 'pendiente') {
+        normStatus = 'PENDIENTE';
+    } else {
+        normStatus = 'PROG';
     }
-    
+
     updateProveedorCell(idx, 'p', normStatus);
 }
 window.selectGlobalProvEstatus = selectGlobalProvEstatus;
@@ -5017,13 +5194,21 @@ function cycleProveedorEstatus(index, event) {
         event.preventDefault();
     }
     const menu = document.getElementById("global-prov-estatus-menu");
-    if (menu) menu.style.display = "none";
+    if (!menu) return;
+    menu.style.display = "none";
 
     const item = appState.proveedores[index];
     if (!item) return;
 
     const currentSt = (item.p || item.estatus || 'PROG').trim().toLowerCase();
-    const nextSt = (currentSt === 'pagado') ? 'PROG' : 'PAGADO';
+    let nextSt = 'PROG';
+    if (currentSt === 'pendiente') {
+        nextSt = 'PROG';
+    } else if (currentSt === 'prog' || currentSt === 'programado' || currentSt === 'programar a pago') {
+        nextSt = 'PAGADO';
+    } else {
+        nextSt = 'PENDIENTE';
+    }
 
     updateProveedorCell(index, 'p', nextSt);
 }
@@ -5064,30 +5249,49 @@ function renderProveedores() {
         (p.servicio && String(p.servicio).trim() !== '')
     ));
     
+    // Actualizar tarjeta y banner de Sección Archivo (Pagados) de Proveedores (Imágenes 1 y 2)
+    const pagadosCount = (appState.proveedores || []).filter(p => p && (p.p || p.estatus || '').trim().toLowerCase() === 'pagado').length;
+    const archivoCountEl = document.getElementById("proveedores-archivo-count");
+    const archivoBtn = document.getElementById("btn-proveedores-archivo");
+    const archivoBanner = document.getElementById("proveedores-archivo-banner");
+    if (archivoCountEl) {
+        archivoCountEl.innerText = appState.proveedoresArchivoMode
+            ? `Viendo Archivo (${pagadosCount})`
+            : `Ver Archivo (${pagadosCount})`;
+    }
+    if (archivoBtn) {
+        archivoBtn.classList.toggle("active", Boolean(appState.proveedoresArchivoMode));
+    }
+    if (archivoBanner) {
+        archivoBanner.style.display = appState.proveedoresArchivoMode ? "flex" : "none";
+    }
+
     // Filter by active chip
     if (appState.selectedProveedorFilter && appState.selectedProveedorFilter !== 'all') {
         const selLow = appState.selectedProveedorFilter.trim().toLowerCase();
         list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === selLow);
     }
 
-    // Filter by active status (Programar a pago, Pagado)
-    if (appState.proveedorStatusFilter && appState.proveedorStatusFilter !== 'all') {
-        const filterVal = appState.proveedorStatusFilter.toLowerCase();
-        list = list.filter(p => {
-            const st = (p.p || p.estatus || 'PROG').trim().toLowerCase();
-            if (filterVal === 'pagado') {
-                return st === 'pagado';
+    // Filter by active status (3 Filtros: Pendientes azul, Programado azul, Pagados verde) y Modo Archivo
+    if (appState.proveedoresArchivoMode) {
+        list = list.filter(p => (p.p || p.estatus || '').trim().toLowerCase() === 'pagado');
+    } else {
+        // En vista normal, los expedientes Pagados van a Archivo
+        list = list.filter(p => (p.p || p.estatus || '').trim().toLowerCase() !== 'pagado');
+        if (appState.proveedorStatusFilter) {
+            const filterVal = appState.proveedorStatusFilter.toLowerCase();
+            if (filterVal === 'pendiente') {
+                list = list.filter(p => (p.p || p.estatus || '').trim().toLowerCase() === 'pendiente');
+            } else if (filterVal === 'prog' || filterVal === 'programado') {
+                list = list.filter(p => (p.p || p.estatus || '').trim().toLowerCase() !== 'pendiente');
             }
-            if (filterVal === 'prog' || filterVal === 'c' || filterVal === 'p') {
-                return st !== 'pagado';
-            }
-            return st === filterVal;
-        });
+        }
     }
 
     // Evitar reemplazar el DOM de la tabla si los datos y el modo de edición son idénticos (previene parpadeo/pestañeo)
     const renderSig = JSON.stringify({
         edit: Boolean(appState.isEditingProveedores),
+        archMode: Boolean(appState.proveedoresArchivoMode),
         provFilter: appState.selectedProveedorFilter || 'all',
         stFilter: appState.proveedorStatusFilter || 'all',
         rows: list.map(item => ({
@@ -5121,16 +5325,20 @@ function renderProveedores() {
     list.forEach((item, index) => {
         const realIndex = appState.proveedores.indexOf(item);
         const rawSt = (item.p || item.estatus || 'PROG').trim().toLowerCase();
-        let currentStatus = 'Programar a pago';
-        let displayLabel = 'Prog';
+        let currentStatus = 'Programado';
+        let displayLabel = 'Programado';
         let estatusClass = 'estatus-prog';
         if (rawSt === 'pagado') {
             currentStatus = 'Pagado';
             displayLabel = 'Pagado';
             estatusClass = 'estatus-pagado';
+        } else if (rawSt === 'pendiente') {
+            currentStatus = 'Pendiente';
+            displayLabel = 'Pendiente';
+            estatusClass = 'estatus-pendiente';
         } else {
-            currentStatus = 'Programar a pago';
-            displayLabel = 'Prog';
+            currentStatus = 'Programado';
+            displayLabel = 'Programado';
             estatusClass = 'estatus-prog';
         }
 
@@ -5230,11 +5438,17 @@ function recalculateProveedoresTableTotals() {
         list = list.filter(p => p.proveedor && p.proveedor.toLowerCase() === selLow);
     }
 
-    // Solo sumar las filas que están programadas a pagar (excluir las que ya están en estatus "Pagado")
-    list = list.filter(p => {
-        const st = String(p.p || p.estatus || 'PROG').trim().toLowerCase();
-        return st !== 'pagado';
-    });
+    if (appState.proveedoresArchivoMode) {
+        list = list.filter(p => String(p.p || p.estatus || '').trim().toLowerCase() === 'pagado');
+    } else {
+        // Solo sumar las filas que no están en estatus "Pagado" (excluir archivadas)
+        list = list.filter(p => String(p.p || p.estatus || '').trim().toLowerCase() !== 'pagado');
+        if (appState.proveedorStatusFilter && appState.proveedorStatusFilter.toLowerCase() === 'pendiente') {
+            list = list.filter(p => String(p.p || p.estatus || '').trim().toLowerCase() === 'pendiente');
+        } else if (appState.proveedorStatusFilter && (appState.proveedorStatusFilter.toLowerCase() === 'prog' || appState.proveedorStatusFilter.toLowerCase() === 'programado')) {
+            list = list.filter(p => String(p.p || p.estatus || '').trim().toLowerCase() !== 'pendiente');
+        }
+    }
     
     list.forEach(item => {
         sumSubtotal += Number(item.subtotal) || 0;
@@ -5280,8 +5494,14 @@ function updateProveedorCell(index, key, val) {
     window.updateProveedorCell = updateProveedorCell;
     if (appState.proveedores && appState.proveedores[index]) {
         if (key === 'p') {
-            const isPagado = String(val || '').trim().toLowerCase() === 'pagado';
-            val = isPagado ? 'PAGADO' : 'PROG';
+            const rawVal = String(val || '').trim().toLowerCase();
+            if (rawVal === 'pagado') {
+                val = 'PAGADO';
+            } else if (rawVal === 'pendiente') {
+                val = 'PENDIENTE';
+            } else {
+                val = 'PROG';
+            }
         }
         appState.proveedores[index][key] = val;
         if (key === 'facturaProveedor' || key === 'folioFF' || key === 'facturaNum') {
@@ -5295,6 +5515,9 @@ function updateProveedorCell(index, key, val) {
             if (isPagado) {
                 if (!appState.proveedores[index].fechaPago || appState.proveedores[index].fechaPago === '-' || appState.proveedores[index].fechaPago === '') {
                     appState.proveedores[index].fechaPago = new Date().toISOString().split('T')[0];
+                }
+                if (typeof showCustomNotification === 'function') {
+                    showCustomNotification(`Expediente marcado como Pagado y archivado. Haz clic en 'Guardar' para confirmar.`, "info");
                 }
             } else {
                 appState.proveedores[index].fechaPago = '';
@@ -7543,17 +7766,17 @@ function renderConsecutivo() {
             const stVal = String(item.st || 'PP').trim().toUpperCase();
             
             let stBadgeClass = 'st-badge-pp';
-            let stDisplay = 'PP';
+            let stDisplay = 'Por Programar';
             let isProg = false;
             if (stVal === 'P') {
                 stBadgeClass = 'st-badge-p';
-                stDisplay = 'P';
+                stDisplay = 'Cobrado';
             } else if (stVal === 'C') {
                 stBadgeClass = 'st-badge-c';
-                stDisplay = 'C';
+                stDisplay = 'Pendiente Cobro';
             } else {
                 stBadgeClass = 'st-badge-pp';
-                stDisplay = 'PP';
+                stDisplay = 'Por Programar';
                 isProg = true;
             }
             
@@ -7599,16 +7822,13 @@ function renderConsecutivo() {
                         </div>
                         <div class="st-dropdown-menu" id="st-menu-${realIndex}">
                             <div class="st-dropdown-option ${stVal === 'P' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'P', event)">
-                                <span class="st-badge st-badge-p">P</span>
-                                <span class="option-name">Pagado (P)</span>
+                                <span class="st-badge st-badge-p">Cobrado</span>
                             </div>
                             <div class="st-dropdown-option ${stVal === 'C' ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'C', event)">
-                                <span class="st-badge st-badge-c">C</span>
-                                <span class="option-name">Por Cobrar (C)</span>
+                                <span class="st-badge st-badge-c">Pendiente Cobro</span>
                             </div>
                             <div class="st-dropdown-option ${isProg ? 'selected' : ''}" onclick="selectStOption(${realIndex}, 'PP', event)">
-                                <span class="st-badge st-badge-pp">PP</span>
-                                <span class="option-name">Por programar (PP)</span>
+                                <span class="st-badge st-badge-pp">Por Programar</span>
                             </div>
                         </div>
                     </div>
@@ -7637,35 +7857,51 @@ function renderConsecutivo() {
     renderConsecutivoPagination(totalPages);
 }
 
-function updateConsecutivoKPIs(list) {
-    let sumSubtotal = 0;
-    let sumIva = 0;
+function isConsecutivoPendienteCobro(item) {
+    if (!item) return false;
+    const st = String(item.st || 'PP').trim().toUpperCase();
+    if (st === 'P' || st.includes('PAG') || st.includes('COBRAD')) return false;
+    if (st === 'PP' || st === 'PROG' || st.includes('PROG') || st.includes('CANCEL')) return false;
+    return (st === 'C' || st.includes('COBR') || st.includes('PEND'));
+}
+window.isConsecutivoPendienteCobro = isConsecutivoPendienteCobro;
+
+function getConsecutivoPendienteCobroTotals() {
+    let subtotal = 0;
+    let iva = 0;
+    let total = 0;
     
-    // El resultado del total de todos los proyectos que estén en "Por cobrar" ('C') y "Por programar" ('PP')
-    const sourceList = appState.consecutivo || [];
-    sourceList.forEach(item => {
+    (appState.consecutivo || []).forEach(item => {
         if (!item) return;
-        const stVal = String(item.st || 'PP').trim().toUpperCase();
-        if (stVal !== 'P') {
+        if (isConsecutivoPendienteCobro(item)) {
             const sub = Number(item.subtotal) || 0;
             const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined) 
                 ? Number(item.iva) 
                 : (sub > 0 ? Math.round(sub * 0.16 * 100) / 100 : 0);
-            
-            sumSubtotal += sub;
-            sumIva += iv;
+            const tot = (item.total !== '' && item.total !== null && item.total !== undefined && Number(item.total) > 0) 
+                ? Number(item.total) 
+                : (sub + iv);
+            subtotal += sub;
+            iva += iv;
+            total += tot;
         }
     });
     
-    const sumTotalFacturado = sumSubtotal + sumIva;
+    return { subtotal, iva, total };
+}
+window.getConsecutivoPendienteCobroTotals = getConsecutivoPendienteCobroTotals;
+
+function updateConsecutivoKPIs(list) {
+    // Todos los expedientes que estén en el filtro "Pendiente Cobro" (C) se reflejan en las tarjetas superiores
+    const pcTotals = getConsecutivoPendienteCobroTotals();
     
     const subEl = document.getElementById("consecutivo-kpi-subtotal");
     const ivaEl = document.getElementById("consecutivo-kpi-iva");
     const totEl = document.getElementById("consecutivo-kpi-total");
     
-    if (subEl) subEl.innerText = formatCurrency(sumSubtotal);
-    if (ivaEl) ivaEl.innerText = formatCurrency(sumIva);
-    if (totEl) totEl.innerText = formatCurrency(sumTotalFacturado);
+    if (subEl) subEl.innerText = formatCurrency(pcTotals.subtotal);
+    if (ivaEl) ivaEl.innerText = formatCurrency(pcTotals.iva);
+    if (totEl) totEl.innerText = formatCurrency(pcTotals.total);
 
     if (typeof renderVisualizacion === 'function') {
         renderVisualizacion();
@@ -7673,6 +7909,8 @@ function updateConsecutivoKPIs(list) {
 }
 
 function renderConsecutivoFooterTotals(list) {
+    const pcTotals = getConsecutivoPendienteCobroTotals();
+    
     let sumSubtotal = 0;
     let sumIva = 0;
     let sumTotal = 0;
@@ -7682,6 +7920,16 @@ function renderConsecutivoFooterTotals(list) {
         sumIva += Number(item.iva) || 0;
         sumTotal += Number(item.total) || 0;
     });
+
+    const currentFilter = String(appState.consecutivoStFilter || 'all').trim().toUpperCase();
+    const isViewingAllOrC = (currentFilter === 'ALL' || currentFilter === 'TODOS' || currentFilter === 'C' || currentFilter.includes('COBR') || currentFilter.includes('PEND') || currentFilter === '');
+
+    // El total de la sección / tabla solo tiene que ser de las operaciones que están en el filtro "Pendiente Cobro"
+    if (isViewingAllOrC) {
+        sumSubtotal = pcTotals.subtotal;
+        sumIva = pcTotals.iva;
+        sumTotal = pcTotals.total;
+    }
     
     const totalsRow = document.getElementById("excel-consecutivo-totals-row");
     if (totalsRow) {
@@ -8271,15 +8519,15 @@ function selectStOption(index, value, event) {
 
     if (finalVal === 'P') {
         if (typeof showCustomNotification === 'function') {
-            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Pagada con fecha ${formatProvTableDate(row.fechaPago)}. Haz clic en 'Guardar' para confirmar.`, "info");
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Cobrado con fecha ${formatProvTableDate(row.fechaPago)}. Haz clic en 'Guardar' para confirmar.`, "info");
         }
     } else if (finalVal === 'C') {
         if (typeof showCustomNotification === 'function') {
-            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Por Cobrar (C) y fecha de pago retirada. Haz clic en 'Guardar' para confirmar.`, "info");
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Pendiente Cobro y fecha de pago retirada. Haz clic en 'Guardar' para confirmar.`, "info");
         }
     } else if (finalVal === 'PP') {
         if (typeof showCustomNotification === 'function') {
-            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Por programar (PP). Haz clic en 'Guardar' para confirmar.`, "info");
+            showCustomNotification(`Factura #${row.consecutivo || (index + 1)} marcada como Por Programar. Haz clic en 'Guardar' para confirmar.`, "info");
         }
     }
 
@@ -9149,22 +9397,30 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'nominas_lock_update' }, payload => {
         const data = payload.payload;
         if (!data) return;
+        const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : window._myClientId;
+        if (data.clientId && myClientId && data.clientId === myClientId) return;
+
         const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
         const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
 
         if (data.isLocked) {
-            if (data.userId === currentUserId) return;
-
             if (appState.isEditingNominas) {
-                // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
-                // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
                 const myLockTime = appState.nominasLockedBy?.timestamp || Date.now();
-                broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
-                syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                return;
+                if ((data.timestamp || 0) < myLockTime) {
+                    appState.isEditingNominas = false;
+                    appState.nominasLockedBy = data;
+                    if (appState._nominasSnapshot) {
+                        appState.nominas = JSON.parse(JSON.stringify(appState._nominasSnapshot));
+                        appState._nominasSnapshot = null;
+                    }
+                } else {
+                    broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime, myClientId);
+                    syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime, myClientId);
+                    return;
+                }
+            } else {
+                appState.nominasLockedBy = data;
             }
-
-            appState.nominasLockedBy = data;
         } else {
             if (!appState.isEditingNominas) {
                 appState.nominasLockedBy = null;
@@ -9183,7 +9439,8 @@ function setupRealtimeSubscriptions() {
         if (appState.isEditingGastosIndirectos) return;
         const data = payload.payload;
         if (!data || !Array.isArray(data.gastosIndirectos)) return;
-        if (data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
+        const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : window._myClientId;
+        if (data.senderClientId && myClientId && data.senderClientId === myClientId) return;
         appState.gastosIndirectos = data.gastosIndirectos.filter(item => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(item));
         saveToStorage();
         if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && appState.currentAdminFicha === 'quincenal' && appState.adminSubSection === 'gastos-indirectos') {
@@ -9203,22 +9460,30 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'gastos_indirectos_lock_update' }, payload => {
         const data = payload.payload;
         if (!data) return;
+        const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : window._myClientId;
+        if (data.clientId && myClientId && data.clientId === myClientId) return;
+
         const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
         const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
 
         if (data.isLocked) {
-            if (data.userId === currentUserId) return;
-
             if (appState.isEditingGastosIndirectos) {
-                // ¡Yo di primero el click de editar! Mantener mi preferencia absoluta.
-                // Rechazar el bloqueo entrante y contra-transmitir mi bloqueo para bloquear al otro usuario de inmediato.
                 const myLockTime = appState.gastosIndirectosLockedBy?.timestamp || Date.now();
-                broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, myLockTime);
-                syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, myLockTime);
-                return;
+                if ((data.timestamp || 0) < myLockTime) {
+                    appState.isEditingGastosIndirectos = false;
+                    appState.gastosIndirectosLockedBy = data;
+                    if (appState._gastosIndirectosSnapshot) {
+                        appState.gastosIndirectos = JSON.parse(JSON.stringify(appState._gastosIndirectosSnapshot));
+                        appState._gastosIndirectosSnapshot = null;
+                    }
+                } else {
+                    broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, myLockTime, myClientId);
+                    syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, myLockTime, myClientId);
+                    return;
+                }
+            } else {
+                appState.gastosIndirectosLockedBy = data;
             }
-
-            appState.gastosIndirectosLockedBy = data;
         } else {
             if (!appState.isEditingGastosIndirectos) {
                 appState.gastosIndirectosLockedBy = null;
@@ -9459,6 +9724,10 @@ function setupRealtimeSubscriptions() {
                 if (row.contenido) {
                     try {
                         const parsed = JSON.parse(row.contenido);
+                        const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : window._myClientId;
+                        if (parsed.clientId && myClientId && parsed.clientId === myClientId) {
+                            return;
+                        }
                         const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
                         const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
                         if (parsed.isLocked === false) {
@@ -9468,16 +9737,26 @@ function setupRealtimeSubscriptions() {
                                 if ((appState.currentTab === 'administracion' || appState.currentTab === 'admin') && typeof window.renderNominas === 'function') window.renderNominas();
                             }
                         } else if (parsed.isLocked) {
-                            if (parsed.userId !== currentUserId) {
+                            if (!isLockOwnedByCurrentUser(parsed)) {
                                 if (appState.isEditingNominas) {
                                     const myLockTime = appState.nominasLockedBy?.timestamp || Date.now();
-                                    broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime);
-                                    syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                    if ((parsed.timestamp || 0) < myLockTime) {
+                                        appState.isEditingNominas = false;
+                                        appState.nominasLockedBy = parsed;
+                                        if (appState._nominasSnapshot) {
+                                            appState.nominas = JSON.parse(JSON.stringify(appState._nominasSnapshot));
+                                            appState._nominasSnapshot = null;
+                                        }
+                                    } else {
+                                        broadcastNominasLockState(true, currentUserName, currentUserId, myLockTime, myClientId);
+                                        syncNominasLockToCloud(true, currentUserName, currentUserId, myLockTime, myClientId);
+                                    }
                                 } else {
                                     const elapsed = Date.now() - (parsed.timestamp || 0);
-                                    if (elapsed < 5 * 60 * 1000) {
+                                    if (elapsed < 30 * 60 * 1000) {
                                         appState.nominasLockedBy = parsed;
                                         if (typeof window.updateNominasEditButtonsUI === 'function') window.updateNominasEditButtonsUI();
+                                        if (typeof window.renderNominas === 'function') window.renderNominas();
                                     }
                                 }
                             }
@@ -14383,7 +14662,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_10_27_proveedores_v4';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_02_ingresos_pc_v1';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -17528,12 +17807,15 @@ function convertirPrefacturaPDF() {
         const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
         const retIvaPct = parseFloat(item.retencionIvaPct !== undefined ? item.retencionIvaPct : (item.retencionIva !== undefined ? item.retencionIva : (item.retencion !== undefined ? item.retencion : item.ret4))) || 0;
-        const retIsrPct = parseFloat(item.retencionIsrPct !== undefined ? item.retencionIsrPct : (item.retencionIsr !== undefined ? item.retencionIsr : item.retIsr)) || 0;
         const retIvaAmount = sub > 0 ? (sub * (retIvaPct / 100)) : 0;
-        const retIsrAmount = sub > 0 ? (sub * (retIsrPct / 100)) : 0;
+        const retIsrAmount = (item.retencionIsr !== undefined && item.retencionIsr !== '' && !isNaN(parseFloat(item.retencionIsr)))
+            ? Math.max(0, parseFloat(item.retencionIsr))
+            : ((item.retencionIsrMonto !== undefined && item.retencionIsrMonto !== '' && !isNaN(parseFloat(item.retencionIsrMonto)))
+                ? Math.max(0, parseFloat(item.retencionIsrMonto))
+                : ((item.retIsr !== undefined && item.retIsr !== '' && !isNaN(parseFloat(item.retIsr))) ? Math.max(0, parseFloat(item.retIsr)) : 0));
         const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
 
-        if (item.proveedor || item.facturaNum || item.concepto || unit > 0 || cant > 0 || retIvaPct > 0 || retIsrPct > 0) {
+        if (item.proveedor || item.facturaNum || item.concepto || unit > 0 || cant > 0 || retIvaPct > 0 || retIsrAmount > 0) {
             totSub2 += sub;
             totIva2 += iva;
             totRetIva2 += retIvaAmount;
@@ -17542,11 +17824,11 @@ function convertirPrefacturaPDF() {
         }
 
         const cantDisplay = item.cantidad !== undefined && item.cantidad !== '' && item.cantidad !== 0 ? item.cantidad : '';
-        const unitDisplay = unit > 0 ? `$${unit.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : '$0.00';
-        const subDisplay = `$${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-        const ivaDisplay = `$${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const unitDisplay = unit > 0 ? `${unit.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : '$0.00';
+        const subDisplay = `${sub.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const ivaDisplay = `${iva.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
         const retIvaDisplay = retIvaPct > 0 ? `${retIvaPct}%` : '0%';
-        const retIsrDisplay = retIsrPct > 0 ? `${retIsrPct}%` : '0%';
+        const retIsrDisplay = retIsrAmount > 0 ? `${retIsrAmount.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : '$0.00';
         const totDisplay = `$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 
         return `
@@ -18366,10 +18648,25 @@ function updateProveedorClavesFieldFast(idx, key, val) {
     } else if (key === 'retencionIsr') {
         const valClean = val === '' ? '' : (parseFloat(val) || 0);
         p.proveedoresClaves[idx].retencionIsr = valClean;
-        p.proveedoresClaves[idx].retencionIsrPct = valClean;
+        p.proveedoresClaves[idx].retencionIsrMonto = typeof valClean === 'number' ? valClean : 0;
+        p.proveedoresClaves[idx].retIsr = typeof valClean === 'number' ? valClean : 0;
+        p.proveedoresClaves[idx].retencionIsrPct = 0;
     } else {
         p.proveedoresClaves[idx][key] = val;
     }
+
+    const tbody = document.getElementById("tbody-proveedor-claves");
+    if (tbody && tbody.children[idx]) {
+        const inputs = tbody.children[idx].querySelectorAll('input');
+        if (inputs.length >= 5) {
+            if (key === 'facturaNum' && inputs[0] !== document.activeElement) inputs[0].value = val;
+            if (key === 'cantidad' && inputs[1] !== document.activeElement) inputs[1].value = val;
+            if (key === 'unitario' && inputs[2] !== document.activeElement) inputs[2].value = val;
+            if ((key === 'retencionIva' || key === 'retencion') && inputs[3] !== document.activeElement) inputs[3].value = val;
+            if (key === 'retencionIsr' && inputs[4] !== document.activeElement) inputs[4].value = val;
+        }
+    }
+
     recalcProveedorClavesTotals(p);
     // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 };
@@ -18392,9 +18689,9 @@ function recalcProveedorClavesTotals(p) {
         let rawRetIva = (item.retencionIvaPct !== undefined && item.retencionIvaPct !== '' && item.retencionIvaPct !== null)
             ? item.retencionIvaPct
             : ((item.retencionIva !== undefined && item.retencionIva !== '' && item.retencionIva !== null) ? item.retencionIva : '');
-        let rawRetIsr = (item.retencionIsrPct !== undefined && item.retencionIsrPct !== '' && item.retencionIsrPct !== null)
-            ? item.retencionIsrPct
-            : ((item.retencionIsr !== undefined && item.retencionIsr !== '' && item.retencionIsr !== null) ? item.retencionIsr : '');
+        let rawRetIsr = (item.retencionIsr !== undefined && item.retencionIsr !== '' && item.retencionIsr !== null)
+            ? item.retencionIsr
+            : ((item.retencionIsrMonto !== undefined && item.retencionIsrMonto !== '' && item.retencionIsrMonto !== null) ? item.retencionIsrMonto : '');
 
         if (tbody && tbody.children[idx]) {
             const tr = tbody.children[idx];
@@ -18408,25 +18705,22 @@ function recalcProveedorClavesTotals(p) {
                 if (inputs[3].value !== '') rawRetIva = inputs[3].value;
                 else if (item.retencionIvaPct === '' || item.retencionIva === '') rawRetIva = '';
                 if (inputs[4].value !== '') rawRetIsr = inputs[4].value;
-                else if (item.retencionIsrPct === '' || item.retencionIsr === '') rawRetIsr = '';
+                else if (item.retencionIsr === '' || item.retencionIsrMonto === '') rawRetIsr = '';
             }
         }
 
         const sub = cant * unit;
         const iva = sub > 0 ? (sub * 0.16) : 0;
         let retIvaPct = (rawRetIva === '' || rawRetIva === null || rawRetIva === undefined) ? 0 : (parseFloat(rawRetIva) || 0);
-        let retIsrPct = (rawRetIsr === '' || rawRetIsr === null || rawRetIsr === undefined) ? 0 : (parseFloat(rawRetIsr) || 0);
 
         // Si el porcentaje ingresado/heredado es mayor a 100 y sub > 0, corregir monto en pesos a porcentaje
         if (retIvaPct > 100 && sub > 0) {
             retIvaPct = Math.round((retIvaPct / sub) * 100 * 100) / 100;
         }
-        if (retIsrPct > 100 && sub > 0) {
-            retIsrPct = Math.round((retIsrPct / sub) * 100 * 100) / 100;
-        }
 
         const retIvaAmount = sub > 0 ? (sub * (retIvaPct / 100)) : 0;
-        const retIsrAmount = sub > 0 ? (sub * (retIsrPct / 100)) : 0;
+        // Retención ISR ingresado directamente como número (monto)
+        const retIsrAmount = (rawRetIsr === '' || rawRetIsr === null || rawRetIsr === undefined) ? 0 : Math.max(0, parseFloat(rawRetIsr) || 0);
         const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
 
         item.subtotal = sub;
@@ -18436,13 +18730,13 @@ function recalcProveedorClavesTotals(p) {
         item.retencionIvaMonto = retIvaAmount;
         item.ret4 = retIvaAmount;
         item.retencion = retIvaAmount;
-        item.retencionIsr = rawRetIsr === '' ? '' : retIsrPct;
-        item.retencionIsrPct = retIsrPct;
+        item.retencionIsr = rawRetIsr === '' ? '' : retIsrAmount;
+        item.retencionIsrPct = 0;
         item.retencionIsrMonto = retIsrAmount;
         item.retIsr = retIsrAmount;
         item.total = tot;
 
-        if (sub > 0 || tot !== 0 || cant > 0 || unit > 0 || retIvaPct > 0 || retIsrPct > 0 || item.proveedor || item.facturaNum || item.concepto) {
+        if (sub > 0 || tot !== 0 || cant > 0 || unit > 0 || retIvaPct > 0 || retIsrAmount > 0 || item.proveedor || item.facturaNum || item.concepto) {
             totSub += sub;
             totIva += iva;
             totRetIva += retIvaAmount;
@@ -18515,19 +18809,17 @@ function renderProveedorClavesTable(p) {
         let retIvaPct = (item.retencionIvaPct !== undefined && item.retencionIvaPct !== '' && !isNaN(parseFloat(item.retencionIvaPct)))
             ? parseFloat(item.retencionIvaPct)
             : ((item.retencionIva !== undefined && item.retencionIva !== '' && !isNaN(parseFloat(item.retencionIva))) ? parseFloat(item.retencionIva) : 0);
-        let retIsrPct = (item.retencionIsrPct !== undefined && item.retencionIsrPct !== '' && !isNaN(parseFloat(item.retencionIsrPct)))
-            ? parseFloat(item.retencionIsrPct)
-            : ((item.retencionIsr !== undefined && item.retencionIsr !== '' && !isNaN(parseFloat(item.retencionIsr))) ? parseFloat(item.retencionIsr) : 0);
 
         if (retIvaPct > 100 && sub > 0) {
             retIvaPct = Math.round((retIvaPct / sub) * 100 * 100) / 100;
         }
-        if (retIsrPct > 100 && sub > 0) {
-            retIsrPct = Math.round((retIsrPct / sub) * 100 * 100) / 100;
-        }
 
         const retIvaAmount = sub > 0 ? (sub * (retIvaPct / 100)) : 0;
-        const retIsrAmount = sub > 0 ? (sub * (retIsrPct / 100)) : 0;
+        const retIsrAmount = (item.retencionIsr !== undefined && item.retencionIsr !== '' && !isNaN(parseFloat(item.retencionIsr)))
+            ? Math.max(0, parseFloat(item.retencionIsr))
+            : ((item.retencionIsrMonto !== undefined && item.retencionIsrMonto !== '' && !isNaN(parseFloat(item.retencionIsrMonto)))
+                ? Math.max(0, parseFloat(item.retencionIsrMonto))
+                : ((item.retIsr !== undefined && item.retIsr !== '' && !isNaN(parseFloat(item.retIsr))) ? Math.max(0, parseFloat(item.retIsr)) : 0));
 
         const tot = (sub > 0 || iva > 0 || retIvaAmount > 0 || retIsrAmount > 0) ? (sub + iva - retIvaAmount - retIsrAmount) : 0;
 
@@ -18538,13 +18830,13 @@ function renderProveedorClavesTable(p) {
         item.retencionIvaMonto = retIvaAmount;
         item.ret4 = retIvaAmount;
         item.retencion = retIvaAmount;
-        item.retencionIsr = retIsrPct;
-        item.retencionIsrPct = retIsrPct;
+        item.retencionIsr = (item.retencionIsr !== undefined && item.retencionIsr !== '') ? item.retencionIsr : (retIsrAmount > 0 ? retIsrAmount : '');
+        item.retencionIsrPct = 0;
         item.retencionIsrMonto = retIsrAmount;
         item.retIsr = retIsrAmount;
         item.total = tot;
 
-        if (sub > 0 || tot !== 0 || cant > 0 || unit > 0 || retIvaPct > 0 || retIsrPct > 0 || item.proveedor || item.facturaNum || item.concepto) {
+        if (sub > 0 || tot !== 0 || cant > 0 || unit > 0 || retIvaPct > 0 || retIsrAmount > 0 || item.proveedor || item.facturaNum || item.concepto) {
             totSub += sub;
             totIva += iva;
             totRetIva += retIvaAmount;
@@ -18557,9 +18849,9 @@ function renderProveedorClavesTable(p) {
         const retIvaVal = (item.retencionIvaPct !== undefined && item.retencionIvaPct !== '' && item.retencionIvaPct !== null)
             ? item.retencionIvaPct
             : ((item.retencionIva !== undefined && item.retencionIva !== '' && item.retencionIva !== null) ? (item.retencionIva > 100 ? retIvaPct : item.retencionIva) : '');
-        const retIsrVal = (item.retencionIsrPct !== undefined && item.retencionIsrPct !== '' && item.retencionIsrPct !== null)
-            ? item.retencionIsrPct
-            : ((item.retencionIsr !== undefined && item.retencionIsr !== '' && item.retencionIsr !== null) ? (item.retencionIsr > 100 ? retIsrPct : item.retencionIsr) : '');
+        const retIsrVal = (item.retencionIsr !== undefined && item.retencionIsr !== '' && item.retencionIsr !== null)
+            ? item.retencionIsr
+            : ((item.retencionIsrMonto !== undefined && item.retencionIsrMonto !== '' && item.retencionIsrMonto !== null) ? item.retencionIsrMonto : '');
 
         // Celdas amarillas: Proveedor, Factura #, Concepto sin texto escrito (placeholder vacío), dejando solo el color amarillo
         return `
@@ -18617,15 +18909,12 @@ function renderProveedorClavesTable(p) {
                     </div>
                 </td>
                 <td style="text-align:right;">
-                    <div style="display:inline-flex; align-items:center; justify-content:flex-end; gap:2px;">
-                        <input type="number" 
-                               step="any"
-                               value="${retIsrVal}" 
-                               placeholder="0" 
-                               oninput="updateProveedorClavesFieldFast(${idx}, 'retencionIsr', this.value)" 
-                               style="width:50px; text-align:right; border:none; background:transparent; outline:none;" />
-                        <span style="font-size:12px; font-weight:700; color:#475569;">%</span>
-                    </div>
+                    <input type="number" 
+                           step="any"
+                           value="${retIsrVal}" 
+                           placeholder="0.00" 
+                           oninput="updateProveedorClavesFieldFast(${idx}, 'retencionIsr', this.value)" 
+                           style="width:75px; text-align:right; border:none; background:transparent; outline:none;" />
                 </td>
                 <td style="text-align:right; font-weight:700;" id="prov-tot-${idx}">$${tot.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
             </tr>
