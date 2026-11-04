@@ -3382,17 +3382,18 @@ function toggleGastoIndCategoriaDropdown(index, event) {
         menu.style.zIndex = "99999999";
         menu.style.display = "block";
 
-        const menuHeight = menu.offsetHeight || 160;
+        const menuHeight = Math.max(menu.offsetHeight || 0, 180);
         const spaceBelow = window.innerHeight - rect.bottom;
         const spaceAbove = rect.top;
+        const shouldOpenUp = (spaceBelow < 250 && spaceAbove > 140) || (spaceBelow < menuHeight + 30 && spaceAbove > spaceBelow);
 
-        if (spaceBelow < menuHeight + 12 && spaceAbove > spaceBelow) {
-            menu.style.top = "auto";
-            menu.style.bottom = `${Math.max(8, window.innerHeight - rect.top + 4)}px`;
+        if (shouldOpenUp) {
+            menu.style.setProperty("top", "auto", "important");
+            menu.style.setProperty("bottom", `${Math.max(8, window.innerHeight - rect.top + 6)}px`, "important");
             menu.classList.add("open-upwards");
         } else {
-            menu.style.bottom = "auto";
-            menu.style.top = `${rect.bottom + 4}px`;
+            menu.style.setProperty("bottom", "auto", "important");
+            menu.style.setProperty("top", `${rect.bottom + 6}px`, "important");
             menu.classList.remove("open-upwards");
         }
 
@@ -5218,17 +5219,18 @@ function toggleProvEstatusDropdown(index, event) {
         menu.style.zIndex = "99999999";
         menu.style.display = "block";
 
-        const menuHeight = menu.offsetHeight || 135;
+        const menuHeight = Math.max(menu.offsetHeight || 0, 160);
         const spaceBelow = window.innerHeight - rect.bottom;
         const spaceAbove = rect.top;
+        const shouldOpenUp = (spaceBelow < 250 && spaceAbove > 140) || (spaceBelow < menuHeight + 30 && spaceAbove > spaceBelow);
 
-        if (spaceBelow < menuHeight + 12 && spaceAbove > spaceBelow) {
-            menu.style.top = "auto";
-            menu.style.bottom = `${Math.max(8, window.innerHeight - rect.top + 4)}px`;
+        if (shouldOpenUp) {
+            menu.style.setProperty("top", "auto", "important");
+            menu.style.setProperty("bottom", `${Math.max(8, window.innerHeight - rect.top + 6)}px`, "important");
             menu.classList.add("open-upwards");
         } else {
-            menu.style.bottom = "auto";
-            menu.style.top = `${rect.bottom + 4}px`;
+            menu.style.setProperty("bottom", "auto", "important");
+            menu.style.setProperty("top", `${rect.bottom + 6}px`, "important");
             menu.classList.remove("open-upwards");
         }
 
@@ -8595,17 +8597,18 @@ function toggleStBadgeDropdown(index, event) {
         menu.style.zIndex = "99999";
         wrap.classList.add("open");
 
-        const menuHeight = menu.offsetHeight || 140;
+        const menuHeight = Math.max(menu.offsetHeight || 0, 160);
         const spaceBelow = window.innerHeight - rect.bottom;
         const spaceAbove = rect.top;
+        const shouldOpenUp = (spaceBelow < 250 && spaceAbove > 140) || (spaceBelow < menuHeight + 30 && spaceAbove > spaceBelow);
 
-        if (spaceBelow < menuHeight + 12 && spaceAbove > spaceBelow) {
-            menu.style.top = "auto";
-            menu.style.bottom = `${Math.max(8, window.innerHeight - rect.top + 4)}px`;
+        if (shouldOpenUp) {
+            menu.style.setProperty("top", "auto", "important");
+            menu.style.setProperty("bottom", `${Math.max(8, window.innerHeight - rect.top + 6)}px`, "important");
             menu.classList.add("open-upwards");
         } else {
-            menu.style.bottom = "auto";
-            menu.style.top = `${rect.bottom + 4}px`;
+            menu.style.setProperty("bottom", "auto", "important");
+            menu.style.setProperty("top", `${rect.bottom + 6}px`, "important");
             menu.classList.remove("open-upwards");
         }
 

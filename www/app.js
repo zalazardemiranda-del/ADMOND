@@ -3378,9 +3378,32 @@ function toggleGastoIndCategoriaDropdown(index, event) {
     const trigger = (event && (event.currentTarget || event.target.closest(".gi-cat-trigger"))) || document.getElementById(`gi-cat-trigger-${index}`);
     if (trigger) {
         const rect = trigger.getBoundingClientRect();
-        menu.style.top = `${rect.bottom + 4}px`;
-        menu.style.left = `${rect.left}px`;
+        menu.style.position = "fixed";
+        menu.style.zIndex = "99999999";
         menu.style.display = "block";
+
+        const menuHeight = Math.max(menu.offsetHeight || 0, 180);
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        const shouldOpenUp = (spaceBelow < 250 && spaceAbove > 140) || (spaceBelow < menuHeight + 30 && spaceAbove > spaceBelow);
+
+        if (shouldOpenUp) {
+            menu.style.setProperty("top", "auto", "important");
+            menu.style.setProperty("bottom", `${Math.max(8, window.innerHeight - rect.top + 6)}px`, "important");
+            menu.classList.add("open-upwards");
+        } else {
+            menu.style.setProperty("bottom", "auto", "important");
+            menu.style.setProperty("top", `${rect.bottom + 6}px`, "important");
+            menu.classList.remove("open-upwards");
+        }
+
+        let left = rect.left;
+        const menuWidth = menu.offsetWidth || 185;
+        if (left + menuWidth > window.innerWidth - 10) {
+            left = window.innerWidth - menuWidth - 10;
+        }
+        if (left < 10) left = 10;
+        menu.style.left = `${left}px`;
     }
 }
 window.toggleGastoIndCategoriaDropdown = toggleGastoIndCategoriaDropdown;
@@ -5193,11 +5216,35 @@ function toggleProvEstatusDropdown(index, event) {
     if (trigger) {
         const rect = trigger.getBoundingClientRect();
         menu.style.position = "fixed";
-        menu.style.top = `${rect.bottom + 4}px`;
-        menu.style.left = `${rect.left + (rect.width / 2)}px`;
-        menu.style.transform = "translateX(-50%)";
         menu.style.zIndex = "99999999";
         menu.style.display = "block";
+
+        const menuHeight = Math.max(menu.offsetHeight || 0, 160);
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        const shouldOpenUp = (spaceBelow < 250 && spaceAbove > 140) || (spaceBelow < menuHeight + 30 && spaceAbove > spaceBelow);
+
+        if (shouldOpenUp) {
+            menu.style.setProperty("top", "auto", "important");
+            menu.style.setProperty("bottom", `${Math.max(8, window.innerHeight - rect.top + 6)}px`, "important");
+            menu.classList.add("open-upwards");
+        } else {
+            menu.style.setProperty("bottom", "auto", "important");
+            menu.style.setProperty("top", `${rect.bottom + 6}px`, "important");
+            menu.classList.remove("open-upwards");
+        }
+
+        let left = rect.left + (rect.width / 2);
+        const menuWidth = menu.offsetWidth || 155;
+        const halfWidth = menuWidth / 2;
+        if (left - halfWidth < 10) {
+            left = halfWidth + 10;
+        } else if (left + halfWidth > window.innerWidth - 10) {
+            left = window.innerWidth - 10 - halfWidth;
+        }
+
+        menu.style.left = `${left}px`;
+        menu.style.transform = "translateX(-50%)";
     }
 }
 window.toggleProvEstatusDropdown = toggleProvEstatusDropdown;
@@ -8547,12 +8594,35 @@ function toggleStBadgeDropdown(index, event) {
         const rect = trigger.getBoundingClientRect();
         
         menu.style.position = "fixed";
-        menu.style.top = `${rect.bottom + 4}px`;
-        menu.style.left = `${rect.left + (rect.width / 2)}px`;
-        menu.style.transform = "translateX(-50%)";
         menu.style.zIndex = "99999";
-        
         wrap.classList.add("open");
+
+        const menuHeight = Math.max(menu.offsetHeight || 0, 160);
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        const shouldOpenUp = (spaceBelow < 250 && spaceAbove > 140) || (spaceBelow < menuHeight + 30 && spaceAbove > spaceBelow);
+
+        if (shouldOpenUp) {
+            menu.style.setProperty("top", "auto", "important");
+            menu.style.setProperty("bottom", `${Math.max(8, window.innerHeight - rect.top + 6)}px`, "important");
+            menu.classList.add("open-upwards");
+        } else {
+            menu.style.setProperty("bottom", "auto", "important");
+            menu.style.setProperty("top", `${rect.bottom + 6}px`, "important");
+            menu.classList.remove("open-upwards");
+        }
+
+        let left = rect.left + (rect.width / 2);
+        const menuWidth = menu.offsetWidth || 140;
+        const halfWidth = menuWidth / 2;
+        if (left - halfWidth < 10) {
+            left = halfWidth + 10;
+        } else if (left + halfWidth > window.innerWidth - 10) {
+            left = window.innerWidth - 10 - halfWidth;
+        }
+
+        menu.style.left = `${left}px`;
+        menu.style.transform = "translateX(-50%)";
     }
 }
 
