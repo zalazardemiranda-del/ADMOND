@@ -14757,6 +14757,12 @@ function cleanOperacionesLegacyData(proyectos) {
 
     proyectos.forEach(p => {
         if (!p) return;
+        const pKey = String(p.consecutivo || p.numConsecutivo || p.numProyecto || p.id || '').trim().toUpperCase();
+        // Todos los proyectos de octubre 2026 (RDP2610...) están definitivamente concluidos y archivados en EXPEDIENTE
+        if (pKey.startsWith('RDP2610')) {
+            p.archivado = true;
+            p.estatus = 'CERRADO';
+        }
         if (!p.tipoProyecto) {
             const sName = (p.servicioName || '').toLowerCase();
             if (sName.includes('lavado')) {
@@ -14828,7 +14834,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_fix_consecutivos_89_v10';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_fix_create_and_archive_v11';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -14959,6 +14965,10 @@ function getOperacionesProjectLock(projectOrId) {
 window.getOperacionesProjectLock = getOperacionesProjectLock;
 
 function getProjectLockByOther(projectOrId) {
+    if (!projectOrId) return null;
+    if (typeof projectOrId === 'object' && (projectOrId.isNewProject === true || projectOrId.isDraft === true || (typeof isProjectGenerado === 'function' && !isProjectGenerado(projectOrId)))) {
+        return null;
+    }
     const lock = getOperacionesProjectLock(projectOrId);
     if (!lock) return null;
     if (isLockOwnedByMe(lock)) return null;
@@ -16465,7 +16475,11 @@ window.startEditingOperacionesProject = startEditingOperacionesProject;
 
 function saveEditingOperacionesProject() {
     window.saveEditingOperacionesProject = saveEditingOperacionesProject;
-    if (!appState.isEditingOperacionesDetail) return;
+    const pCheck = (typeof getActiveOperacionesProject === 'function')
+        ? getActiveOperacionesProject()
+        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
+    if (!appState.isEditingOperacionesDetail && pCheck && (typeof isProjectGenerado === 'function') && isProjectGenerado(pCheck)) return;
+    appState.isEditingOperacionesDetail = true;
 
     const p = (typeof getActiveOperacionesProject === 'function')
         ? getActiveOperacionesProject()
@@ -16641,8 +16655,14 @@ async function openOperacionesDetail(projectId, clickTimestamp = null) {
             await window.syncOperacionesProjectLocksToCloud();
         }
 
-        // Abrir siempre en modo lectura. Solo se edita si el usuario hace clic en "Editar".
-        appState.isEditingOperacionesDetail = false;
+        const isNewDraft = Boolean(p.isNewProject === true || p.isDraft === true || (typeof isProjectGenerado === 'function' && !isProjectGenerado(p)));
+        if (isNewDraft) {
+            appState.isEditingOperacionesDetail = true;
+            try { sessionStorage.setItem('rp_active_operaciones_editing', 'true'); } catch(e) {}
+        } else {
+            // Abrir en modo lectura solo para proyectos existentes ya generados
+            appState.isEditingOperacionesDetail = false;
+        }
         appState._operacionesDetailSnapshot = JSON.parse(JSON.stringify(p));
 
         appState.contenedoresPage = 0;
@@ -19751,12 +19771,12 @@ function generarProyectoOperaciones() {
     closeOperacionesDetail();
 };
 
-function openNuevoProyectoModal() {
+async function openNuevoProyectoModal() {
     window.openNuevoProyectoModal = openNuevoProyectoModal;
 
     // Si ya existe un borrador no generado en edición, reanudarlo y evitar duplicados por clics múltiples
     if (appState.draftOperacionesProject && !isProjectGenerado(appState.draftOperacionesProject)) {
-        openOperacionesDetail(appState.draftOperacionesProject.id);
+        await openOperacionesDetail(appState.draftOperacionesProject.id);
         startEditingOperacionesProject();
         goToOperacionesStep(1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -19823,7 +19843,7 @@ function openNuevoProyectoModal() {
 
     // NOTA: NO guardamos en LocalStorage y NO sincronizamos a la nube aquí.
     // Solo cuando el usuario haga clic en GENERAR PROYECTO o GUARDAR se registrará formalmente.
-    openOperacionesDetail(newProject.id);
+    await openOperacionesDetail(newProject.id);
     startEditingOperacionesProject();
     goToOperacionesStep(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
