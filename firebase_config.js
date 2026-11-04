@@ -844,12 +844,6 @@
         return !!(window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.client);
     };
 
-    // Puente de compatibilidad transparente para que ninguna referencia previa falle
-    window.SUPABASE_CONFIG = window.FIREBASE_CONFIG;
-    window.initSupabaseClient = window.initFirebaseClient;
-    window.saveSupabaseConfig = window.saveFirebaseConfig;
-    window.isSupabaseActive = window.isFirebaseActive;
-
     // Inicialización automática
     window.initFirebaseClient();
 

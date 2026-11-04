@@ -29,4 +29,4 @@ def process_file(file_path):
 if __name__ == "__main__":
     print("[Rodipack] Comprimiendo y protegiendo codigo JavaScript...")
     process_file("app.js")
-    process_file("supabase_config.js")
+    process_file("firebase_config.js")

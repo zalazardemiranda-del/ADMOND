@@ -286,7 +286,8 @@ const runInitialAppSetup = async () => {
         'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
         'RDP261074-', 'RDP261075-',
         'RDP2610182-F', 'RDP2610182',
-        'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
+        'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1',
+        'RDP2611199', 'RDP2611200', 'RDP2611310', 'RDP2611311', 'RDP2611312', 'RDP2611313', 'RDP2611314', 'RDP2611315', 'RDP2611316', 'RDP2611317'
     ]);
     window.purgedProjectIds = purgedProjectIds;
 
@@ -1651,8 +1652,8 @@ function renderVisualizacion() {
 let _syncAdminConceptsTimer = null;
 function syncAdminConceptsToCloud(forceImmediate = false) {
     window.syncAdminConceptsToCloud = syncAdminConceptsToCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     const doSync = async () => {
@@ -1733,8 +1734,8 @@ window.broadcastAdminConceptsUpdate = broadcastAdminConceptsUpdate;
 async function fetchAdminConceptsFromCloud() {
     window.fetchAdminConceptsFromCloud = fetchAdminConceptsFromCloud;
     if (Date.now() - (window._lastLocalAdminConceptsSyncTime || 0) < 3000) return;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     try {
@@ -2285,8 +2286,8 @@ window.broadcastNominasLockState = broadcastNominasLockState;
 
 async function syncNominasLockToCloud(isLocked, userName, userId, timestamp, clientId) {
     window.syncNominasLockToCloud = syncNominasLockToCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         const cId = clientId || (typeof getMyClientId === 'function' ? getMyClientId() : window._myClientId);
@@ -2325,8 +2326,8 @@ async function fetchNominasLockFromCloud() {
         }
     } catch (e) {}
 
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         const { data: msgs } = await client.from('messages')
@@ -2673,8 +2674,8 @@ function deleteNominaRecord(index) {
 let _syncNominasTimer = null;
 function syncNominasToCloud(forceImmediate = false) {
     window.syncNominasToCloud = syncNominasToCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     const doSync = async () => {
@@ -2691,7 +2692,7 @@ function syncNominasToCloud(forceImmediate = false) {
                 emisor_role: 'sistema'
             });
         } catch (e) {
-            console.warn("⚠️ Error persisting nominas to Supabase:", e);
+            console.warn("⚠️ Error persisting nominas to Firebase:", e);
         }
     };
 
@@ -2730,8 +2731,8 @@ async function fetchNominasFromCloud() {
     window.fetchNominasFromCloud = fetchNominasFromCloud;
     if (appState.isEditingNominas) return;
     if (Date.now() - (window._lastLocalNominasSyncTime || 0) < 5000) return;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     try {
@@ -3028,8 +3029,8 @@ window.broadcastGastosIndirectosLockState = broadcastGastosIndirectosLockState;
 
 async function syncGastosIndirectosLockToCloud(isLocked, userName, userId, timestamp, clientId) {
     window.syncGastosIndirectosLockToCloud = syncGastosIndirectosLockToCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         const cId = clientId || (typeof getMyClientId === 'function' ? getMyClientId() : window._myClientId);
@@ -3053,8 +3054,8 @@ window.syncGastosIndirectosLockToCloud = syncGastosIndirectosLockToCloud;
 
 async function fetchGastosIndirectosLockFromCloud() {
     window.fetchGastosIndirectosLockFromCloud = fetchGastosIndirectosLockFromCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         const { data: msgs } = await client.from('messages')
@@ -3104,8 +3105,8 @@ window.fetchGastosIndirectosLockFromCloud = fetchGastosIndirectosLockFromCloud;
 let _syncGastosIndirectosTimer = null;
 function syncGastosIndirectosToCloud(forceImmediate = false) {
     window.syncGastosIndirectosToCloud = syncGastosIndirectosToCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     const doSync = async () => {
@@ -3118,7 +3119,7 @@ function syncGastosIndirectosToCloud(forceImmediate = false) {
                 emisor_role: 'sistema'
             });
         } catch (e) {
-            console.warn("⚠️ Error persisting gastos indirectos to Supabase:", e);
+            console.warn("⚠️ Error persisting gastos indirectos to Firebase:", e);
         }
     };
 
@@ -3166,8 +3167,8 @@ async function fetchGastosIndirectosFromCloud() {
     window.fetchGastosIndirectosFromCloud = fetchGastosIndirectosFromCloud;
     if (appState.isEditingGastosIndirectos) return;
     if (Date.now() - (window._lastLocalGastosIndSyncTime || 0) < 5000) return;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     try {
@@ -3926,7 +3927,7 @@ function promptAddProveedor() {
     }
 }
 
-// Sincronización del catálogo de proveedores en Supabase (todos los administradores y gerentes)
+// Sincronización del catálogo de proveedores en Firebase (todos los administradores y gerentes)
 async function syncProveedoresCatalogToCloud() {
     window.syncProveedoresCatalogToCloud = syncProveedoresCatalogToCloud;
     const catalog = appState.proveedorNamesList || [];
@@ -3947,8 +3948,8 @@ async function syncProveedoresCatalogToCloud() {
         }
     }
 
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     try {
@@ -3959,14 +3960,14 @@ async function syncProveedoresCatalogToCloud() {
             emisor_role: 'sistema'
         });
     } catch (err) {
-        console.warn("⚠️ Error saving proveedores catalog to Supabase:", err);
+        console.warn("⚠️ Error saving proveedores catalog to Firebase:", err);
     }
 }
 
 async function fetchProveedoresCatalogFromCloud() {
     window.fetchProveedoresCatalogFromCloud = fetchProveedoresCatalogFromCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     try {
@@ -4017,8 +4018,8 @@ let _syncProveedoresTimer = null;
 function syncProveedoresToCloud(forceImmediate = false) {
     window.syncProveedoresToCloud = syncProveedoresToCloud;
     window._lastLocalProveedoresSyncTime = Date.now();
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     const doSync = async () => {
@@ -4033,7 +4034,7 @@ function syncProveedoresToCloud(forceImmediate = false) {
             });
             window._lastLocalProveedoresSyncTime = Date.now();
         } catch (e) {
-            console.warn("⚠️ Error persisting proveedores data to Supabase:", e);
+            console.warn("⚠️ Error persisting proveedores data to Firebase:", e);
         }
     };
 
@@ -4070,10 +4071,10 @@ window.broadcastProveedoresUpdate = broadcastProveedoresUpdate;
 
 async function fetchProveedoresDataFromCloud() {
     window.fetchProveedoresDataFromCloud = fetchProveedoresDataFromCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
     if (appState.isEditingProveedores) return;
     if (Date.now() - (window._lastLocalProveedoresSyncTime || 0) < 5000) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     try {
@@ -4654,8 +4655,8 @@ window._lastProveedoresUnlockTime = 0;
 
 async function checkCloudLockActive(lockChatId, currentUserId) {
     window.checkCloudLockActive = checkCloudLockActive;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return null;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return null;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return null;
     try {
         const { data: msgs } = await client.from('messages')
@@ -4752,7 +4753,7 @@ async function startEditingProveedores() {
         }
     } catch (e) {}
 
-    // Notificar a otras máquinas por WebSockets y persistir en Supabase
+    // Notificar a otras máquinas por WebSockets y persistir en Firebase
     broadcastProveedoresLockState(true, currentUserName, currentUserId, lockTime);
     syncProveedoresLockToCloud(true, currentUserName, currentUserId, lockTime);
 
@@ -5007,8 +5008,8 @@ window.broadcastProveedoresLockState = broadcastProveedoresLockState;
 
 async function syncProveedoresLockToCloud(isLocked, userName, userId, timestamp) {
     window.syncProveedoresLockToCloud = syncProveedoresLockToCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         await client.from('messages').insert({
@@ -5030,8 +5031,8 @@ window.syncProveedoresLockToCloud = syncProveedoresLockToCloud;
 
 async function fetchProveedoresLockFromCloud() {
     window.fetchProveedoresLockFromCloud = fetchProveedoresLockFromCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         const { data: msgs, error } = await client.from('messages')
@@ -5692,8 +5693,8 @@ function handleCreateTask(event) {
     if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
     
     // Cloud Sync
-    if (window.isSupabaseActive()) {
-        const client = window.SUPABASE_CONFIG.client;
+    if (window.isFirebaseActive()) {
+        const client = window.FIREBASE_CONFIG.client;
         const dbPriority = priority.charAt(0).toUpperCase() + priority.slice(1).toLowerCase();
         client.from('tasks').insert([{
             titulo: title,
@@ -5702,7 +5703,7 @@ function handleCreateTask(event) {
             estado: 'pendiente',
             asignado_nombre: assignee || 'Sin asignar'
         }]).then(({ error }) => {
-            if (error) console.warn("Error saving task to Supabase:", error);
+            if (error) console.warn("Error saving task to Firebase:", error);
         });
 
         // Transmisión instantánea en tiempo real por WebSockets
@@ -5737,11 +5738,11 @@ function toggleTaskComplete(taskId) {
         if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
         
         // Cloud Sync
-        if (window.isSupabaseActive()) {
-            const client = window.SUPABASE_CONFIG.client;
+        if (window.isFirebaseActive()) {
+            const client = window.FIREBASE_CONFIG.client;
             const dbStatus = newStatus === 'completed' ? 'completada' : 'pendiente';
             client.from('tasks').update({ estado: dbStatus }).eq('id', taskId).then(({ error }) => {
-                if (error) console.warn("Error updating task status on Supabase:", error);
+                if (error) console.warn("Error updating task status on Firebase:", error);
             });
 
             if (window.chatRealtimeChannel) {
@@ -5781,10 +5782,10 @@ function deleteTask(taskId) {
     if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
     
     // Cloud Sync
-    if (window.isSupabaseActive()) {
-        const client = window.SUPABASE_CONFIG.client;
+    if (window.isFirebaseActive()) {
+        const client = window.FIREBASE_CONFIG.client;
         client.from('tasks').delete().eq('id', taskId).then(({ error }) => {
-            if (error) console.warn("Error deleting task on Supabase:", error);
+            if (error) console.warn("Error deleting task on Firebase:", error);
         });
 
         if (window.chatRealtimeChannel) {
@@ -5872,8 +5873,8 @@ function handleSaveTaskEdit(event) {
         updateGlobalStats();
         if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
 
-        if (window.isSupabaseActive()) {
-            const client = window.SUPABASE_CONFIG.client;
+        if (window.isFirebaseActive()) {
+            const client = window.FIREBASE_CONFIG.client;
             const dbPriority = priority.charAt(0).toUpperCase() + priority.slice(1).toLowerCase();
             client.from('tasks').update({
                 titulo: title,
@@ -5881,7 +5882,7 @@ function handleSaveTaskEdit(event) {
                 prioridad: dbPriority,
                 asignado_nombre: assignee || 'Sin asignar'
             }).eq('id', taskId).then(({ error }) => {
-                if (error) console.warn("Error updating task on Supabase:", error);
+                if (error) console.warn("Error updating task on Firebase:", error);
             });
 
             if (window.chatRealtimeChannel) {
@@ -6522,8 +6523,8 @@ function handleCreateChatGroup(event) {
         }).catch(err => console.warn("Broadcast group msg warning:", err));
     }
 
-    if (window.isSupabaseActive()) {
-        const client = window.SUPABASE_CONFIG.client;
+    if (window.isFirebaseActive()) {
+        const client = window.FIREBASE_CONFIG.client;
         const validUUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const rawUserId = appState.currentUser?.id;
         const validUserId = (rawUserId && validUUIDRegex.test(rawUserId)) ? rawUserId : null;
@@ -6535,7 +6536,7 @@ function handleCreateChatGroup(event) {
             emisor_role: 'sistema',
             contenido: sysMsgText
         }]).then(({ error }) => {
-            if (error) console.warn("Notice: group message to Supabase:", error.message || error);
+            if (error) console.warn("Notice: group message to Firebase:", error.message || error);
         });
     }
 };
@@ -6607,8 +6608,8 @@ function handleAddChatMember(event) {
     }
 
     // Cloud Realtime Sync for System Member Addition
-    if (window.isSupabaseActive()) {
-        const client = window.SUPABASE_CONFIG.client;
+    if (window.isFirebaseActive()) {
+        const client = window.FIREBASE_CONFIG.client;
         const validUUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const rawUserId = appState.currentUser?.id;
         const validUserId = (rawUserId && validUUIDRegex.test(rawUserId)) ? rawUserId : null;
@@ -6620,7 +6621,7 @@ function handleAddChatMember(event) {
             emisor_role: 'sistema',
             contenido: sysMsgText
         }]).then(({ error }) => {
-            if (error) console.warn("Notice: add member message to Supabase:", error.message || error);
+            if (error) console.warn("Notice: add member message to Firebase:", error.message || error);
         });
     }
 };
@@ -6893,10 +6894,10 @@ async function downloadChatAttachment(msgId, event) {
         return;
     }
 
-    // Si falta la dataUrl en memoria, obtener directamente de Supabase
-    if (window.isSupabaseActive()) {
+    // Si falta la dataUrl en memoria, obtener directamente de Firebase
+    if (window.isFirebaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG.client;
+            const client = window.FIREBASE_CONFIG.client;
             const { data, error } = await client.from('messages').select('contenido').eq('id', msgId).single();
             if (data && data.contenido) {
                 const parsed = parseMessageContent(data.contenido);
@@ -6907,7 +6908,7 @@ async function downloadChatAttachment(msgId, event) {
                 }
             }
         } catch (e) {
-            console.warn("Error fetching attachment from Supabase:", e);
+            console.warn("Error fetching attachment from Firebase:", e);
         }
     }
 
@@ -6991,16 +6992,16 @@ function handleSendChatMessage(event) {
         }).catch(err => console.warn("Broadcast warning:", err));
     }
     
-    // 2. Persistencia en Base de Datos Supabase (PostgreSQL messages)
-    if (window.isSupabaseActive()) {
-        const client = window.SUPABASE_CONFIG.client;
+    // 2. Persistencia en Base de Datos Firebase (PostgreSQL messages)
+    if (window.isFirebaseActive()) {
+        const client = window.FIREBASE_CONFIG.client;
         const validUUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const rawUserId = appState.currentUser?.id;
         const validUserId = (rawUserId && validUUIDRegex.test(rawUserId)) ? rawUserId : null;
 
-        let supabaseContent = text;
+        let cloudContent = text;
         if (attachment) {
-            supabaseContent = JSON.stringify({
+            cloudContent = JSON.stringify({
                 _type: 'attachment_msg',
                 text: text,
                 attachment: {
@@ -7019,7 +7020,7 @@ function handleSendChatMessage(event) {
             emisor_id: validUserId,
             emisor_nombre: senderName,
             emisor_role: senderRole,
-            contenido: supabaseContent
+            contenido: cloudContent
         }]).then(({ error }) => {
             if (error) console.warn("Notice: Message cloud sync to PostgreSQL:", error.message || error);
         });
@@ -7360,7 +7361,7 @@ async function startEditingConsecutivo() {
         }
     } catch (e) {}
 
-    // Notificar a otras máquinas por WebSockets y persistir en Supabase
+    // Notificar a otras máquinas por WebSockets y persistir en Firebase
     broadcastConsecutivoLockState(true, currentUserName, currentUserId, lockTime);
     syncConsecutivoLockToCloud(true, currentUserName, currentUserId, lockTime);
 
@@ -7560,8 +7561,8 @@ window.broadcastConsecutivoLockState = broadcastConsecutivoLockState;
 
 async function syncConsecutivoLockToCloud(isLocked, userName, userId, timestamp) {
     window.syncConsecutivoLockToCloud = syncConsecutivoLockToCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         await client.from('messages').insert({
@@ -7583,8 +7584,8 @@ window.syncConsecutivoLockToCloud = syncConsecutivoLockToCloud;
 
 async function fetchConsecutivoLockFromCloud() {
     window.fetchConsecutivoLockFromCloud = fetchConsecutivoLockFromCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         const { data: msgs, error } = await client.from('messages')
@@ -8860,17 +8861,17 @@ function exitArchiveMode() {
 
 
 // ===============// =================================================================================
-// 12. SUPABASE CLOUD AUTHENTICATION & REALTIME SYNCHRONIZATION
+// 12. FIREBASE CLOUD AUTHENTICATION & REALTIME SYNCHRONIZATION
 // =================================================================================
 
 let cloudProfilesCache = [];
 
 async function initAuthAndRealtime() {
-    const client = window.initSupabaseClient();
+    const client = window.initFirebaseClient();
     updateCloudStatusUI(false, null);
     
     if (!client) {
-        console.log("ℹ️ [Rodipack] Modo Local / Demostración activo. Conecta Supabase en 'Conectar Nube'.");
+        console.log("ℹ️ [Rodipack] Modo Local / Demostración activo. Conecta Firebase en 'Conectar Nube'.");
         return;
     }
     
@@ -8928,7 +8929,7 @@ async function initAuthAndRealtime() {
         // Setup WebSockets Realtime Subscriptions
         setupRealtimeSubscriptions();
         
-        // Fetch Cloud Data from Supabase
+        // Fetch Cloud Data from Firebase
         await fetchCloudData();
     } catch (err) {
         console.warn("⚠️ Error initializing cloud auth:", err);
@@ -8936,8 +8937,8 @@ async function initAuthAndRealtime() {
 }
 
 async function handleUserSession(user) {
-    if (!window.isSupabaseActive() || !user) return;
-    const client = window.SUPABASE_CONFIG.client;
+    if (!window.isFirebaseActive() || !user) return;
+    const client = window.FIREBASE_CONFIG.client;
     const userEmail = (user.email || '').toLowerCase();
     const userId = user.id || user.uid || '';
     
@@ -9035,8 +9036,8 @@ function updateCloudStatusUI(isConnected, user) {
 }
 
 function setupRealtimeSubscriptions() {
-    if (!window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG.client;
+    if (!window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG.client;
 
     // Remover canal previo si existiera para evitar duplicados
     if (window.chatRealtimeChannel) {
@@ -9347,7 +9348,7 @@ function setupRealtimeSubscriptions() {
                 }
             }
             if (docData && docData.dataUrl && !isFakeDummyPdf(docData.dataUrl)) {
-                const client = window.SUPABASE_CONFIG?.client;
+                const client = window.FIREBASE_CONFIG?.client;
                 if (client) {
                     await client.from('messages').insert({
                         chat_id: `__doc_${req.projectId}_${req.docKey}__`,
@@ -9508,7 +9509,7 @@ function setupRealtimeSubscriptions() {
     window.chatRealtimeChannel.on('broadcast', { event: 'document_ready' }, async payload => {
         const data = payload.payload;
         if (!data || !data.projectId || !data.docKey) return;
-        const client = window.SUPABASE_CONFIG?.client;
+        const client = window.FIREBASE_CONFIG?.client;
         if (!client) return;
         try {
             const { data: rows } = await client.from('messages')
@@ -9959,7 +9960,7 @@ function setupRealtimeSubscriptions() {
     if (!window._realtimeHeartbeatInterval) {
         window._realtimeHeartbeatInterval = setInterval(async () => {
             try {
-                if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+                if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
 
                 // Si el canal websocket se desconectó o quedó en error, re-suscribir automáticamente
                 if (window.chatRealtimeChannel && (window.chatRealtimeChannel.state === 'closed' || window.chatRealtimeChannel.state === 'errored')) {
@@ -10146,8 +10147,8 @@ if (!window._collabEditingEventsBound) {
 }
 
 async function fetchCloudData() {
-    if (!window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG.client;
+    if (!window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG.client;
     
     try {
         // Cargar perfiles exclusivamente desde Firebase (profiles)
@@ -10221,7 +10222,7 @@ async function fetchCloudData() {
             await window.fetchAdminConceptsFromCloud();
         }
         
-        // Sincronizar mensajes de chat: 100% de la base de datos de Supabase (sin datos inventados ni locales obsoletos)
+        // Sincronizar mensajes de chat: 100% de la base de datos de Firebase (sin datos inventados ni locales obsoletos)
         // Se excluyen en el servidor las filas internas (chat_id que empieza con "__": snapshots y documentos)
         // y se piden los 1000 mas RECIENTES (PostgREST limita a 1000 filas; antes se perdian los mensajes nuevos).
         const { data: msgsDesc, error: mError } = await client.from('messages')
@@ -10273,8 +10274,8 @@ async function fetchCloudData() {
 }
 
 async function fetchTasksFromCloud() {
-    if (!window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG.client;
+    if (!window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG.client;
     if (!appState.deletedTaskIds) appState.deletedTaskIds = JSON.parse(localStorage.getItem('rp_deleted_task_ids')) || [];
     
     try {
@@ -10336,7 +10337,7 @@ async function fetchTasksFromCloud() {
             mergedMap.set(sig, lt);
         });
 
-        // 2. Fusionar tareas provenientes de Supabase
+        // 2. Fusionar tareas provenientes de Firebase
         filteredCloudTasks.forEach(ct => {
             const cleanTitle = (ct.title || '').trim().toLowerCase();
             const cleanDesc = (ct.desc || '').trim().toLowerCase();
@@ -10376,7 +10377,7 @@ async function fetchTasksFromCloud() {
         renderTasks();
         updateGlobalStats();
 
-        // Subir a Supabase cualquier tarea local no sincronizada
+        // Subir a Firebase cualquier tarea local no sincronizada
         if (appState.currentRole === 'gerente') {
             const cloudTitleSet = new Set((dbTasks || []).map(t => (t.titulo || '').trim().toLowerCase()));
             appState.tasks.forEach(t => {
@@ -10415,14 +10416,14 @@ function updateAssigneeDropdown(profiles) {
 
 // Reconexión y re-sincronización automática para Tablets (iPad/Android) al desbloquear pantalla
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && window.isSupabaseActive()) {
+    if (document.visibilityState === 'visible' && window.isFirebaseActive()) {
         console.log("⚡ [Tablet/Pantalla Activa]: Re-sincronizando chat y tareas en vivo...");
         fetchCloudData();
     }
 });
 
 window.addEventListener('online', () => {
-    if (window.isSupabaseActive()) {
+    if (window.isFirebaseActive()) {
         console.log("⚡ [Red Reconectada]: Restaurando conexión en vivo...");
         setupRealtimeSubscriptions();
         fetchCloudData();
@@ -10431,7 +10432,7 @@ window.addEventListener('online', () => {
 
 // Sincronización periódica en segundo plano para asegurar que tablets y móviles nunca pierdan mensajes
 setInterval(() => {
-    if (window.isSupabaseActive() && document.visibilityState === 'visible') {
+    if (window.isFirebaseActive() && document.visibilityState === 'visible') {
         fetchCloudData();
     }
 }, 8000);
@@ -10455,7 +10456,7 @@ function openAuthModal() {
     const cloudIndicator = document.getElementById("modal-cloud-indicator");
 
     if (cloudIndicator) {
-        if (window.isSupabaseActive()) {
+        if (window.isFirebaseActive()) {
             cloudIndicator.innerHTML = '<span style="width: 7px; height: 7px; border-radius: 50%; background: #10B981;"></span> Nube Activa';
             cloudIndicator.style.color = '#10B981';
             cloudIndicator.style.background = '#ECFDF5';
@@ -10508,10 +10509,10 @@ function switchAuthTab(tabName) {
     
     // Auto-fill config inputs if switching to config
     if (tabName === 'config') {
-        const urlInput = document.getElementById("config-supabase-url");
-        const keyInput = document.getElementById("config-supabase-key");
-        if (urlInput) urlInput.value = window.SUPABASE_CONFIG.URL || "";
-        if (keyInput) keyInput.value = window.SUPABASE_CONFIG.ANON_KEY || "";
+        const urlInput = document.getElementById("config-firebase-url");
+        const keyInput = document.getElementById("config-firebase-key");
+        if (urlInput) urlInput.value = window.FIREBASE_CONFIG.URL || "";
+        if (keyInput) keyInput.value = window.FIREBASE_CONFIG.ANON_KEY || "";
     }
 };
 
@@ -10539,7 +10540,7 @@ function toggleNewUserForm() {
         const isOpening = (formContainer.style.display === "none" || formContainer.style.display === "");
         formContainer.style.display = isOpening ? "block" : "none";
         if (isOpening) {
-            const regForm = document.getElementById("form-firebase-register") || document.getElementById("form-supabase-register");
+            const regForm = document.getElementById("form-firebase-register") || document.getElementById("form-firebase-register");
             if (regForm) regForm.reset();
             const errEl = document.getElementById("reg-error-msg");
             if (errEl) errEl.style.display = "none";
@@ -10750,8 +10751,8 @@ async function loadProfilesList() {
 
 async function handleFirebaseLogin(event) {
     window.handleFirebaseLogin = handleFirebaseLogin;
-    window.handleSupabaseLogin = handleFirebaseLogin;
-    const handleSupabaseLogin = handleFirebaseLogin;
+    window.handleFirebaseLogin = handleFirebaseLogin;
+    const handleFirebaseLogin = handleFirebaseLogin;
     event.preventDefault();
     const email = document.getElementById("login-email").value.trim();
     const password = document.getElementById("login-password").value;
@@ -10786,7 +10787,7 @@ async function handleFirebaseLogin(event) {
         if (typeof loadProfilesList === 'function') loadProfilesList();
     };
 
-    if (!window.isSupabaseActive()) {
+    if (!window.isFirebaseActive()) {
         if (matchedProfile && matchedProfile.password === password) {
             await doLocalLoginFallback();
             return;
@@ -10802,7 +10803,7 @@ async function handleFirebaseLogin(event) {
     btnSubmit.innerHTML = "<span class='material-symbols-outlined'>hourglass_empty</span> Verificando...";
     
     try {
-        const client = window.SUPABASE_CONFIG.client;
+        const client = window.FIREBASE_CONFIG.client;
         const { data, error } = await client.auth.signInWithPassword({ email, password });
         
         if (error) {
@@ -10869,8 +10870,8 @@ async function handleFirebaseLogin(event) {
 
 async function handleFirebaseRegister(event) {
     window.handleFirebaseRegister = handleFirebaseRegister;
-    window.handleSupabaseRegister = handleFirebaseRegister;
-    const handleSupabaseRegister = handleFirebaseRegister;
+    window.handleFirebaseRegister = handleFirebaseRegister;
+    const handleFirebaseRegister = handleFirebaseRegister;
     event.preventDefault();
     let nombre = document.getElementById("reg-nombre").value.trim();
     const email = document.getElementById("reg-email").value.trim();
@@ -10902,7 +10903,7 @@ async function handleFirebaseRegister(event) {
     }
 
     let newId = generateUUID();
-    const regForm = document.getElementById("form-firebase-register") || document.getElementById("form-supabase-register");
+    const regForm = document.getElementById("form-firebase-register") || document.getElementById("form-firebase-register");
 
     if (!window.isFirebaseActive()) {
         if (errorEl) {
@@ -11208,15 +11209,15 @@ async function handleSaveProfileEdit(event) {
         }
     }
     
-    // 3. Actualizar en Supabase si la conexión está activa
-    if (window.isSupabaseActive && window.isSupabaseActive()) {
+    // 3. Actualizar en Firebase si la conexión está activa
+    if (window.isFirebaseActive && window.isFirebaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG?.client;
+            const client = window.FIREBASE_CONFIG?.client;
             if (client) {
                 await client.from('profiles').update({ nombre, rol, departamento, updated_at: updatedAt }).eq('email', emailLower);
             }
         } catch (err) {
-            console.warn("Supabase profile update warning:", err);
+            console.warn("Firebase profile update warning:", err);
         }
     }
     
@@ -11273,8 +11274,8 @@ async function handleGlobalLoginSubmit(event) {
     btnSubmit.innerHTML = "<span class='material-symbols-outlined'>hourglass_empty</span> Validando...";
 
     try {
-        if (window.isSupabaseActive()) {
-            const client = window.SUPABASE_CONFIG.client;
+        if (window.isFirebaseActive()) {
+            const client = window.FIREBASE_CONFIG.client;
             const { data, error } = await client.auth.signInWithPassword({ email, password });
             
             if (error) {
@@ -11368,10 +11369,10 @@ async function handleGlobalLoginSubmit(event) {
 
 async function handleFirebaseLogout() {
     window.handleFirebaseLogout = handleFirebaseLogout;
-    window.handleSupabaseLogout = handleFirebaseLogout;
+    window.handleFirebaseLogout = handleFirebaseLogout;
     try {
-        if (window.isSupabaseActive()) {
-            await window.SUPABASE_CONFIG.client.auth.signOut();
+        if (window.isFirebaseActive()) {
+            await window.FIREBASE_CONFIG.client.auth.signOut();
         }
     } catch (err) {
         console.warn("Logout error:", err);
@@ -11461,12 +11462,12 @@ function openInteractiveResetModal() {
     const errStep3 = document.getElementById("reset-step3-error");
     if (errStep3) errStep3.style.display = "none";
     
-    if (window.isSupabaseActive()) {
+    if (window.isFirebaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG.client;
+            const client = window.FIREBASE_CONFIG.client;
             client.auth.signInWithOtp({ email: userEmail, options: { shouldCreateUser: false } });
         } catch (e) {
-            console.warn("Supabase OTP trigger:", e);
+            console.warn("Firebase OTP trigger:", e);
         }
     }
     
@@ -11567,8 +11568,8 @@ async function saveNewVerifiedPassword(event) {
     btnSubmit.innerHTML = "<span class='material-symbols-outlined'>sync</span> Guardando en Central...";
     
     try {
-        if (window.isSupabaseActive()) {
-            const client = window.SUPABASE_CONFIG.client;
+        if (window.isFirebaseActive()) {
+            const client = window.FIREBASE_CONFIG.client;
             const { error } = await client.auth.updateUser({ password: pass1 });
             if (error) {
                 if (errorEl) {
@@ -11659,7 +11660,7 @@ async function handleSaveMyProfile(event) {
         localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
     } catch (e) {}
 
-    // 3. Guardar en Firebase / Supabase wrapper
+    // 3. Guardar en Firebase / Firebase wrapper
     if (window.isFirebaseActive && window.isFirebaseActive()) {
         try {
             const client = window.FIREBASE_CONFIG?.client;
@@ -11678,9 +11679,9 @@ async function handleSaveMyProfile(event) {
             console.warn("Firebase profile update error:", err);
         }
     }
-    if (window.isSupabaseActive && window.isSupabaseActive()) {
+    if (window.isFirebaseActive && window.isFirebaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG?.client;
+            const client = window.FIREBASE_CONFIG?.client;
             if (client) {
                 await client.from('profiles').upsert({
                     id: uid,
@@ -12070,10 +12071,10 @@ async function loadEmailsData() {
     window.loadEmailsData = loadEmailsData;
     let loadedEmails = null;
 
-    // 1. Intentar cargar desde Supabase si el cliente está disponible
-    if (typeof window.isSupabaseActive === 'function' && window.isSupabaseActive()) {
+    // 1. Intentar cargar desde Firebase si el cliente está disponible
+    if (typeof window.isFirebaseActive === 'function' && window.isFirebaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG?.client;
+            const client = window.FIREBASE_CONFIG?.client;
             if (client) {
                 const { data, error } = await client
                     .from('emails')
@@ -12082,15 +12083,15 @@ async function loadEmailsData() {
 
                 if (!error && Array.isArray(data) && data.length > 0) {
                     loadedEmails = data;
-                    console.log("📥 [Rodipack Emails] Correos sincronizados desde Supabase:", data.length);
+                    console.log("📥 [Rodipack Emails] Correos sincronizados desde Firebase:", data.length);
                 }
             }
         } catch (e) {
-            console.warn("⚠️ [Rodipack Emails] No se pudo leer de Supabase, usando respaldo local:", e);
+            console.warn("⚠️ [Rodipack Emails] No se pudo leer de Firebase, usando respaldo local:", e);
         }
     }
 
-    // 2. Si no hubo datos de Supabase, leer de localStorage
+    // 2. Si no hubo datos de Firebase, leer de localStorage
     if (!loadedEmails) {
         const stored = localStorage.getItem('rp_emails_data');
         if (stored) {
@@ -12107,10 +12108,10 @@ async function loadEmailsData() {
         loadedEmails = getDefaultSeedEmails();
         localStorage.setItem('rp_emails_data', JSON.stringify(loadedEmails));
         
-        // Si Supabase está activo, guardar las semillas en la nube
-        if (typeof window.isSupabaseActive === 'function' && window.isSupabaseActive()) {
+        // Si Firebase está activo, guardar las semillas en la nube
+        if (typeof window.isFirebaseActive === 'function' && window.isFirebaseActive()) {
             try {
-                const client = window.SUPABASE_CONFIG?.client;
+                const client = window.FIREBASE_CONFIG?.client;
                 if (client) {
                     await client.from('emails').upsert(loadedEmails);
                 }
@@ -12122,10 +12123,10 @@ async function loadEmailsData() {
     updateEmailStatsAndBadges();
 };
 
-function setupSupabaseEmailsRealtime() {
-    window.setupSupabaseEmailsRealtime = setupSupabaseEmailsRealtime;
-    if (typeof window.isSupabaseActive !== 'function' || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+function setupFirebaseEmailsRealtime() {
+    window.setupFirebaseEmailsRealtime = setupFirebaseEmailsRealtime;
+    if (typeof window.isFirebaseActive !== 'function' || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client || typeof client.channel !== 'function') return;
 
     try {
@@ -12469,10 +12470,10 @@ function selectEmail(id) {
         saveToStorage();
         updateEmailStatsAndBadges();
 
-        // Actualizar en Supabase si está disponible
-        if (typeof window.isSupabaseActive === 'function' && window.isSupabaseActive()) {
+        // Actualizar en Firebase si está disponible
+        if (typeof window.isFirebaseActive === 'function' && window.isFirebaseActive()) {
             try {
-                window.SUPABASE_CONFIG?.client
+                window.FIREBASE_CONFIG?.client
                     ?.from('emails')
                     ?.update({ leido: true, updated_at: new Date().toISOString() })
                     ?.eq('id', email.id)
@@ -12635,9 +12636,9 @@ function toggleEmailStar(id, event) {
         }
     }
 
-    if (typeof window.isSupabaseActive === 'function' && window.isSupabaseActive()) {
+    if (typeof window.isFirebaseActive === 'function' && window.isFirebaseActive()) {
         try {
-            window.SUPABASE_CONFIG?.client
+            window.FIREBASE_CONFIG?.client
                 ?.from('emails')
                 ?.update({ destacado: email.destacado, updated_at: new Date().toISOString() })
                 ?.eq('id', email.id)
@@ -12664,9 +12665,9 @@ function toggleCurrentEmailUnread() {
     updateEmailStatsAndBadges();
     renderEmailList();
 
-    if (typeof window.isSupabaseActive === 'function' && window.isSupabaseActive()) {
+    if (typeof window.isFirebaseActive === 'function' && window.isFirebaseActive()) {
         try {
-            window.SUPABASE_CONFIG?.client
+            window.FIREBASE_CONFIG?.client
                 ?.from('emails')
                 ?.update({ leido: email.leido, updated_at: new Date().toISOString() })
                 ?.eq('id', email.id)
@@ -12690,17 +12691,17 @@ function deleteEmail(id) {
         if (!confirm("¿Deseas eliminar este correo de manera permanente?")) return;
         appState.emails = appState.emails.filter(e => e.id !== id);
 
-        if (typeof window.isSupabaseActive === 'function' && window.isSupabaseActive()) {
+        if (typeof window.isFirebaseActive === 'function' && window.isFirebaseActive()) {
             try {
-                window.SUPABASE_CONFIG?.client?.from('emails')?.delete()?.eq('id', id)?.then();
+                window.FIREBASE_CONFIG?.client?.from('emails')?.delete()?.eq('id', id)?.then();
             } catch (e) {}
         }
     } else {
         // Mover a papelera
         email.carpeta = 'trash';
-        if (typeof window.isSupabaseActive === 'function' && window.isSupabaseActive()) {
+        if (typeof window.isFirebaseActive === 'function' && window.isFirebaseActive()) {
             try {
-                window.SUPABASE_CONFIG?.client
+                window.FIREBASE_CONFIG?.client
                     ?.from('emails')
                     ?.update({ carpeta: 'trash', updated_at: new Date().toISOString() })
                     ?.eq('id', id)
@@ -13128,15 +13129,15 @@ async function handleSendComposeEmail(event) {
     saveToStorage();
     updateEmailStatsAndBadges();
 
-    // Guardar en Supabase si está disponible
-    if (typeof window.isSupabaseActive === 'function' && window.isSupabaseActive()) {
+    // Guardar en Firebase si está disponible
+    if (typeof window.isFirebaseActive === 'function' && window.isFirebaseActive()) {
         try {
-            const client = window.SUPABASE_CONFIG?.client;
+            const client = window.FIREBASE_CONFIG?.client;
             if (client) {
                 await client.from('emails').insert([emailSentItem, emailInboxItem]);
             }
         } catch (e) {
-            console.warn("[Rodipack Emails] Error al insertar en Supabase:", e);
+            console.warn("[Rodipack Emails] Error al insertar en Firebase:", e);
         }
     }
 
@@ -13277,9 +13278,9 @@ async function sendQuickReply() {
 
     if (input) input.value = '';
 
-    if (typeof window.isSupabaseActive === 'function' && window.isSupabaseActive()) {
+    if (typeof window.isFirebaseActive === 'function' && window.isFirebaseActive()) {
         try {
-            await window.SUPABASE_CONFIG?.client?.from('emails')?.insert([replyEmail]);
+            await window.FIREBASE_CONFIG?.client?.from('emails')?.insert([replyEmail]);
         } catch (e) {}
     }
 
@@ -13377,7 +13378,8 @@ function syncAllOperacionesToConsecutivo() {
         'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
         'RDP261074-', 'RDP261075-',
         'RDP2610182-F', 'RDP2610182',
-        'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
+        'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1',
+        'RDP2611199', 'RDP2611200', 'RDP2611310', 'RDP2611311', 'RDP2611312', 'RDP2611313', 'RDP2611314', 'RDP2611315', 'RDP2611316', 'RDP2611317'
     ]);
 
     if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos) || appState.operacionesProyectos.length === 0) {
@@ -13690,8 +13692,8 @@ function saveOperacionesStorage(skipProveedoresSync = false) {
 let _syncOperacionesTimer = null;
 function syncOperacionesToCloud(forceImmediate = false) {
     window.syncOperacionesToCloud = syncOperacionesToCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     const cleanProjectsForCloud = (projList) => stripLargeDocsFromProjectList(projList);
@@ -13741,7 +13743,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
                 console.warn("⚠️ Error saving snapshot to messages:", errSnap);
             }
 
-            // B. Si existe la tabla operaciones en Firebase/Supabase, guardar cada proyecto de forma independiente
+            // B. Si existe la tabla operaciones en Firebase/Firebase, guardar cada proyecto de forma independiente
             for (const proj of safeList) {
                 try {
                     const cNum = proj.consecutivo || proj.numConsecutivo || proj.id;
@@ -13764,7 +13766,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
                 }
             }
         } catch (err) {
-            console.warn("⚠️ Error persisting operaciones to Supabase:", err);
+            console.warn("⚠️ Error persisting operaciones to Firebase:", err);
         }
     };
 
@@ -13780,8 +13782,8 @@ let _syncConsecutivoTimer = null;
 function syncConsecutivoToCloud(forceImmediate = false) {
     window.syncConsecutivoToCloud = syncConsecutivoToCloud;
     window._lastLocalConsecutivoSyncTime = Date.now();
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     const list = appState.consecutivo || [];
@@ -13815,7 +13817,7 @@ function syncConsecutivoToCloud(forceImmediate = false) {
                 emisor_role: 'sistema'
             });
         } catch (errSnap) {
-            console.warn("⚠️ Error saving consecutivo snapshot to Supabase:", errSnap);
+            console.warn("⚠️ Error saving consecutivo snapshot to Firebase:", errSnap);
         }
     };
 
@@ -13830,10 +13832,10 @@ window.syncConsecutivoToCloud = syncConsecutivoToCloud;
 
 async function fetchConsecutivoFromCloud() {
     window.fetchConsecutivoFromCloud = fetchConsecutivoFromCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
     if (appState.isEditingConsecutivo || document.querySelector(".st-custom-dropdown-wrap.open")) return;
     if (Date.now() - (window._lastLocalConsecutivoSyncTime || 0) < 5000) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     try {
@@ -13912,10 +13914,10 @@ window.mergeConsecutivoFromCloud = mergeConsecutivoFromCloud;
 
 async function fetchOperacionesFromCloud() {
     window.fetchOperacionesFromCloud = fetchOperacionesFromCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
     if (appState.isEditingOperacionesDetail) return;
     if (Date.now() - (window._lastLocalOperacionesSyncTime || 0) < 5000) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
 
     try {
@@ -14579,9 +14581,9 @@ function cleanOperacionesLegacyData(proyectos) {
         });
     }
 
-    // Eliminar de Supabase en segundo plano si está conectado
-    if (window.isSupabaseActive && window.isSupabaseActive()) {
-        const client = window.SUPABASE_CONFIG?.client;
+    // Eliminar de Firebase en segundo plano si está conectado
+    if (window.isFirebaseActive && window.isFirebaseActive()) {
+        const client = window.FIREBASE_CONFIG?.client;
         if (client) {
             try {
                 const ghostIdsToDelete = ['RDP261074-', 'RDP261075-', 'RDP-PRUEBA', 'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PROV-1'];
@@ -14622,13 +14624,15 @@ function cleanOperacionesLegacyData(proyectos) {
             p.numOC = '';
         }
 
-        if (!p.numConsecutivo || !p.numConsecutivo.startsWith('RDP') || p.numConsecutivo.includes('112') || p.numConsecutivo.includes('110') || p.numConsecutivo.includes('111')) {
+        const existingCons = String(p.numConsecutivo || p.consecutivo || p.numProyecto || p.id || '').trim();
+        if (!existingCons || !existingCons.startsWith('RDP')) {
             p.numConsecutivo = generateProjectConsecutivo(p.tipoProyecto);
             p.consecutivo = p.numConsecutivo;
+        } else {
+            p.numConsecutivo = existingCons;
+            p.consecutivo = existingCons;
         }
-        if (p.consecutivo || p.numConsecutivo) {
-            p.numProyecto = p.consecutivo || p.numConsecutivo;
-        }
+        p.numProyecto = p.consecutivo;
 
         // Saneamiento de porcentajes de retención en proveedoresClaves (evitar que montos en pesos se lean como %)
         if (p.proveedoresClaves && Array.isArray(p.proveedoresClaves)) {
@@ -14662,7 +14666,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_02_ingresos_pc_v1';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_firebase_fix_v2';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -14866,8 +14870,8 @@ window.broadcastOperacionesProjectLock = broadcastOperacionesProjectLock;
 
 async function syncOperacionesProjectLocksToCloud() {
     window.syncOperacionesProjectLocksToCloud = syncOperacionesProjectLocksToCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         const locks = ensureOperacionesLocksMap();
@@ -14884,8 +14888,8 @@ async function syncOperacionesProjectLocksToCloud() {
 
 async function fetchOperacionesProjectLocksFromCloud() {
     window.fetchOperacionesProjectLocksFromCloud = fetchOperacionesProjectLocksFromCloud;
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         const { data: msgs } = await client.from('messages')
@@ -15351,8 +15355,8 @@ async function triggerSystemReleaseEviction(customReleaseId = null) {
         } catch (e) {}
     }
 
-    if (window.isSupabaseActive && window.isSupabaseActive()) {
-        const client = window.SUPABASE_CONFIG?.client;
+    if (window.isFirebaseActive && window.isFirebaseActive()) {
+        const client = window.FIREBASE_CONFIG?.client;
         if (client) {
             try {
                 await client.from('messages').insert({
@@ -15401,8 +15405,8 @@ async function checkSystemReleaseFromCloud() {
         evictUserFromProjectOnSystemUpdate(SYSTEM_RELEASE_VERSION);
     }
 
-    if (!window.isSupabaseActive || !window.isSupabaseActive()) return;
-    const client = window.SUPABASE_CONFIG?.client;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
     if (!client) return;
     try {
         const { data: msgs } = await client.from('messages')
@@ -15913,9 +15917,9 @@ function eliminarProyectoOperaciones(projectId, event) {
 
     saveOperacionesStorage();
 
-    if (window.isSupabaseActive && window.isSupabaseActive()) {
+    if (window.isFirebaseActive && window.isFirebaseActive()) {
         try {
-            window.SUPABASE_CONFIG?.client?.from('operaciones')?.delete()?.eq('id', projectId)?.then(() => {}, () => {});
+            window.FIREBASE_CONFIG?.client?.from('operaciones')?.delete()?.eq('id', projectId)?.then(() => {}, () => {});
         } catch (e) {}
     }
 
@@ -19094,8 +19098,8 @@ window.DocStorage = {
                 if (stored && stored.uploaded && stored.dataUrl && !isFakeDummyPdf(stored.dataUrl)) {
                     p.documentos[k] = Object.assign({}, cur || {}, stored);
                     restoredAny = true;
-                } else if (cur && cur.uploaded && window.isSupabaseActive && window.isSupabaseActive()) {
-                    const client = window.SUPABASE_CONFIG?.client;
+                } else if (cur && cur.uploaded && window.isFirebaseActive && window.isFirebaseActive()) {
+                    const client = window.FIREBASE_CONFIG?.client;
                     if (client) {
                         try {
                             const candidateKeys = [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean);
@@ -19315,9 +19319,9 @@ function uploadDocItem(docKey) {
                     } catch (eStorage) {}
                 }
 
-                // 2. Guardar en slot dedicado en Firebase/Supabase (solo si < 800KB para respetar límite Firestore 1MB)
-                if (window.isSupabaseActive && window.isSupabaseActive()) {
-                    const client = window.SUPABASE_CONFIG?.client;
+                // 2. Guardar en slot dedicado en Firebase/Firebase (solo si < 800KB para respetar límite Firestore 1MB)
+                if (window.isFirebaseActive && window.isFirebaseActive()) {
+                    const client = window.FIREBASE_CONFIG?.client;
                     if (client) {
                         try {
                             const cloudDoc = (dataUrl && dataUrl.length < 800000)
@@ -19433,8 +19437,8 @@ async function viewDocItem(docKey) {
     }
 
     // 2. Si no está en IndexedDB, recuperar de la nube (slot de mensajes)
-    if (!dataUrl && window.isSupabaseActive && window.isSupabaseActive()) {
-        const client = window.SUPABASE_CONFIG?.client;
+    if (!dataUrl && window.isFirebaseActive && window.isFirebaseActive()) {
+        const client = window.FIREBASE_CONFIG?.client;
         if (client) {
             try {
                 if (typeof showCustomNotification === 'function') {
