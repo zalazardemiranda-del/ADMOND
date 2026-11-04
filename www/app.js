@@ -14806,7 +14806,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_consecutivo_totales_v6';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_bloqueo_abrir_v7';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -14896,51 +14896,16 @@ function isLockOwnedByMe(lock) {
     if (!lock || !lock.isLocked) return false;
     const myInfo = getOperacionesCurrentUserInfo();
 
-    // 1. Coincidencia por clientId de navegador
-    if (lock.clientId && myInfo.clientId && lock.clientId === myInfo.clientId) {
-        return true;
+    // 1. REGLA ESTRICTA DE SESIÓN / DISPOSITIVO:
+    // Cada navegador, pestaña o dispositivo tiene un clientId único.
+    // Si el candado tiene clientId, solo le pertenece al dispositivo que lo abrió.
+    if (lock.clientId && myInfo.clientId) {
+        return lock.clientId === myInfo.clientId;
     }
 
-    // 2. Coincidencia por userId
-    if (lock.userId && myInfo.userId && String(lock.userId).trim().toLowerCase() === String(myInfo.userId).trim().toLowerCase()) {
-        return true;
-    }
-
-    // 3. Coincidencia por email
-    const myEmail = (myInfo.userEmail || '').trim().toLowerCase();
-    const lockEmail = (lock.userEmail || '').trim().toLowerCase();
-    if (myEmail && lockEmail && myEmail === lockEmail) {
-        return true;
-    }
-    if (myEmail && lock.userId && myEmail === String(lock.userId).trim().toLowerCase()) {
-        return true;
-    }
-
-    // Si uno es Diego y el otro no es Diego, son usuarios distintos: NUNCA coinciden
-    const isDiegoMe = myEmail.includes('diego') || (myInfo.userName || '').toLowerCase().includes('diego') || String(myInfo.userId || '').toLowerCase().includes('diego');
-    const isDiegoLock = lockEmail.includes('diego') || (lock.userName || '').toLowerCase().includes('diego') || String(lock.userId || '').toLowerCase().includes('diego');
-    if (isDiegoMe !== isDiegoLock) {
-        return false;
-    }
-
-    // 4. Coincidencia por userName exacto o inclusión
-    const myName = (myInfo.userName || '').trim().toLowerCase();
-    const lockName = (lock.userName || '').trim().toLowerCase();
-    if (myName && lockName && (myName === lockName || (myName.length > 5 && lockName.length > 5 && (myName.includes(lockName) || lockName.includes(myName))))) {
-        return true;
-    }
-
-    // 5. Coincidencia por prefijo de correo
-    const myPrefix = (myInfo.userPrefix || '').toLowerCase();
-    const lockPrefix = (lock.userPrefix || (lockEmail.includes('@') ? lockEmail.split('@')[0] : '')).toLowerCase();
-    if (myPrefix && (lockName === myPrefix || lockPrefix === myPrefix)) {
-        return true;
-    }
-    if (lockName && myEmail && (myEmail.startsWith(lockName + '@') || myEmail === lockName)) {
-        return true;
-    }
-    if (myName && lockEmail && (lockEmail.startsWith(myName + '@') || lockEmail === myName)) {
-        return true;
+    // 2. Si no hay clientId (datos heredados), comparar por userId exacto
+    if (lock.userId && myInfo.userId) {
+        return String(lock.userId).trim().toLowerCase() === String(myInfo.userId).trim().toLowerCase();
     }
 
     return false;
@@ -15358,8 +15323,10 @@ if (typeof window !== 'undefined' && !window._opProjectLocksStorageBound) {
 // Heartbeat activo cada 10s mientras el usuario esté adentro de un proyecto
 if (typeof window !== 'undefined' && !window._operacionesLockHeartbeatStarted) {
     window._operacionesLockHeartbeatStarted = true;
-    setInterval(() => {
-        if (appState.activeOperacionesProjectId && (appState.isEditingOperacionesDetail || document.getElementById("operaciones-view-detail")?.style.display === "block")) {
+    setInterval(async () => {
+        const detailPane = document.getElementById("operaciones-view-detail");
+        const isDetailVisible = detailPane && detailPane.style.display !== "none";
+        if (appState.activeOperacionesProjectId && isDetailVisible) {
             const myLock = appState._myActiveProjectLock;
             if (myLock && isLockOwnedByMe(myLock)) {
                 myLock.timestamp = Date.now();
@@ -15369,6 +15336,12 @@ if (typeof window !== 'undefined' && !window._operacionesLockHeartbeatStarted) {
                     if (locks[k]) locks[k].timestamp = myLock.timestamp;
                 });
                 saveOperacionesLocksMapToLocal();
+                // Sincronizar timestamp fresco a la nube para que nunca expire mientras el usuario sigue adentro
+                if (typeof window.syncOperacionesProjectLocksToCloud === 'function') {
+                    try {
+                        await window.syncOperacionesProjectLocksToCloud();
+                    } catch (e) {}
+                }
             }
         }
     }, 10000);
@@ -15987,9 +15960,9 @@ function renderOperaciones() {
         const lockInfo = getProjectLockByOther(p);
         const isLockedByOther = Boolean(lockInfo);
         const myLockInfo = !isLockedByOther ? getOperacionesProjectLock(p) : null;
-        const isLockedByMe = Boolean(myLockInfo && isLockOwnedByMe(myLockInfo) && appState.isEditingOperacionesDetail && appState.activeOperacionesProjectId);
+        const isLockedByMe = Boolean(myLockInfo && isLockOwnedByMe(myLockInfo) && appState.activeOperacionesProjectId);
         const lockMsg = isLockedByOther
-            ? `El proyecto está siendo editado por ${lockInfo.userName || 'otro usuario'}`
+            ? `En uso por ${lockInfo.userName || 'otro usuario'}`
             : '';
         const facturaDisplay = getOperacionesProjectFacturaDisplay(p);
 
@@ -15997,20 +15970,20 @@ function renderOperaciones() {
         <tr data-op-id="${pId}" class="${isLockedByOther ? 'op-row-locked' : ''}" ${isLockedByOther ? `title="${lockMsg}"` : ''}>
             <td>
                 <strong>${consecutivoDisplay}</strong>
-                ${isLockedByOther ? `<div class="op-locked-project-msg" style="margin-top: 4px;"><span class="material-symbols-outlined">lock</span> ${lockMsg} <button type="button" class="btn-op-force-unlock" onclick="event.stopPropagation(); handleOpenLockedOperacionesProject('${pId}', '${(lockInfo.userName || '').replace(/'/g, "\\'")}')" style="margin-left: 6px; padding: 2px 6px; font-size: 11px; background: #EF4444; color: white; border: none; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" title="Forzar desbloqueo de este proyecto"><span class="material-symbols-outlined" style="font-size: 13px;">lock_open</span> Desbloquear</button></div>` : ''}
-                ${isLockedByMe ? `<div class="op-locked-project-msg" style="margin-top: 4px; background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE;"><span class="material-symbols-outlined" style="font-size: 14px; color: #4F46E5;">edit</span> En edición por ti</div>` : ''}
+                ${isLockedByOther ? `<div class="op-locked-project-msg" style="margin-top: 4px; color: #DC2626; font-size: 11.5px; font-weight: 600;"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">lock</span> En uso por ${lockInfo.userName || 'otro usuario'}</div>` : ''}
+                ${isLockedByMe ? `<div class="op-locked-project-msg" style="margin-top: 4px; background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE;"><span class="material-symbols-outlined" style="font-size: 14px; color: #4F46E5;">visibility</span> Abierto por ti</div>` : ''}
             </td>
             <td>${p.fechaInicioDisplay || p.fechaInicio || '-'}</td>
             <td>${facturaDisplay}</td>
             <td><span class="op-status-badge ${p.estatus}">${p.estatus}</span></td>
             <td style="white-space: nowrap;">
                 ${isLockedByOther ? `
-                    <button type="button" class="btn-op-abrir" data-project-id="${pId}" disabled title="${lockMsg}">
+                    <button type="button" class="btn-op-abrir" data-project-id="${pId}" disabled style="opacity: 0.6; cursor: not-allowed; background: #F1F5F9; color: #64748B; border: 1px solid #CBD5E1;" title="En uso por ${lockInfo.userName || 'otro usuario'}. Espera a que regrese a Operaciones.">
                         <span class="material-symbols-outlined" style="font-size: 16px;">lock</span> BLOQUEADO
                     </button>
                 ` : `
-                    <button type="button" class="btn-op-abrir" data-project-id="${pId}" onclick="event.stopPropagation(); openOperacionesDetail('${pId}')" title="${isLockedByMe ? 'Continuar editando tu proyecto' : 'Abrir y revisar expediente'}">
-                        <span class="material-symbols-outlined" style="font-size: 16px;">${isLockedByMe ? 'edit' : 'folder_open'}</span> ${isLockedByMe ? 'EDITAR' : 'ABRIR'}
+                    <button type="button" class="btn-op-abrir" data-project-id="${pId}" onclick="event.stopPropagation(); openOperacionesDetail('${pId}')" title="${isLockedByMe ? 'Continuar en tu proyecto' : 'Abrir expediente'}">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">${isLockedByMe ? 'visibility' : 'folder_open'}</span> ${isLockedByMe ? 'ABIERTO' : 'ABRIR'}
                     </button>
                 `}
             </td>
@@ -16555,13 +16528,20 @@ function saveEditingOperacionesProject() {
 }
 window.saveEditingOperacionesProject = saveEditingOperacionesProject;
 
-function openOperacionesDetail(projectId, clickTimestamp = null) {
+async function openOperacionesDetail(projectId, clickTimestamp = null) {
     window.openOperacionesDetail = openOperacionesDetail;
     try {
         if (!projectId) {
             projectId = appState.activeOperacionesProjectId;
         }
         const cleanTargetId = String(projectId || '').trim().toLowerCase();
+
+        // 1. ANTES DE ABRIR: Consultar inmediatamente el estado más fresco de bloqueos en la nube
+        if (typeof window.fetchOperacionesProjectLocksFromCloud === 'function') {
+            try {
+                await window.fetchOperacionesProjectLocksFromCloud();
+            } catch (e) {}
+        }
 
         if (!appState.operacionesProyectos || appState.operacionesProyectos.length === 0) {
             try {
@@ -16604,32 +16584,27 @@ function openOperacionesDetail(projectId, clickTimestamp = null) {
             return;
         }
 
-        // 1. Verificar bloqueo exclusivo por otro usuario
+        // 2. REGLA ESTRICTA DE BLOQUEO EN APERTURA:
+        // Si el usuario 1 ya dio clic en "ABRIR" (incluso para solo visualizar),
+        // el usuario 2 o 3 tiene TOTALMENTE BLOQUEADA la entrada hasta que el usuario 1 regrese a Operaciones.
         const lockByOther = getProjectLockByOther(p);
-        if (lockByOther) {
-            const isActuallyOwnedByMe = isLockOwnedByMe(lockByOther) ||
-                (sessionStorage.getItem('rp_active_operaciones_project_id') === p.id) ||
-                (lockByOther.userEmail && appState.currentUser?.email && lockByOther.userEmail.toLowerCase() === appState.currentUser.email.toLowerCase()) ||
-                (String(lockByOther.userName || '').toLowerCase().includes('zalazar') && (appState.currentUser?.email || '').toLowerCase().includes('zalazar')) ||
-                (String(lockByOther.userName || '').toLowerCase() === String(appState.currentUser?.nombre || '').toLowerCase());
-
-            if (!isActuallyOwnedByMe) {
-                const lockMsg = `El proyecto está siendo editado por ${lockByOther.userName || 'otro usuario'}`;
-                if (confirm(`${lockMsg}.\n\n¿Deseas desbloquear el proyecto y tomar el control para editarlo?`)) {
-                    releaseOperacionesProjectLock(p, true);
-                } else {
-                    if (typeof showCustomNotification === 'function') {
-                        showCustomNotification(lockMsg, "warning");
-                    }
-                    renderOperaciones();
-                    return;
-                }
+        if (lockByOther && !isLockOwnedByMe(lockByOther)) {
+            const userName = lockByOther.userName || 'otro usuario';
+            const consDisplay = p.consecutivo || p.numConsecutivo || p.numProyecto || p.id || '';
+            const blockMsg = `El proyecto ${consDisplay} está actualmente en uso por ${userName}. La entrada está bloqueada hasta que regrese a Operaciones.`;
+            
+            if (typeof showCustomNotification === 'function') {
+                showCustomNotification(blockMsg, "warning");
             } else {
-                claimOperacionesProjectLock(p, clickTimestamp !== null ? clickTimestamp : Date.now());
+                alert(blockMsg);
             }
+            if (typeof renderOperaciones === 'function') {
+                renderOperaciones();
+            }
+            return; // BLOQUEADO: No se permite entrar ni para visualizar
         }
 
-        // Si teníamos otro proyecto bloqueado previamente por nosotros, liberarlo
+        // Si teníamos otro proyecto abierto previamente por nosotros, liberarlo
         if (appState.activeOperacionesProjectId && normalizeOperacionesProjectKey(appState.activeOperacionesProjectId) !== normalizeOperacionesProjectKey(p)) {
             releaseOperacionesProjectLock(appState.activeOperacionesProjectId);
         }
@@ -16640,8 +16615,11 @@ function openOperacionesDetail(projectId, clickTimestamp = null) {
             localStorage.removeItem('rp_active_operaciones_project_id');
         } catch(e) {}
 
-        // Registrar timestamp de apertura para control de concurrencia
+        // Registrar bloqueo exclusivo de apertura inmediatamente
         claimOperacionesProjectLock(p, clickTimestamp !== null ? clickTimestamp : Date.now());
+        if (typeof window.syncOperacionesProjectLocksToCloud === 'function') {
+            await window.syncOperacionesProjectLocksToCloud();
+        }
 
         // Abrir siempre en modo lectura. Solo se edita si el usuario hace clic en "Editar".
         appState.isEditingOperacionesDetail = false;
