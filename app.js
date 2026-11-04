@@ -290,7 +290,7 @@ const runInitialAppSetup = async () => {
     // Solo purgar los folios fantasma confirmados del glitch anterior (199, 200 y serie 300)
     // Los folios nuevos legítimos (189, 190, etc.) NO están bloqueados para poder crear proyectos libremente
     const specificPurge = [
-        'RDP2611199', 'RDP2611199-F', 'RDP2611200', 'RDP2611200-F'
+        'RDP2611192', 'RDP2611192-F', 'RDP2611198', 'RDP2611198-F', 'RDP2611199', 'RDP2611199-F', 'RDP2611200', 'RDP2611200-F'
     ];
     specificPurge.forEach(id => purgedProjectIds.add(id));
 
@@ -13430,14 +13430,22 @@ function generateProjectConsecutivo(tipoProyecto, excludeProjectId = null) {
     // - Lavado de Contenedores: el siguiente consecutivo es RDP261058-L (base 57)
     let maxSeq = isLavado ? 57 : 171;
     
-    const projects = appState.operacionesProyectos || [];
+    const projects = (appState.operacionesProyectos || []).concat(
+        (appState.consecutivo || []).map(r => ({
+            numConsecutivo: r.referenciaOp || r.refOp,
+            consecutivo: r.referenciaOp || r.refOp,
+            generado: true
+        }))
+    );
     projects.forEach(p => {
         if (!p) return;
+        if (appState.draftOperacionesProject && p === appState.draftOperacionesProject) return;
+        if (p.isDraft === true || p.isNewProject === true || p.generado === false) return;
         if (typeof isProjectGenerado === 'function' && !isProjectGenerado(p)) return;
-        if (excludeProjectId && (p.id === excludeProjectId || p.consecutivo === excludeProjectId || p.numProyecto === excludeProjectId)) return;
-        if (window.purgedProjectIds && (window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo) || window.purgedProjectIds.has(p.numProyecto))) return;
+        if (excludeProjectId && (p.id === excludeProjectId || p.consecutivo === excludeProjectId || p.numProyecto === excludeProjectId || p.numConsecutivo === excludeProjectId)) return;
+        if (window.purgedProjectIds && (window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo) || window.purgedProjectIds.has(p.numProyecto) || window.purgedProjectIds.has(p.numConsecutivo))) return;
 
-        const val = (p.numConsecutivo || p.consecutivo || p.numProyecto || '').trim();
+        const val = String(p.numConsecutivo || p.consecutivo || p.numProyecto || p.id || '').trim();
         // Regex para capturar RDP + 4 dígitos de fecha (YYMM) + números + sufijo opcional (-L o letra)
         const m = val.match(/^RDP\d{4}(\d+)(?:-?([A-Z]))?$/i);
         if (m) {
@@ -14570,6 +14578,19 @@ function areProjectsSame(p1, p2) {
     const b2 = getBase(p2);
     if (b1 && b2 && b1 === b2 && b1.startsWith('RDP')) return true;
 
+    // Fusión de duplicados idénticos por contenido (mismo cliente, fecha y montos idénticos generados en la misma sesión):
+    const c1 = String(p1.cliente || p1.nombreCliente || '').trim().toUpperCase();
+    const c2 = String(p2.cliente || p2.nombreCliente || '').trim().toUpperCase();
+    const f1 = String(p1.fechaInicioDisplay || p1.fechaInicio || '').trim();
+    const f2 = String(p2.fechaInicioDisplay || p2.fechaInicio || '').trim();
+    const tot1 = parseFloat(p1.total) || 0;
+    const tot2 = parseFloat(p2.total) || 0;
+    const sub1 = parseFloat(p1.subtotal) || 0;
+    const sub2 = parseFloat(p2.subtotal) || 0;
+    if (c1 && c2 && c1 === c2 && f1 && f2 && f1 === f2 && tot1 > 0 && tot1 === tot2 && sub1 > 0 && sub1 === sub2) {
+        return true;
+    }
+
     return false;
 }
 window.areProjectsSame = areProjectsSame;
@@ -14625,9 +14646,28 @@ function cleanOperacionesLegacyData(proyectos) {
             const pHasSuffix = /-[A-Z]$/i.test(pCid);
             const exHasSuffix = /-[A-Z]$/i.test(exCid);
 
+            const getSeq = (str) => {
+                const m = String(str).match(/^RDP\d{4}(\d+)/i);
+                return m ? parseInt(m[1], 10) : 999999;
+            };
+            const seqEx = getSeq(exCid);
+            const seqP = getSeq(pCid);
+
             let canonical = exCid;
-            if (pHasSuffix && (!exHasSuffix || pCid.length >= exCid.length)) {
+            let discarded = pCid;
+            if (seqP < seqEx) {
                 canonical = pCid;
+                discarded = exCid;
+            } else if (pHasSuffix && (!exHasSuffix || pCid.length >= exCid.length)) {
+                canonical = pCid;
+                discarded = exCid;
+            }
+
+            if (discarded && discarded !== canonical && window.isFirebaseActive && window.isFirebaseActive()) {
+                const client = window.FIREBASE_CONFIG?.client;
+                if (client) {
+                    client.from('operaciones').delete().eq('id', discarded).then(() => {}, () => {});
+                }
             }
 
             const merged = Object.assign({}, existing, p);
@@ -14788,7 +14828,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_fix_create_projects_v8';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_fix_consecutivos_89_v10';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -16297,7 +16337,7 @@ function syncOperacionesDetailReadonlyDOM(isReadonly) {
             return;
         }
         if (el.id === "op-step1-consecutivo-num") {
-            el.readOnly = Boolean(isReadonly);
+            el.readOnly = true;
             el.disabled = false;
             return;
         }
@@ -16445,13 +16485,13 @@ function saveEditingOperacionesProject() {
     if (ocVal !== undefined) {
         p.numOC = ocVal;
     }
-    if (consecutivoVal !== undefined && consecutivoVal.trim()) {
-        const cleanCons = consecutivoVal.trim();
+    const currentCons = p.consecutivo || p.numConsecutivo || p.numProyecto || p.id;
+    if (currentCons && String(currentCons).startsWith('RDP')) {
+        const cleanCons = String(currentCons).trim();
         p.numConsecutivo = cleanCons;
         p.consecutivo = cleanCons;
         p.numProyecto = cleanCons;
         p.id = cleanCons;
-        appState.activeOperacionesProjectId = cleanCons;
     }
     if (clienteVal !== undefined) {
         p.cliente = clienteVal;
@@ -17014,17 +17054,7 @@ function updateProjectHeaderField(key, val) {
         document.querySelectorAll("#op-step3-num-oc, #op-step4-num-oc, #op-step5-num-oc").forEach(el => el.innerText = val || "-");
     }
     if (key === 'numConsecutivo' || key === 'consecutivo') {
-        const cleanVal = (val || '').trim();
-        p.numConsecutivo = cleanVal;
-        p.consecutivo = cleanVal;
-        p.numProyecto = cleanVal;
-        if (cleanVal) {
-            p.id = cleanVal;
-            appState.activeOperacionesProjectId = cleanVal;
-        }
-        const cInput = document.getElementById("op-step1-consecutivo-num");
-        if (cInput && document.activeElement !== cInput) cInput.value = cleanVal || "";
-        document.querySelectorAll("#op-step3-num-consecutivo, #op-step4-num-consecutivo, #op-step5-num-consecutivo").forEach(el => el.innerText = cleanVal || "-");
+        return; // El consecutivo del proyecto es inmutable
     }
     // NO auto-guardar: se guarda únicamente cuando el usuario da clic en "Guardar"
 };
@@ -19679,8 +19709,9 @@ function generarProyectoOperaciones() {
         const clienteVal = document.getElementById("op-cliente-input")?.value;
         if (facturaVal) p.numFactura = facturaVal;
         if (ocVal) p.numOC = ocVal;
-        if (consecutivoVal) {
-            const cleanCons = consecutivoVal.trim();
+        const currentCons = p.consecutivo || p.numConsecutivo || p.numProyecto || p.id;
+        if (currentCons && String(currentCons).startsWith('RDP')) {
+            const cleanCons = String(currentCons).trim();
             p.numConsecutivo = cleanCons;
             p.consecutivo = cleanCons;
             p.numProyecto = cleanCons;
