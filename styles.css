@@ -587,6 +587,17 @@ select option {
     }
 }
 
+@keyframes dropdownOpenFadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(6px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
 .form-row {
     display: flex;
     gap: 14px;
@@ -2641,6 +2652,10 @@ select option {
     animation: dropdownOpenFade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+.prov-estatus-global-menu.open-upwards {
+    animation: dropdownOpenFadeUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
 .prov-estatus-global-menu .prov-dropdown-option {
     display: flex !important;
     align-items: center !important;
@@ -3761,6 +3776,10 @@ input.excel-p-flag-x {
     display: block !important;
     opacity: 1 !important;
     animation: dropdownOpenFade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.st-custom-dropdown-wrap.open .st-dropdown-menu.open-upwards {
+    animation: dropdownOpenFadeUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
 .st-dropdown-option {
@@ -12441,6 +12460,11 @@ body {
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16), 0 4px 10px rgba(15, 23, 42, 0.06);
     z-index: 99999999;
     display: none;
+    animation: dropdownOpenFade 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.gi-cat-global-menu.open-upwards {
+    animation: dropdownOpenFadeUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
 .gi-cat-option {
