@@ -287,32 +287,17 @@ const runInitialAppSetup = async () => {
         'RDP2610182-F', 'RDP2610182',
         'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
     ]);
-    // Purga masiva y exhaustiva de todos los folios fantasma generados por el bucle de noviembre (con y sin sufijo)
+    // Solo purgar los folios fantasma confirmados del glitch anterior (199, 200 y serie 300)
+    // Los folios nuevos legítimos (189, 190, etc.) NO están bloqueados para poder crear proyectos libremente
     const specificPurge = [
-        'RDP2611189-F', 'RDP2611189', 'RDP2611190-F', 'RDP2611190',
-        'RDP261189-F', 'RDP261189', 'RDP261190-F', 'RDP261190',
         'RDP2611199', 'RDP2611199-F', 'RDP2611200', 'RDP2611200-F'
     ];
     specificPurge.forEach(id => purgedProjectIds.add(id));
 
-    for (let i = 300; i <= 399; i++) {
+    for (let i = 310; i <= 399; i++) {
         purgedProjectIds.add(`RDP2611${i}`);
         purgedProjectIds.add(`RDP2611${i}-F`);
         purgedProjectIds.add(`RDP2611${i}-L`);
-    }
-    for (let i = 180; i <= 210; i++) {
-        if (i !== 188) { // Conservar estrictamente el 88 legítimo (RDP2611188-F)
-            purgedProjectIds.add(`RDP2611${i}`);
-            purgedProjectIds.add(`RDP2611${i}-F`);
-            purgedProjectIds.add(`RDP2611${i}-L`);
-        }
-    }
-    for (let i = 80; i <= 99; i++) {
-        if (i !== 88) {
-            purgedProjectIds.add(`RDP2611${i}`);
-            purgedProjectIds.add(`RDP2611${i}-F`);
-            purgedProjectIds.add(`RDP2611${i}-L`);
-        }
     }
     window.purgedProjectIds = purgedProjectIds;
 // ---------------------------------------------------------------------------------
@@ -327,11 +312,8 @@ const runInitialAppSetup = async () => {
                 const isGhost = (p) => {
                     if (!p) return true;
                     const id = String(p.id || p.consecutivo || p.numProyecto || p.numConsecutivo || '').trim().toUpperCase();
-                    if (id.includes('188')) return false; // El 88 es el legítimo de Diego (RDP2611188-F)
-                    if (id.includes('189') || id.includes('190') || id.endsWith('89-F') || id.endsWith('90-F')) return true; // Eliminar 89 y 90
-                    if (id.startsWith('RDP26113')) return true; // Serie 300 fantasma
+                    if (id.endsWith('-')) return true;
                     if (window.purgedProjectIds && (window.purgedProjectIds.has(id) || window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo))) return true;
-                    if (id.startsWith('RDP2611') && id !== 'RDP2611188-F' && id !== 'RDP2611188') return true;
                     return false;
                 };
                 const cleanList = list.filter(p => !isGhost(p));
@@ -13474,7 +13456,7 @@ function generateProjectConsecutivo(tipoProyecto, excludeProjectId = null) {
     if (isLavado) {
         return `RDP${year2}${month}${nextSeq}-L`;
     } else {
-        return `RDP${year2}${month}${nextSeq}`;
+        return `RDP${year2}${month}${nextSeq}-F`;
     }
 };
 
@@ -14806,7 +14788,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_bloqueo_abrir_v7';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_fix_create_projects_v8';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -15887,9 +15869,7 @@ function renderOperaciones() {
     let filtered = proyectos.filter(p => {
         if (!p) return false;
         const key = String(p.consecutivo || p.numConsecutivo || p.numProyecto || p.id || '').trim().toUpperCase();
-        if (key.includes('188')) {
-            // El 88 es el bueno y legítimo
-        } else if (key.includes('189') || key.includes('190') || key.endsWith('89-F') || key.endsWith('90-F') || key.startsWith('RDP26113') || activePurgedIds.has(key) || activePurgedIds.has(p.id) || activePurgedIds.has(p.consecutivo)) {
+        if (key.endsWith('-') || activePurgedIds.has(key) || activePurgedIds.has(p.id) || activePurgedIds.has(p.consecutivo)) {
             return false;
         }
         if (typeof isAccidentalEmptyProject === 'function' && isAccidentalEmptyProject(p)) return false;
