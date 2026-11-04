@@ -110,7 +110,7 @@ let appState = {
     isEditingConsecutivo: false,
     consecutivoLockedBy: null,
     consecutivoSearch: '',
-    consecutivoStFilter: 'all',
+    consecutivoStFilter: 'PP',
     consecutivoClientFilter: 'all',
     consecutivoPage: 1,
     consecutivoPageSize: 50,
@@ -1471,11 +1471,14 @@ function calculateAdminTotals() {
         ? (Number(appState.concepts.bancos) || 0)
         : 10000;
 
-    // Ingresos: resultado del total que aparece en Consecutivo (Total de Pendiente Cobro / Imagen 2)
+    // Ingresos: resultado del total que aparece en Consecutivo (Total Por Programar / Activo)
     let ingresos = 0;
-    if (typeof getConsecutivoPendienteCobroTotals === 'function') {
+    if (typeof getConsecutivoPorProgramarTotals === 'function') {
+        ingresos = getConsecutivoPorProgramarTotals().total;
+    }
+    if (!ingresos && typeof getConsecutivoPendienteCobroTotals === 'function') {
         ingresos = getConsecutivoPendienteCobroTotals().total;
-    } else if (Array.isArray(appState.consecutivo)) {
+    } else if (!ingresos && Array.isArray(appState.consecutivo)) {
         appState.consecutivo.forEach(item => {
             if (!item) return;
             const stVal = String(item.st || 'PP').trim().toUpperCase();
@@ -7696,11 +7699,14 @@ function getFilteredConsecutivoList() {
         list = list.filter(item => String(item.st || '').trim().toUpperCase() === 'P');
     } else if (appState.consecutivoStFilter === 'C') {
         list = list.filter(item => String(item.st || '').trim().toUpperCase() === 'C');
-    } else if (appState.consecutivoStFilter === 'PP' || appState.consecutivoStFilter === 'PROG' || appState.consecutivoStFilter === 'Cancelado') {
+    } else if (appState.consecutivoStFilter === 'PP' || appState.consecutivoStFilter === 'PROG' || appState.consecutivoStFilter === 'Por programar' || appState.consecutivoStFilter === 'Cancelado') {
         list = list.filter(item => {
             const st = String(item.st || 'PP').trim().toUpperCase();
             return st !== 'P' && st !== 'C';
         });
+    } else {
+        // En vista activa 'Todos': NUNCA mostrar los 'P' (Cobrados), pertenecen exclusivamente al Archivo
+        list = list.filter(item => String(item.st || '').trim().toUpperCase() !== 'P');
     }
     
     // 2. Client Filter
@@ -7743,9 +7749,9 @@ function toggleConsecutivoArchivoView(forceState) {
         const btnP = document.querySelector(".consecutivo-filter-btn[data-st='P']");
         if (btnP) btnP.classList.add("active");
     } else {
-        appState.consecutivoStFilter = 'all';
-        const btnAll = document.querySelector(".consecutivo-filter-btn[data-st='all']");
-        if (btnAll) btnAll.classList.add("active");
+        appState.consecutivoStFilter = 'PP';
+        const btnPP = document.querySelector(".consecutivo-filter-btn[data-st='PP']");
+        if (btnPP) btnPP.classList.add("active");
     }
     renderConsecutivo();
 }
@@ -7923,6 +7929,44 @@ function isConsecutivoPendienteCobro(item) {
 }
 window.isConsecutivoPendienteCobro = isConsecutivoPendienteCobro;
 
+function isConsecutivoPorProgramar(item) {
+    if (!item) return false;
+    const st = String(item.st || 'PP').trim().toUpperCase();
+    if (st === 'P' || st.includes('PAG') || st.includes('COBRAD')) return false;
+    if (st === 'C' || st.includes('COBR') || st.includes('PEND')) return false;
+    return true; // PP, PROG, Por Programar
+}
+window.isConsecutivoPorProgramar = isConsecutivoPorProgramar;
+
+function getConsecutivoPorProgramarTotals() {
+    let subtotal = 0;
+    let iva = 0;
+    let total = 0;
+    
+    (appState.consecutivo || []).forEach(item => {
+        if (!item) return;
+        if (isConsecutivoPorProgramar(item)) {
+            const sub = Number(item.subtotal) || 0;
+            const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined) 
+                ? Number(item.iva) 
+                : (sub > 0 ? Math.round(sub * 0.16 * 100) / 100 : 0);
+            const tot = (item.total !== '' && item.total !== null && item.total !== undefined && Number(item.total) > 0) 
+                ? Number(item.total) 
+                : (sub + iv);
+            subtotal += sub;
+            iva += iv;
+            total += tot;
+        }
+    });
+    
+    return {
+        subtotal: Math.round(subtotal * 100) / 100,
+        iva: Math.round(iva * 100) / 100,
+        total: Math.round(total * 100) / 100
+    };
+}
+window.getConsecutivoPorProgramarTotals = getConsecutivoPorProgramarTotals;
+
 function getConsecutivoPendienteCobroTotals() {
     let subtotal = 0;
     let iva = 0;
@@ -7944,21 +7988,61 @@ function getConsecutivoPendienteCobroTotals() {
         }
     });
     
-    return { subtotal, iva, total };
+    return {
+        subtotal: Math.round(subtotal * 100) / 100,
+        iva: Math.round(iva * 100) / 100,
+        total: Math.round(total * 100) / 100
+    };
 }
 window.getConsecutivoPendienteCobroTotals = getConsecutivoPendienteCobroTotals;
 
 function updateConsecutivoKPIs(list) {
-    // Todos los expedientes que estén en el filtro "Pendiente Cobro" (C) se reflejan en las tarjetas superiores
-    const pcTotals = getConsecutivoPendienteCobroTotals();
+    const currentFilter = String(appState.consecutivoStFilter || 'PP').trim().toUpperCase();
+    
+    let subtotal = 0;
+    let iva = 0;
+    let total = 0;
+
+    // Los proyectos al crearse en operaciones entran por defecto en "Por Programar",
+    // y esos de "Por Programar" (uno o muchos) forman el total reflejado en las tarjetas superiores.
+    let targetItems = [];
+    if (appState.consecutivoArchivoMode || currentFilter === 'P') {
+        targetItems = (appState.consecutivo || []).filter(item => String(item.st || '').trim().toUpperCase() === 'P');
+    } else if (currentFilter === 'C') {
+        targetItems = (appState.consecutivo || []).filter(item => isConsecutivoPendienteCobro(item));
+    } else if (currentFilter === 'ALL') {
+        // Vista activa 'Todos': proyectos no cobrados (Por Programar + Pendiente Cobro)
+        targetItems = (appState.consecutivo || []).filter(item => String(item.st || '').trim().toUpperCase() !== 'P');
+    } else {
+        // Filtro 'PP' / 'Por Programar' por defecto
+        targetItems = (appState.consecutivo || []).filter(item => isConsecutivoPorProgramar(item));
+    }
+
+    targetItems.forEach(item => {
+        if (!item) return;
+        const sub = Number(item.subtotal) || 0;
+        const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined) 
+            ? Number(item.iva) 
+            : (sub > 0 ? Math.round(sub * 0.16 * 100) / 100 : 0);
+        const tot = (item.total !== '' && item.total !== null && item.total !== undefined && Number(item.total) > 0) 
+            ? Number(item.total) 
+            : (sub + iv);
+        subtotal += sub;
+        iva += iv;
+        total += tot;
+    });
+
+    subtotal = Math.round(subtotal * 100) / 100;
+    iva = Math.round(iva * 100) / 100;
+    total = Math.round(total * 100) / 100;
     
     const subEl = document.getElementById("consecutivo-kpi-subtotal");
     const ivaEl = document.getElementById("consecutivo-kpi-iva");
     const totEl = document.getElementById("consecutivo-kpi-total");
     
-    if (subEl) subEl.innerText = formatCurrency(pcTotals.subtotal);
-    if (ivaEl) ivaEl.innerText = formatCurrency(pcTotals.iva);
-    if (totEl) totEl.innerText = formatCurrency(pcTotals.total);
+    if (subEl) subEl.innerText = formatCurrency(subtotal);
+    if (ivaEl) ivaEl.innerText = formatCurrency(iva);
+    if (totEl) totEl.innerText = formatCurrency(total);
 
     if (typeof renderVisualizacion === 'function') {
         renderVisualizacion();
@@ -7966,33 +8050,33 @@ function updateConsecutivoKPIs(list) {
 }
 
 function renderConsecutivoFooterTotals(list) {
-    const pcTotals = getConsecutivoPendienteCobroTotals();
-    
     let sumSubtotal = 0;
     let sumIva = 0;
     let sumTotal = 0;
     
-    list.forEach(item => {
-        sumSubtotal += Number(item.subtotal) || 0;
-        sumIva += Number(item.iva) || 0;
-        sumTotal += Number(item.total) || 0;
+    (list || []).forEach(item => {
+        if (!item) return;
+        const sub = Number(item.subtotal) || 0;
+        const iv = (item.iva !== '' && item.iva !== null && item.iva !== undefined) 
+            ? Number(item.iva) 
+            : (sub > 0 ? Math.round(sub * 0.16 * 100) / 100 : 0);
+        const tot = (item.total !== '' && item.total !== null && item.total !== undefined && Number(item.total) > 0) 
+            ? Number(item.total) 
+            : (sub + iv);
+        sumSubtotal += sub;
+        sumIva += iv;
+        sumTotal += tot;
     });
 
-    const currentFilter = String(appState.consecutivoStFilter || 'all').trim().toUpperCase();
-    const isViewingAllOrC = (currentFilter === 'ALL' || currentFilter === 'TODOS' || currentFilter === 'C' || currentFilter.includes('COBR') || currentFilter.includes('PEND') || currentFilter === '');
-
-    // El total de la sección / tabla solo tiene que ser de las operaciones que están en el filtro "Pendiente Cobro"
-    if (isViewingAllOrC) {
-        sumSubtotal = pcTotals.subtotal;
-        sumIva = pcTotals.iva;
-        sumTotal = pcTotals.total;
-    }
+    sumSubtotal = Math.round(sumSubtotal * 100) / 100;
+    sumIva = Math.round(sumIva * 100) / 100;
+    sumTotal = Math.round(sumTotal * 100) / 100;
     
     const totalsRow = document.getElementById("excel-consecutivo-totals-row");
     if (totalsRow) {
         totalsRow.innerHTML = `
             <td style="text-align: center; font-weight: 800;">TOT</td>
-            <td colspan="4" style="font-weight: 800; font-size: 10px;">${list.length} regs</td>
+            <td colspan="4" style="font-weight: 800; font-size: 10px;">${(list || []).length} regs</td>
             <td style="text-align: right; font-weight: 800;">${formatCurrency(sumSubtotal)}</td>
             <td style="text-align: right; font-weight: 800;">${formatCurrency(sumIva)}</td>
             <td style="text-align: right; font-weight: 800;">${formatCurrency(sumTotal)}</td>
@@ -14722,7 +14806,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_purge_89_90_v4';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_consecutivo_totales_v6';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
