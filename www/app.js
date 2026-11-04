@@ -219,7 +219,6 @@ const runInitialAppSetup = async () => {
     
     function hasProjectData(p) {
         if (!p) return false;
-        if (p.generado === true) return true;
         if (p.numFactura && p.numFactura.trim() && p.numFactura !== '-') return true;
         if (p.numOC && p.numOC.trim() && p.numOC !== '-') return true;
         if (p.cliente && p.cliente.trim()) return true;
@@ -286,10 +285,49 @@ const runInitialAppSetup = async () => {
         'RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F',
         'RDP261074-', 'RDP261075-',
         'RDP2610182-F', 'RDP2610182',
-        'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1',
-        'RDP2611199', 'RDP2611200', 'RDP2611310', 'RDP2611311', 'RDP2611312', 'RDP2611313', 'RDP2611314', 'RDP2611315', 'RDP2611316', 'RDP2611317'
+        'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
     ]);
+    // Purga masiva y exhaustiva de todos los folios fantasma generados por el bucle de noviembre
+    for (let i = 300; i <= 399; i++) {
+        purgedProjectIds.add(`RDP2611${i}`);
+    }
+    for (let i = 180; i <= 210; i++) {
+        if (i !== 198) purgedProjectIds.add(`RDP2611${i}`);
+    }
+    for (let i = 80; i <= 99; i++) {
+        purgedProjectIds.add(`RDP2611${i}`);
+    }
     window.purgedProjectIds = purgedProjectIds;
+// ---------------------------------------------------------------------------------
+// LIMPIEZA FORZOSA INMEDIATA DE EXPEDIENTES FANTASMA (NOVIEMBRE 2026)
+// ---------------------------------------------------------------------------------
+(function runInstantForcedPurge() {
+    try {
+        const stored = localStorage.getItem('rp_operaciones_proyectos');
+        if (stored) {
+            let list = JSON.parse(stored);
+            if (Array.isArray(list)) {
+                const isGhost = (p) => {
+                    if (!p) return true;
+                    const id = String(p.id || p.consecutivo || p.numProyecto || p.numConsecutivo || '').trim();
+                    if (id === 'RDP2611198') return false; // Legítimo de Diego
+                    if (id.startsWith('RDP26113')) return true; // Serie 300 fantasma
+                    if (window.purgedProjectIds && (window.purgedProjectIds.has(id) || window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo))) return true;
+                    if (id.startsWith('RDP2611') && typeof hasProjectData === 'function' && !hasProjectData(p)) return true;
+                    return false;
+                };
+                const cleanList = list.filter(p => !isGhost(p));
+                if (cleanList.length !== list.length) {
+                    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(cleanList));
+                    if (window.appState) {
+                        window.appState.operacionesProyectos = cleanList;
+                    }
+                }
+            }
+        }
+    } catch(e) {}
+})();
+
 
     try {
         const storedOps = localStorage.getItem('rp_operaciones_proyectos');
@@ -14666,7 +14704,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_firebase_fix_v2';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_instant_purge_v3';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -15769,8 +15807,14 @@ function renderOperaciones() {
             : `Proyectos registrados`;
     }
 
-    // Filtrar según el modo activo (SOLO proyectos generados; nunca borradores)
+    // Filtrar según el modo activo (SOLO proyectos generados; nunca borradores ni folios purgados)
+    const activePurgedIds = window.purgedProjectIds || new Set();
     let filtered = proyectos.filter(p => {
+        if (!p) return false;
+        const key = String(p.consecutivo || p.numConsecutivo || p.numProyecto || p.id || '').trim();
+        if (activePurgedIds.has(key) || activePurgedIds.has(p.id) || activePurgedIds.has(p.consecutivo) || activePurgedIds.has(p.numConsecutivo)) return false;
+        if (key.startsWith('RDP26113')) return false;
+        if (typeof isAccidentalEmptyProject === 'function' && isAccidentalEmptyProject(p)) return false;
         if (!isProjectGenerado(p)) return false;
         const isArchivado = p.archivado === true || p.estatus === 'CERRADO';
         return isExpedienteMode ? isArchivado : !isArchivado;
