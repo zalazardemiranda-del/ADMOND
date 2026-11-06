@@ -3,6 +3,37 @@
 <html lang="es">
 
 <head>
+    <script>
+(function() {
+    try {
+        var flag = 'rp_purged_test_nov_192_199_v5';
+        if (!localStorage.getItem(flag)) {
+            var isTest = function(id) { return /^RDP2611(19[2-9])/i.test(String(id || '').trim()); };
+            var ops = localStorage.getItem('rp_operaciones_proyectos');
+            if (ops) {
+                var oList = JSON.parse(ops);
+                if (Array.isArray(oList)) {
+                    oList = oList.filter(function(p) {
+                        return !isTest(p && (p.id || p.consecutivo || p.numProyecto || p.numConsecutivo));
+                    });
+                    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(oList));
+                }
+            }
+            var cons = localStorage.getItem('rp_consecutivo_data');
+            if (cons) {
+                var cList = JSON.parse(cons);
+                if (Array.isArray(cList)) {
+                    cList = cList.filter(function(r) {
+                        return !isTest(r && (r.referenciaOp || r.refOp));
+                    });
+                    localStorage.setItem('rp_consecutivo_data', JSON.stringify(cList));
+                }
+            }
+            localStorage.setItem(flag, 'true');
+        }
+    } catch(e) {}
+})();
+</script>
 
     <meta charset="UTF-8">
 
@@ -5211,7 +5242,7 @@
     <script src="consecutivo_data.js?v=285df872"></script>
 
     <script src="schema.js?v=c644e61d"></script>
-    <script src="app.js?v=ee48cbfe"></script>
+    <script src="app.js?v=271cf85d"></script>
 
 </body>
 

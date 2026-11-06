@@ -295,9 +295,39 @@ const runInitialAppSetup = async () => {
 // ---------------------------------------------------------------------------------
 (function runInstantForcedPurge() {
     try {
-        const stored = localStorage.getItem('rp_operaciones_proyectos');
-        if (stored) {
-            let list = JSON.parse(stored);
+        const isTestId = (val) => /^RDP2611(19[2-9])/i.test(String(val || '').trim());
+        const purgeFlag = 'rp_purged_test_nov_192_199_v5';
+        if (!localStorage.getItem(purgeFlag)) {
+            const stored = localStorage.getItem('rp_operaciones_proyectos');
+            if (stored) {
+                let list = JSON.parse(stored);
+                if (Array.isArray(list)) {
+                    list = list.filter(p => {
+                        const id = String(p?.id || p?.consecutivo || p?.numProyecto || p?.numConsecutivo || '').trim();
+                        return !isTestId(id);
+                    });
+                    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(list));
+                    if (window.appState) window.appState.operacionesProyectos = list;
+                }
+            }
+            const storedCon = localStorage.getItem('rp_consecutivo_data');
+            if (storedCon) {
+                let conList = JSON.parse(storedCon);
+                if (Array.isArray(conList)) {
+                    conList = conList.filter(r => {
+                        const ref = String(r?.referenciaOp || r?.refOp || '').trim();
+                        return !isTestId(ref);
+                    });
+                    localStorage.setItem('rp_consecutivo_data', JSON.stringify(conList));
+                    if (window.appState) window.appState.consecutivo = conList;
+                }
+            }
+            localStorage.setItem(purgeFlag, 'true');
+        }
+
+        const storedNow = localStorage.getItem('rp_operaciones_proyectos');
+        if (storedNow) {
+            let list = JSON.parse(storedNow);
             if (Array.isArray(list)) {
                 const isGhost = (p) => {
                     if (!p) return true;
@@ -309,9 +339,7 @@ const runInitialAppSetup = async () => {
                 const cleanList = list.filter(p => !isGhost(p));
                 if (cleanList.length !== list.length) {
                     localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(cleanList));
-                    if (window.appState) {
-                        window.appState.operacionesProyectos = cleanList;
-                    }
+                    if (window.appState) window.appState.operacionesProyectos = cleanList;
                 }
             }
         }
@@ -14280,14 +14308,26 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
     }
 
     // Filtrar proyectos locales que sean inválidos, purgados o que tengan guión colgante '-'
+    const cloudKeySet = new Set();
+    validCloudList.forEach(cp => {
+        [cp.id, cp.consecutivo, cp.numConsecutivo, cp.numProyecto].filter(Boolean).forEach(k => {
+            cloudKeySet.add(String(k).trim().toUpperCase());
+        });
+    });
+
     appState.operacionesProyectos = (appState.operacionesProyectos || []).filter(p => {
         if (!p) return false;
-        if (appState.draftOperacionesProject && p.id === appState.draftOperacionesProject.id) return true;
+        if (appState.draftOperacionesProject && (p === appState.draftOperacionesProject || p.id === appState.draftOperacionesProject.id)) return true;
+        if (p.isDraft === true && p.generado !== true) return true;
         if (!isProjectGenerado(p)) return false;
         if (typeof isAccidentalEmptyProject === 'function' && isAccidentalEmptyProject(p)) return false;
-        const cid = String(p.id || p.consecutivo || p.numProyecto || '').trim();
-        if (fakeOpIds.has(cid) || fakeOpIds.has(p.id) || fakeOpIds.has(p.consecutivo) || fakeOpIds.has(p.numProyecto) || cid.endsWith('-')) return false;
-        return true;
+        const cid = String(p.id || p.consecutivo || p.numProyecto || p.numConsecutivo || '').trim().toUpperCase();
+        if (fakeOpIds.has(cid) || cid.endsWith('-')) return false;
+
+        // Reconciliación con la nube: si no existe en la base de datos y no es borrador activo, descartar
+        const pKeys = [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean).map(k => String(k).trim().toUpperCase());
+        const existsInCloud = pKeys.some(k => cloudKeySet.has(k));
+        return existsInCloud;
     });
 
     validCloudList.forEach(cp => {
@@ -14904,7 +14944,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_06_force_v14_1793998765723';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_06_force_purge_92_94_1793999197381';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
