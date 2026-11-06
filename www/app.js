@@ -272,6 +272,8 @@ const runInitialAppSetup = async () => {
         const cid = String(p.id || p.consecutivo || p.numProyecto || p.numConsecutivo || '').trim();
         if (cid.endsWith('-')) return true;
         if (window.purgedProjectIds && (window.purgedProjectIds.has(cid) || window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo) || window.purgedProjectIds.has(p.numProyecto))) return true;
+        // Un proyecto formalmente generado o guardado por el usuario NUNCA es accidental
+        if (p.generado === true && p.isDraft !== true) return false;
         if (p.isDraft === true && p.generado !== true) return true;
         if (hasProjectData(p)) return false;
         return true;
@@ -287,18 +289,6 @@ const runInitialAppSetup = async () => {
         'RDP2610182-F', 'RDP2610182',
         'RDP-200', 'RDP-555', 'RDP-NEW-OP', 'RDP-PRUEBA', 'RDP-PROV-1'
     ]);
-    // Solo purgar los folios fantasma confirmados del glitch anterior (199, 200 y serie 300)
-    // Los folios nuevos legítimos (189, 190, etc.) NO están bloqueados para poder crear proyectos libremente
-    const specificPurge = [
-        'RDP2611192', 'RDP2611192-F', 'RDP2611198', 'RDP2611198-F', 'RDP2611199', 'RDP2611199-F', 'RDP2611200', 'RDP2611200-F'
-    ];
-    specificPurge.forEach(id => purgedProjectIds.add(id));
-
-    for (let i = 310; i <= 399; i++) {
-        purgedProjectIds.add(`RDP2611${i}`);
-        purgedProjectIds.add(`RDP2611${i}-F`);
-        purgedProjectIds.add(`RDP2611${i}-L`);
-    }
     window.purgedProjectIds = purgedProjectIds;
 // ---------------------------------------------------------------------------------
 // LIMPIEZA FORZOSA INMEDIATA DE EXPEDIENTES FANTASMA (NOVIEMBRE 2026)
@@ -4400,18 +4390,39 @@ window.updateProveedorStatusCounts = updateProveedorStatusCounts;
 
 // Helper para encontrar el proyecto activo en Operaciones de forma robusta
 function getActiveOperacionesProject() {
-    if (!appState.operacionesProyectos || !Array.isArray(appState.operacionesProyectos)) return null;
     const activeId = appState.activeOperacionesProjectId;
-    if (!activeId) return appState.operacionesProyectos[0] || null;
-    return appState.operacionesProyectos.find(x => 
-        x && (
-            x.id === activeId ||
-            String(x.id).toLowerCase() === String(activeId).toLowerCase() ||
-            (x.numProyecto && String(x.numProyecto).toLowerCase() === String(activeId).toLowerCase()) ||
-            (x.consecutivo && String(x.consecutivo).toLowerCase() === String(activeId).toLowerCase()) ||
-            (x.numConsecutivo && String(x.numConsecutivo).toLowerCase() === String(activeId).toLowerCase())
-        )
-    ) || appState.operacionesProyectos[0] || null;
+    const cleanActiveId = activeId ? String(activeId).trim().toLowerCase() : '';
+
+    if (appState.draftOperacionesProject) {
+        const draftId = String(appState.draftOperacionesProject.id || '').trim().toLowerCase();
+        if (!cleanActiveId || draftId === cleanActiveId) {
+            return appState.draftOperacionesProject;
+        }
+    }
+
+    const proyectos = appState.operacionesProyectos;
+    if (Array.isArray(proyectos)) {
+        if (cleanActiveId) {
+            const found = proyectos.find(x => 
+                x && (
+                    String(x.id || '').trim().toLowerCase() === cleanActiveId ||
+                    String(x.numProyecto || '').trim().toLowerCase() === cleanActiveId ||
+                    String(x.consecutivo || '').trim().toLowerCase() === cleanActiveId ||
+                    String(x.numConsecutivo || '').trim().toLowerCase() === cleanActiveId
+                )
+            );
+            if (found) return found;
+        }
+    }
+
+    if (appState.draftOperacionesProject) {
+        return appState.draftOperacionesProject;
+    }
+
+    if (Array.isArray(proyectos) && proyectos.length > 0 && !cleanActiveId) {
+        return proyectos[0];
+    }
+    return null;
 }
 window.getActiveOperacionesProject = getActiveOperacionesProject;
 
@@ -14648,18 +14659,7 @@ function areProjectsSame(p1, p2) {
     const b2 = getBase(p2);
     if (b1 && b2 && b1 === b2 && b1.startsWith('RDP')) return true;
 
-    // Fusión de duplicados idénticos por contenido (mismo cliente, fecha y montos idénticos generados en la misma sesión):
-    const c1 = String(p1.cliente || p1.nombreCliente || '').trim().toUpperCase();
-    const c2 = String(p2.cliente || p2.nombreCliente || '').trim().toUpperCase();
-    const f1 = String(p1.fechaInicioDisplay || p1.fechaInicio || '').trim();
-    const f2 = String(p2.fechaInicioDisplay || p2.fechaInicio || '').trim();
-    const tot1 = parseFloat(p1.total) || 0;
-    const tot2 = parseFloat(p2.total) || 0;
-    const sub1 = parseFloat(p1.subtotal) || 0;
-    const sub2 = parseFloat(p2.subtotal) || 0;
-    if (c1 && c2 && c1 === c2 && f1 && f2 && f1 === f2 && tot1 > 0 && tot1 === tot2 && sub1 > 0 && sub1 === sub2) {
-        return true;
-    }
+    // Los proyectos distintos con folios independientes se conservan de forma individual
 
     return false;
 }
@@ -14904,7 +14904,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_04_fix_create_and_archive_v11';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_06_fix_save_projects_and_recover_90_v12';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -16545,31 +16545,30 @@ window.startEditingOperacionesProject = startEditingOperacionesProject;
 
 function saveEditingOperacionesProject() {
     window.saveEditingOperacionesProject = saveEditingOperacionesProject;
-    const pCheck = (typeof getActiveOperacionesProject === 'function')
-        ? getActiveOperacionesProject()
-        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
-    if (!appState.isEditingOperacionesDetail && pCheck && (typeof isProjectGenerado === 'function') && isProjectGenerado(pCheck)) return;
-    appState.isEditingOperacionesDetail = true;
-
+    
+    // Identificar de forma inequívoca el proyecto activo (sea borrador nuevo o proyecto existente)
     const p = (typeof getActiveOperacionesProject === 'function')
         ? getActiveOperacionesProject()
-        : (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
+        : (appState.draftOperacionesProject || (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId));
     if (!p) return;
+
+    appState.isEditingOperacionesDetail = true;
 
     // Sincronizar campos de encabezado desde el DOM por seguridad
     const facturaVal = document.getElementById("op-step1-factura-num")?.value;
     const ocVal = document.getElementById("op-step1-oc-num")?.value;
     const consecutivoVal = document.getElementById("op-step1-consecutivo-num")?.value;
     const clienteVal = document.getElementById("op-cliente-input")?.value;
+    const lavadoClienteVal = document.getElementById("op-step1-lavado-cliente")?.value;
 
-    if (facturaVal !== undefined) {
-        p.numFactura = facturaVal;
-        p.factura = facturaVal;
+    if (facturaVal !== undefined && facturaVal.trim()) {
+        p.numFactura = facturaVal.trim();
+        p.factura = facturaVal.trim();
     }
-    if (ocVal !== undefined) {
-        p.numOC = ocVal;
+    if (ocVal !== undefined && ocVal.trim()) {
+        p.numOC = ocVal.trim();
     }
-    const currentCons = p.consecutivo || p.numConsecutivo || p.numProyecto || p.id;
+    const currentCons = (consecutivoVal && consecutivoVal.trim()) || p.consecutivo || p.numConsecutivo || p.numProyecto || p.id;
     if (currentCons && String(currentCons).startsWith('RDP')) {
         const cleanCons = String(currentCons).trim();
         p.numConsecutivo = cleanCons;
@@ -16577,11 +16576,23 @@ function saveEditingOperacionesProject() {
         p.numProyecto = cleanCons;
         p.id = cleanCons;
     }
-    if (clienteVal !== undefined) {
-        p.cliente = clienteVal;
-        p.nombreCliente = clienteVal;
-        if (p.infoLavado) p.infoLavado.clienteFacturar = clienteVal;
+    const finalCliente = (clienteVal && clienteVal.trim()) || (lavadoClienteVal && lavadoClienteVal.trim());
+    if (finalCliente) {
+        p.cliente = finalCliente;
+        p.nombreCliente = finalCliente;
+        if (p.infoLavado) p.infoLavado.clienteFacturar = finalCliente;
     }
+
+    // Sincronizar info viaje
+    const termVal = document.getElementById("op-step1-terminal")?.value;
+    const mblVal = document.getElementById("op-step1-mbl")?.value;
+    const destVal = document.getElementById("op-step1-destino")?.value;
+    const obsVal = document.getElementById("op-step1-obs")?.value;
+    if (!p.infoViaje) p.infoViaje = {};
+    if (termVal !== undefined && termVal.trim()) p.infoViaje.terminal = termVal.trim();
+    if (mblVal !== undefined && mblVal.trim()) p.infoViaje.mblMawb = mblVal.trim();
+    if (destVal !== undefined && destVal.trim()) p.infoViaje.destino = destVal.trim();
+    if (obsVal !== undefined && obsVal.trim()) p.infoViaje.observaciones = obsVal.trim();
 
     if (typeof recalcPartidasTotals === 'function') {
         recalcPartidasTotals(p);
@@ -16590,17 +16601,26 @@ function saveEditingOperacionesProject() {
         recalcProveedorClavesTotals(p);
     }
 
-    // Si era un borrador nuevo, marcarlo como generado al guardar
-    if (!isProjectGenerado(p)) {
-        p.generado = true;
-        p.isNewProject = false;
-        p.isDraft = false;
-        appState.draftOperacionesProject = null;
-        if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
-        if (!appState.operacionesProyectos.some(x => x && x.id === p.id)) {
-            appState.operacionesProyectos.unshift(p);
-        }
+    // Formalizar proyecto: deja de ser borrador
+    p.generado = true;
+    p.isNewProject = false;
+    p.isDraft = false;
+    if (!p.estatus || p.estatus === 'PENDIENTE') {
+        p.estatus = 'PRIORIDAD';
     }
+
+    if (appState.draftOperacionesProject && (appState.draftOperacionesProject === p || appState.draftOperacionesProject.id === p.id)) {
+        appState.draftOperacionesProject = null;
+    }
+
+    if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
+    const exIdx = appState.operacionesProyectos.findIndex(x => x && (x.id === p.id || x.consecutivo === p.consecutivo));
+    if (exIdx !== -1) {
+        appState.operacionesProyectos[exIdx] = p;
+    } else {
+        appState.operacionesProyectos.unshift(p);
+    }
+    appState.activeOperacionesProjectId = p.id;
 
     appState.isEditingOperacionesDetail = false;
     appState._operacionesDetailSnapshot = JSON.parse(JSON.stringify(p));
