@@ -16133,15 +16133,31 @@ function eliminarProyectoOperaciones(projectId, event) {
 
     appState.operacionesProyectos = proyectos.filter(x => x.id !== projectId && x.numProyecto !== projectId && x.consecutivo !== projectId);
 
-    if (appState.activeOperacionesProjectId === projectId) {
+    if (Array.isArray(appState.consecutivo)) {
+        appState.consecutivo = appState.consecutivo.filter(r => {
+            const ref = String(r.refOp || r.referenciaOp || '').trim();
+            return ref !== projectId && ref !== name;
+        });
+        if (typeof window.saveConsecutivoStorage === 'function') window.saveConsecutivoStorage();
+        if (typeof window.syncConsecutivoToCloud === 'function') window.syncConsecutivoToCloud(true);
+    }
+
+    if (appState.activeOperacionesProjectId === projectId || appState.activeOperacionesProjectId === name) {
         closeOperacionesDetail();
     }
 
     saveOperacionesStorage();
 
+    if (typeof window.syncOperacionesToCloud === 'function') {
+        window.syncOperacionesToCloud(true);
+    }
+
     if (window.isFirebaseActive && window.isFirebaseActive()) {
         try {
             window.FIREBASE_CONFIG?.client?.from('operaciones')?.delete()?.eq('id', projectId)?.then(() => {}, () => {});
+            if (name && name !== projectId) {
+                window.FIREBASE_CONFIG?.client?.from('operaciones')?.delete()?.eq('id', name)?.then(() => {}, () => {});
+            }
         } catch (e) {}
     }
 
