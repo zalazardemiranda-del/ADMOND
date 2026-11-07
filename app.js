@@ -14944,7 +14944,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_06_force_purge_92_94_1793999197381';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_07_expediente_diff_row_1794079080000';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
@@ -18155,6 +18155,20 @@ function convertirPrefacturaPDF() {
         `;
     }).join('');
 
+    const fmtDiffCurrency = (val) => {
+        const num = Math.round((parseFloat(val) || 0) * 100) / 100;
+        const sign = num < 0 ? '-' : '';
+        const absVal = Math.abs(num);
+        return `${sign}$${absVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    const diffSub = totSub1 - totSub2;
+    const diffIva = totIva1 - totIva2;
+    const diffRetIva = totRet1 - totRetIva2;
+    const diffRetIsr = 0 - totRetIsr2;
+    const diffFinal = totFinal1 - totFinal2;
+    const diffFinalColor = diffFinal < 0 ? '#DC2626' : '#2563EB';
+
     const printHTML = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -18286,7 +18300,7 @@ function convertirPrefacturaPDF() {
             background: #FFFFFF;
             border: 1px solid #CBD5E1;
             border-radius: 8px;
-            padding: 10px 12px;
+            padding: 8px 10px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.03);
         }
         .pdf-table-title {
@@ -18341,6 +18355,44 @@ function convertirPrefacturaPDF() {
         .text-center { text-align: center; }
         .text-right { text-align: right; }
         .font-bold { font-weight: 700; }
+
+        /* Sección Diferencia de Totales (Dos filas: conceptos y resultado) */
+        .pdf-diff-container {
+            display: flex;
+            justify-content: flex-end;
+            padding-right: 10px;
+            margin-top: 6px;
+            margin-bottom: 4px;
+        }
+        .pdf-diff-table {
+            width: 41%;
+            border-collapse: collapse;
+            border: 1px solid #CBD5E1;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .pdf-diff-table th {
+            background: #2563EB;
+            color: #FFFFFF;
+            font-weight: 700;
+            padding: 5px 7px;
+            text-align: right;
+            border: 1px solid #1D4ED8;
+            font-size: 8.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .pdf-diff-table td {
+            background-color: #F8FAFC !important;
+            padding: 5px 7px;
+            border: 1px solid #CBD5E1;
+            font-size: 9.5px;
+        }
+        .pdf-diff-table tr.totals-row td.final-tot {
+            font-weight: 800;
+            font-size: 10.5px;
+        }
 
         /* Footer */
         .pdf-footer {
@@ -18473,6 +18525,30 @@ function convertirPrefacturaPDF() {
                         <td class="text-right final-tot">$${totFinal2.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                     </tr>
                 </tfoot>
+            </table>
+        </div>
+
+        <!-- SECCIÓN 3: Diferencia de Totales (Dos filas: conceptos y resultado) -->
+        <div class="pdf-diff-container">
+            <table class="pdf-table pdf-diff-table">
+                <thead>
+                    <tr>
+                        <th style="width: 24.39%;" class="text-right">Sub total</th>
+                        <th style="width: 17.07%;" class="text-right">IVA</th>
+                        <th style="width: 17.07%;" class="text-right">Retención IVA</th>
+                        <th style="width: 17.07%;" class="text-right">Retención ISR</th>
+                        <th style="width: 24.4%;" class="text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="totals-row">
+                        <td class="text-right font-bold">${fmtDiffCurrency(diffSub)}</td>
+                        <td class="text-right font-bold">${fmtDiffCurrency(diffIva)}</td>
+                        <td class="text-right font-bold">${fmtDiffCurrency(diffRetIva)}</td>
+                        <td class="text-right font-bold">${fmtDiffCurrency(diffRetIsr)}</td>
+                        <td class="text-right final-tot" style="color: ${diffFinalColor};">${fmtDiffCurrency(diffFinal)}</td>
+                    </tr>
+                </tbody>
             </table>
         </div>
 
