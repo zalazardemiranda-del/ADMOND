@@ -344,14 +344,16 @@
                                 const id = item.id || ('doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
                                 const fullItem = Object.assign({}, item, { id: id, created_at: item.created_at || new Date().toISOString(), updated_at: new Date().toISOString() });
                                 
+                                const isSyncSnapMsg = collectionName === 'messages' && item.chat_id && String(item.chat_id).startsWith('__cloud_sync_');
                                 // Guardar en Firestore si está disponible
                                 if (db) {
                                     try {
-                                        if (collectionName === 'messages' && item.chat_id && String(item.chat_id).startsWith('__cloud_sync_')) {
+                                        if (isSyncSnapMsg) {
                                             const safeSnapId = String(item.chat_id).replace(/^__+|__+$/g, '');
                                             await db.collection('sync_snapshots').doc(safeSnapId).set(fullItem, { merge: true });
+                                        } else {
+                                            await db.collection(collectionName).doc(String(id)).set(fullItem, { merge: true });
                                         }
-                                        await db.collection(collectionName).doc(String(id)).set(fullItem, { merge: true });
                                         if (collectionName === 'profiles' && item.email) {
                                             const emailNorm = String(item.email).trim().toLowerCase();
                                             const isAuthUid = /^[A-Za-z0-9]{28}$/.test(String(id));
@@ -397,12 +399,13 @@
                                     }
                                 }
 
-                                const isSyncSnapMsg = collectionName === 'messages' && item.chat_id && String(item.chat_id).startsWith('__cloud_sync_');
-                                const existingIdx = localItems.findIndex(x => x.id === id || (isSyncSnapMsg && x.chat_id === item.chat_id) || (item.email && x.email && x.email.toLowerCase() === item.email.toLowerCase()));
-                                if (existingIdx >= 0) {
-                                    localItems[existingIdx] = Object.assign({}, localItems[existingIdx], fullItem);
-                                } else {
-                                    localItems.unshift(fullItem);
+                                if (!isSyncSnapMsg) {
+                                    const existingIdx = localItems.findIndex(x => x.id === id || (item.email && x.email && x.email.toLowerCase() === item.email.toLowerCase()));
+                                    if (existingIdx >= 0) {
+                                        localItems[existingIdx] = Object.assign({}, localItems[existingIdx], fullItem);
+                                    } else {
+                                        localItems.unshift(fullItem);
+                                    }
                                 }
                                 inserted.push(fullItem);
                             }
@@ -456,12 +459,7 @@
                             localItems = localItems.map(item => {
                                 if (!matchesFilters(item)) return item;
                                 const merged = Object.assign({}, item, actionData, { updated_at: nowIso });
-                                if (!item.id || !touchedIds.has(String(item.id))) {
-                                    if (db && item.id) {
-                                        db.collection(collectionName).doc(String(item.id)).set(merged, { merge: true }).catch((e) => {
-                                            console.warn(`[Firebase] Error actualizando local en ${collectionName}:`, e.message || e);
-                                        });
-                                    }
+                                if (!db && (!item.id || !touchedIds.has(String(item.id)))) {
                                     updated.push(merged);
                                 }
                                 return merged;
@@ -571,7 +569,7 @@
                             }
                         }
 
-                        if (resultList.length === 0 && !(collectionName === 'profiles' && fetchedFromRemoteDb)) {
+                        if (!fetchedFromRemoteDb && resultList.length === 0) {
                             if (collectionName !== 'profiles') {
                                 resultList = localItems.slice();
                             }
@@ -819,12 +817,49 @@
                 window.FIREBASE_CONFIG.app = app;
                 window.FIREBASE_CONFIG.auth = window.firebase.auth ? window.firebase.auth() : null;
                 window.FIREBASE_CONFIG.db = window.firebase.firestore ? window.firebase.firestore() : null;
-                window.FIREBASE_CONFIG.client = createFirebaseClientAdapter(window.firebase);
 
-                // Configurar persistencia offline en Firestore si está disponible
+                // Configurar persistencia offline en Firestore ANTES de usar el cliente
                 if (window.FIREBASE_CONFIG.db && typeof window.FIREBASE_CONFIG.db.enablePersistence === 'function') {
                     window.FIREBASE_CONFIG.db.enablePersistence({ synchronizeTabs: true }).catch(function() {});
                 }
+
+                window.FIREBASE_CONFIG.client = createFirebaseClientAdapter(window.firebase);
+
+                // Reserva atómica de folio consecutivo mediante transacción en Firestore
+                window.reserveNextProjectConsecutivo = async function(tipoProyecto, fallbackMaxSeq) {
+                    const now = new Date();
+                    const year2 = String(now.getFullYear()).slice(-2);
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const isLavado = (tipoProyecto === 'lavado_contenedores');
+                    const baseMin = isLavado ? 57 : 171;
+                    const localFloor = Math.max(baseMin, Number(fallbackMaxSeq) || 0);
+                    const db = window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.db;
+                    if (!db || typeof db.runTransaction !== 'function') {
+                        const nextSeq = localFloor + 1;
+                        return `RDP${year2}${month}${nextSeq}-${isLavado ? 'L' : 'F'}`;
+                    }
+                    const counterDocId = isLavado ? 'lavado' : 'operaciones';
+                    const counterRef = db.collection('counters').doc(counterDocId);
+                    try {
+                        const nextSeq = await db.runTransaction(async function(tx) {
+                            const snap = await tx.get(counterRef);
+                            const currentSeq = (snap && snap.exists && snap.data() && typeof snap.data().lastSeq === 'number')
+                                ? snap.data().lastSeq
+                                : 0;
+                            const seq = Math.max(currentSeq, localFloor) + 1;
+                            tx.set(counterRef, {
+                                lastSeq: seq,
+                                updated_at: new Date().toISOString()
+                            }, { merge: true });
+                            return seq;
+                        });
+                        return `RDP${year2}${month}${nextSeq}-${isLavado ? 'L' : 'F'}`;
+                    } catch (err) {
+                        console.warn('[Firebase] Transacción de folio falló, usando respaldo local:', err.message || err);
+                        const nextSeq = localFloor + 1;
+                        return `RDP${year2}${month}${nextSeq}-${isLavado ? 'L' : 'F'}`;
+                    }
+                };
 
                 console.log("🔥 [Rodipack Firebase] Cliente Firebase & Firestore inicializado con éxito.");
                 return window.FIREBASE_CONFIG.client;

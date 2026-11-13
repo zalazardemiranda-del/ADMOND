@@ -479,149 +479,19 @@ const runInitialAppSetup = async () => {
         }
     }
     
-    // Por defecto todos los proyectos en Consecutivo se ponen en "Por programar" ('PP') y se elimina "Sin Estatus"
-    const migratedConsecutivoPP = localStorage.getItem('rp_consecutivo_default_pp_v3');
+    // Normalizar únicamente filas sin estatus asignado en Consecutivo (sin sobrescribir estatus ni fechas existentes)
     if (appState.consecutivo && Array.isArray(appState.consecutivo)) {
         let consecChanged = false;
         appState.consecutivo.forEach(item => {
             if (!item) return;
             const stVal = String(item.st || '').trim().toUpperCase();
-            if (!migratedConsecutivoPP) {
-                // En la migración inicial, todos los que no estén en Pagado ('P') pasan por defecto a 'PP' (Por programar)
-                if (stVal === 'P') {
-                    item.st = 'P';
-                } else {
-                    item.st = 'PP';
-                    consecChanged = true;
-                }
-            } else {
-                if (stVal === 'P') {
-                    item.st = 'P';
-                } else if (stVal === 'C') {
-                    item.st = 'C';
-                } else {
-                    item.st = 'PP';
-                    consecChanged = true;
-                }
-            }
-            if (item.st !== 'P') {
-                item.fechaPago = '';
+            if (!stVal) {
+                item.st = 'PP';
+                consecChanged = true;
             }
         });
-        if (!migratedConsecutivoPP) {
-            try { localStorage.setItem('rp_consecutivo_default_pp_v3', 'true'); } catch (e) {}
-        }
         if (consecChanged) {
             try { localStorage.setItem('rp_consecutivo_data', JSON.stringify(appState.consecutivo)); } catch (e) {}
-        }
-    }
-    
-    // Por defecto todos los proyectos de Proveedores están en "Programar a pago" ('PROG')
-    if (appState.proveedores && Array.isArray(appState.proveedores)) {
-        let changed = false;
-        appState.proveedores.forEach(p => {
-            if (!p) return;
-            const rawSt = String(p.p || p.estatus || '').trim().toLowerCase();
-            if (rawSt !== 'pagado') {
-                if (p.p !== 'PROG' || p.estatus !== 'PROG') {
-                    p.p = 'PROG';
-                    p.estatus = 'PROG';
-                    changed = true;
-                }
-                if (p.fechaPago) {
-                    p.fechaPago = '';
-                    changed = true;
-                }
-            }
-            const cur = String(p.proveedor || '').trim().toLowerCase();
-            if (cur === 'jennifer' || cur === 'rama') {
-                p.proveedor = cur === 'rama' ? "RAMA MULTIMODAL S DE RL DE CV" : "Jennufer Marylin Gonzales Franco";
-                changed = true;
-            }
-            const isJennifer = cur.includes('jennufer') || cur.includes('gonzales');
-            const opRef = String(p.op || p.referenciaOp || p.projectId || '').toUpperCase();
-            if (isJennifer || opRef.includes('RDP2610172-F')) {
-                if (!p.subtotal || p.subtotal === 0 || p.subtotal === '0' || !p.total || p.total === 0) {
-                    p.proveedor = "Jennufer Marylin Gonzales Franco";
-                    p.facturaProveedor = p.facturaProveedor && p.facturaProveedor !== '-' ? p.facturaProveedor : '-';
-                    p.servicio = p.servicio || 'Logistic';
-                    p.fecha = p.fecha || '2026-10-03';
-                    p.subtotal = 48300;
-                    p.iva = 7728;
-                    p.retencionIvaPct = 4;
-                    p.retencionIva = 1932;
-                    p.retencion4 = 1932;
-                    p.retencionIsr = 0;
-                    p.total = 54096;
-                    p.estatus = (!p.estatus || String(p.estatus).toLowerCase() !== 'pagado') ? 'PROG' : 'PAGADO';
-                    p.p = p.estatus;
-                    p.factura = p.factura || '-';
-                    p.op = 'RDP2610172-F';
-                    changed = true;
-                }
-            }
-        });
-        if (changed) saveToStorage();
-    }
-
-    // Restaurar integridad en Operaciones para RDP2610172-F
-    if (appState.operacionesProyectos && Array.isArray(appState.operacionesProyectos)) {
-        let changedOp = false;
-        appState.operacionesProyectos.forEach(p => {
-            if (!p) return;
-            const pId = String(p.id || p.consecutivo || p.numProyecto || '').toUpperCase();
-            if (pId.includes('RDP2610172-F')) {
-                const hasValidProv = p.proveedoresClaves && p.proveedoresClaves.some(x => x && x.proveedor && (x.subtotal > 0 || x.total > 0));
-                if (!hasValidProv) {
-                    p.proveedoresClaves = [
-                        {
-                            proveedor: 'Jennufer Marylin Gonzales Franco',
-                            facturaNum: '-',
-                            num: 1,
-                            concepto: 'Logistic',
-                            fecha: '2026-10-03',
-                            cantidad: 1,
-                            unitario: 48300,
-                            subtotal: 48300,
-                            iva: 7728,
-                            retencionIvaPct: 4,
-                            retencionIva: 4,
-                            retencionIvaMonto: 1932,
-                            ret4: 1932,
-                            retencion4: 1932,
-                            retencionIsr: 0,
-                            retencionIsrPct: 0,
-                            total: 54096
-                        }
-                    ];
-                    changedOp = true;
-                }
-                if (!p.documentos || !p.documentos.factura1 || !p.documentos.factura2) {
-                    p.documentos = p.documentos || {};
-                    if (!p.documentos.factura1) {
-                        p.documentos.factura1 = {
-                            uploaded: true,
-                            fileName: 'FAC 1574.pdf',
-                            fileSize: 102400,
-                            fileType: 'application/pdf',
-                            uploadedAt: '2026-10-03T19:49:25.232Z'
-                        };
-                    }
-                    if (!p.documentos.factura2) {
-                        p.documentos.factura2 = {
-                            uploaded: true,
-                            fileName: 'Factura-567.pdf',
-                            fileSize: 102400,
-                            fileType: 'application/pdf',
-                            uploadedAt: '2026-10-03T19:49:25.252Z'
-                        };
-                    }
-                    changedOp = true;
-                }
-            }
-        });
-        if (changedOp) {
-            saveOperacionesStorage();
         }
     }
     
@@ -13536,6 +13406,41 @@ async function sendQuickReply() {
 // Regla: RDP + últimos 2 dígitos del año actual (26) + mes en 2 dígitos (09) + número secuencial
 // - Servicio local y movimientos foráneos: sigue el 171 y el usuario define la letra
 // - Lavado de contenedores: sigue el 56 y el sistema agrega la letra 'L'
+function getMaxProjectSeq(tipoProyecto, excludeProjectId = null) {
+    const isLavado = (tipoProyecto === 'lavado_contenedores');
+    let maxSeq = isLavado ? 57 : 171;
+    const projects = (appState.operacionesProyectos || []).concat(
+        (appState.consecutivo || []).map(r => ({
+            numConsecutivo: r.referenciaOp || r.refOp,
+            consecutivo: r.referenciaOp || r.refOp,
+            generado: true
+        }))
+    );
+    projects.forEach(p => {
+        if (!p) return;
+        if (appState.draftOperacionesProject && p === appState.draftOperacionesProject) return;
+        if (p.isDraft === true || p.isNewProject === true || p.generado === false) return;
+        if (typeof isProjectGenerado === 'function' && !isProjectGenerado(p)) return;
+        if (excludeProjectId && (p.id === excludeProjectId || p.consecutivo === excludeProjectId || p.numProyecto === excludeProjectId || p.numConsecutivo === excludeProjectId)) return;
+        if (window.purgedProjectIds && (window.purgedProjectIds.has(p.id) || window.purgedProjectIds.has(p.consecutivo) || window.purgedProjectIds.has(p.numProyecto) || window.purgedProjectIds.has(p.numConsecutivo))) return;
+
+        const val = String(p.numConsecutivo || p.consecutivo || p.numProyecto || p.id || '').trim();
+        const m = val.match(/^RDP\d{4}(\d+)(?:-?([A-Z]))?$/i);
+        if (m) {
+            const n = parseInt(m[1], 10);
+            const letter = (m[2] || '').toUpperCase();
+            const projIsLavado = (letter === 'L' || val.includes('-L') || val.endsWith('L') || p.tipoProyecto === 'lavado_contenedores');
+            if (isLavado && projIsLavado) {
+                if (!isNaN(n) && n > maxSeq) maxSeq = n;
+            } else if (!isLavado && !projIsLavado) {
+                if (!isNaN(n) && n > maxSeq) maxSeq = n;
+            }
+        }
+    });
+    return maxSeq;
+}
+window.getMaxProjectSeq = getMaxProjectSeq;
+
 function generateProjectConsecutivo(tipoProyecto, excludeProjectId = null) {
     window.generateProjectConsecutivo = generateProjectConsecutivo;
     const now = new Date();
@@ -13676,13 +13581,14 @@ function syncAllOperacionesToConsecutivo() {
             }
         });
 
-        // Auto-bridging bidireccional: si hay filas en Consecutivo con referenciaOp válida que no existan aún en Operaciones, crearlas
+        // Auto-bridging bidireccional: si hay filas en Consecutivo con referenciaOp válida que no existan aún en Operaciones, crearlas (excepto si fueron eliminadas)
         let opChanged = false;
+        const deletedOpSet = typeof window.getDeletedOperacionesSet === 'function' ? window.getDeletedOperacionesSet() : new Set();
         if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
         appState.consecutivo.forEach(row => {
             if (!row || !row.referenciaOp) return;
             const ref = String(row.referenciaOp).trim();
-            if (purgedIds.has(ref) || ref.endsWith('-')) return;
+            if (purgedIds.has(ref) || ref.endsWith('-') || deletedOpSet.has(ref.toUpperCase())) return;
             const refLower = ref.toLowerCase();
             const existing = appState.operacionesProyectos.find(p => {
                 if (!p) return false;
@@ -13937,6 +13843,41 @@ function saveOperacionesStorage(skipProveedoresSync = false) {
     }
 };
 
+function getDeletedOperacionesSet() {
+    try {
+        const raw = localStorage.getItem('rp_deleted_operaciones');
+        const arr = raw ? JSON.parse(raw) : [];
+        return new Set(Array.isArray(arr) ? arr.map(x => String(x || '').trim().toUpperCase()).filter(Boolean) : []);
+    } catch (e) {
+        return new Set();
+    }
+}
+window.getDeletedOperacionesSet = getDeletedOperacionesSet;
+
+function markOperacionesProjectDeleted(ids) {
+    const set = getDeletedOperacionesSet();
+    (Array.isArray(ids) ? ids : [ids]).forEach(id => {
+        const clean = String(id || '').trim().toUpperCase();
+        if (clean) set.add(clean);
+    });
+    const list = Array.from(set).slice(-300);
+    try {
+        localStorage.setItem('rp_deleted_operaciones', JSON.stringify(list));
+    } catch (e) {}
+    if (window.isFirebaseActive && window.isFirebaseActive()) {
+        const client = window.FIREBASE_CONFIG?.client;
+        if (client) {
+            client.from('messages').insert({
+                chat_id: '__cloud_sync_operaciones_deleted__',
+                contenido: JSON.stringify(list),
+                emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                emisor_role: 'sistema'
+            }).then(() => {}, () => {});
+        }
+    }
+}
+window.markOperacionesProjectDeleted = markOperacionesProjectDeleted;
+
 let _syncOperacionesTimer = null;
 function syncOperacionesToCloud(forceImmediate = false) {
     window.syncOperacionesToCloud = syncOperacionesToCloud;
@@ -14183,7 +14124,26 @@ async function fetchOperacionesFromCloud() {
         let dbProjects = [];
         let snapProjects = [];
 
-        // 1. Leer desde tabla dedicada operaciones
+        // 0. Leer lista de expedientes eliminados (tombstones) para que nunca resuciten
+        const deletedSet = getDeletedOperacionesSet();
+        try {
+            const { data: delMsgs } = await client.from('messages')
+                .select('contenido')
+                .eq('chat_id', '__cloud_sync_operaciones_deleted__')
+                .limit(1);
+            if (delMsgs && delMsgs.length > 0 && delMsgs[0].contenido) {
+                const delArr = JSON.parse(delMsgs[0].contenido);
+                if (Array.isArray(delArr)) {
+                    delArr.forEach(id => {
+                        const clean = String(id || '').trim().toUpperCase();
+                        if (clean) deletedSet.add(clean);
+                    });
+                    try { localStorage.setItem('rp_deleted_operaciones', JSON.stringify(Array.from(deletedSet).slice(-300))); } catch (e) {}
+                }
+            }
+        } catch (e) {}
+
+        // 1. Leer desde tabla dedicada operaciones (fuente principal)
         try {
             const { data: dbOps } = await client.from('operaciones').select('*').order('updated_at', { ascending: false });
             if (dbOps && dbOps.length > 0) {
@@ -14216,52 +14176,48 @@ async function fetchOperacionesFromCloud() {
             }
         } catch (e) {}
 
-        // 2. Leer SIEMPRE los snapshots recientes de messages (__cloud_sync_operaciones__) para no perder proyectos nuevos
+        // 2. Leer únicamente el snapshot más reciente de sync_snapshots (__cloud_sync_operaciones__) como respaldo
         try {
             const { data: snapMsgs } = await client.from('messages')
                 .select('contenido, created_at')
                 .eq('chat_id', '__cloud_sync_operaciones__')
                 .order('created_at', { ascending: false })
-                .limit(5);
+                .limit(1);
 
-            if (snapMsgs && snapMsgs.length > 0) {
-                for (const msg of snapMsgs) {
-                    if (!msg || !msg.contenido) continue;
-                    try {
-                        let parsed = JSON.parse(msg.contenido);
-                        if (typeof parsed === 'string') {
-                            try { parsed = JSON.parse(parsed); } catch (e) {}
-                        }
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            parsed.forEach(p => {
-                                if (p && typeof p === 'object') {
-                                    if (p.generado === undefined) p.generado = true;
-                                    const pConsec = String(p.consecutivo || p.numProyecto || p.id || '').trim().toUpperCase();
-                                    const alreadyInSnap = snapProjects.some(sp => {
-                                        const spConsec = String(sp.consecutivo || sp.numProyecto || sp.id || '').trim().toUpperCase();
-                                        return spConsec === pConsec;
-                                    });
-                                    if (!alreadyInSnap) {
-                                        snapProjects.push(p);
-                                    }
-                                }
-                            });
-                        }
-                    } catch (e) {}
-                }
+            if (snapMsgs && snapMsgs.length > 0 && snapMsgs[0] && snapMsgs[0].contenido) {
+                try {
+                    let parsed = JSON.parse(snapMsgs[0].contenido);
+                    if (typeof parsed === 'string') {
+                        try { parsed = JSON.parse(parsed); } catch (e) {}
+                    }
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        parsed.forEach(p => {
+                            if (p && typeof p === 'object') {
+                                if (p.generado === undefined) p.generado = true;
+                                snapProjects.push(p);
+                            }
+                        });
+                    }
+                } catch (e) {}
             }
         } catch (e) {}
 
-        const combinedCloud = [...snapProjects];
-        dbProjects.forEach(dp => {
-            const dpConsec = String(dp.consecutivo || dp.numProyecto || dp.id || '').trim().toUpperCase();
-            if (!combinedCloud.some(cp => String(cp.consecutivo || cp.numProyecto || cp.id || '').trim().toUpperCase() === dpConsec)) {
-                combinedCloud.push(dp);
+        // Priorizar los documentos individuales de `operaciones` sobre el snapshot
+        const combinedCloud = [...dbProjects];
+        snapProjects.forEach(sp => {
+            const spConsec = String(sp.consecutivo || sp.numProyecto || sp.id || '').trim().toUpperCase();
+            if (!combinedCloud.some(cp => String(cp.consecutivo || cp.numProyecto || cp.id || '').trim().toUpperCase() === spConsec)) {
+                combinedCloud.push(sp);
             }
         });
 
-        if (combinedCloud.length > 0) {
-            window.mergeOperacionesProjects(combinedCloud);
+        const filteredCloud = combinedCloud.filter(p => {
+            const keys = [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean).map(k => String(k).trim().toUpperCase());
+            return !keys.some(k => deletedSet.has(k));
+        });
+
+        if (filteredCloud.length > 0 || dbProjects.length === 0) {
+            window.mergeOperacionesProjects(filteredCloud);
             if (!appState.isEditingOperacionesDetail) {
                 try {
                     const safeToStore = typeof stripLargeDocsFromProjectList === 'function'
@@ -14295,11 +14251,15 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
     if (!appState.operacionesProyectos) appState.operacionesProyectos = [];
 
     const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F', 'RDP2610182-F', 'RDP2610182']);
+    const deletedSet = getDeletedOperacionesSet();
 
     if (cloudList.length === 0) {
-        appState.operacionesProyectos = (appState.operacionesProyectos || []).filter(p => 
-            p && isProjectGenerado(p) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(p)) && !fakeOpIds.has(p.id) && !fakeOpIds.has(p.consecutivo) && !fakeOpIds.has(p.numProyecto)
-        );
+        appState.operacionesProyectos = (appState.operacionesProyectos || []).filter(p => {
+            if (!p || !isProjectGenerado(p) || (typeof isAccidentalEmptyProject === 'function' && isAccidentalEmptyProject(p))) return false;
+            const keys = [p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean).map(k => String(k).trim().toUpperCase());
+            if (keys.some(k => fakeOpIds.has(k) || deletedSet.has(k))) return false;
+            return true;
+        });
         try {
             localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
         } catch (e) {}
@@ -14320,6 +14280,8 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
         if (cp.generado === undefined && (cp.id || cp.consecutivo || cp.numProyecto)) {
             cp.generado = true;
         }
+        const keys = [cp.id, cp.consecutivo, cp.numConsecutivo, cp.numProyecto].filter(Boolean).map(k => String(k).trim().toUpperCase());
+        if (keys.some(k => deletedSet.has(k))) return false;
         return isProjectGenerado(cp) && (typeof isAccidentalEmptyProject !== 'function' || !isAccidentalEmptyProject(cp)) && !fakeOpIds.has(cp.id) && !fakeOpIds.has(cp.consecutivo) && !fakeOpIds.has(cp.numProyecto) && !String(cp.id || cp.consecutivo || '').endsWith('-');
     });
 
@@ -16192,6 +16154,7 @@ function eliminarProyectoOperaciones(projectId, event) {
     }
 
     appState.operacionesProyectos = proyectos.filter(x => x.id !== projectId && x.numProyecto !== projectId && x.consecutivo !== projectId);
+    markOperacionesProjectDeleted([projectId, name]);
 
     if (Array.isArray(appState.consecutivo)) {
         appState.consecutivo = appState.consecutivo.filter(r => {
@@ -16619,7 +16582,7 @@ function startEditingOperacionesProject() {
 }
 window.startEditingOperacionesProject = startEditingOperacionesProject;
 
-function saveEditingOperacionesProject() {
+async function saveEditingOperacionesProject() {
     window.saveEditingOperacionesProject = saveEditingOperacionesProject;
     
     // Identificar de forma inequívoca el proyecto activo (sea borrador nuevo o proyecto existente)
@@ -16627,6 +16590,8 @@ function saveEditingOperacionesProject() {
         ? getActiveOperacionesProject()
         : (appState.draftOperacionesProject || (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId));
     if (!p) return;
+
+    const wasNewDraft = (p.isNewProject === true || p.isDraft === true || p.generado !== true);
 
     appState.isEditingOperacionesDetail = true;
 
@@ -16677,7 +16642,16 @@ function saveEditingOperacionesProject() {
         recalcProveedorClavesTotals(p);
     }
 
-    // Formalizar proyecto: deja de ser borrador
+    // Formalizar proyecto: si es nuevo borrador, reservar folio atómico en Firestore para evitar duplicados entre usuarios
+    if (wasNewDraft && typeof window.reserveNextProjectConsecutivo === 'function') {
+        const atomicFolio = await window.reserveNextProjectConsecutivo(p.tipoProyecto, getMaxProjectSeq(p.tipoProyecto, p.id));
+        if (atomicFolio) {
+            p.numConsecutivo = atomicFolio;
+            p.consecutivo = atomicFolio;
+            p.numProyecto = atomicFolio;
+            p.id = atomicFolio;
+        }
+    }
     p.generado = true;
     p.isNewProject = false;
     p.isDraft = false;
@@ -19960,10 +19934,11 @@ function finishOperacionesWizard() {
     closeOperacionesDetail();
 };
 
-function generarProyectoOperaciones() {
+async function generarProyectoOperaciones() {
     window.generarProyectoOperaciones = generarProyectoOperaciones;
     const p = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId) || appState.draftOperacionesProject;
     if (p) {
+        const wasNewDraft = (p.isNewProject === true || p.isDraft === true || p.generado !== true);
         // Asegurar que los datos del encabezado queden persistidos
         const facturaVal = document.getElementById("op-step1-factura-num")?.value;
         const ocVal = document.getElementById("op-step1-oc-num")?.value;
@@ -19971,7 +19946,11 @@ function generarProyectoOperaciones() {
         const clienteVal = document.getElementById("op-cliente-input")?.value;
         if (facturaVal) p.numFactura = facturaVal;
         if (ocVal) p.numOC = ocVal;
-        const currentCons = p.consecutivo || p.numConsecutivo || p.numProyecto || p.id;
+        let currentCons = p.consecutivo || p.numConsecutivo || p.numProyecto || p.id;
+        if (wasNewDraft && typeof window.reserveNextProjectConsecutivo === 'function') {
+            const atomicFolio = await window.reserveNextProjectConsecutivo(p.tipoProyecto, getMaxProjectSeq(p.tipoProyecto, p.id));
+            if (atomicFolio) currentCons = atomicFolio;
+        }
         if (currentCons && String(currentCons).startsWith('RDP')) {
             const cleanCons = String(currentCons).trim();
             p.numConsecutivo = cleanCons;
