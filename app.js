@@ -10705,7 +10705,6 @@ async function loadProfilesList() {
     window.loadProfilesList = loadProfilesList;
     const container = document.getElementById("profiles-list-container");
     
-    const deletedProfiles = (JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]') || []).map(e => String(e).toLowerCase());
     let firebaseProfiles = [];
     
     if (window.isFirebaseActive()) {
@@ -10720,8 +10719,6 @@ async function loadProfilesList() {
                 const cleanDbProfiles = [];
                 for (const p of dbProfiles) {
                     if (!p || !p.email) continue;
-                    const e = String(p.email).trim().toLowerCase();
-                    if (deletedProfiles.includes(e)) continue;
                     cleanDbProfiles.push(p);
                 }
 
@@ -11063,7 +11060,7 @@ async function handleFirebaseRegister(event) {
             newId = signUpRes.data.user.id || signUpRes.data.user.uid;
         }
 
-        const newProfileObj = { id: newId, nombre, email, rol, departamento: depto, password };
+        const newProfileObj = { id: newId, nombre, email, rol, departamento: depto };
 
         // 1. Desmarcar de eliminados si se vuelve a dar de alta
         let deletedProfiles = JSON.parse(localStorage.getItem('rp_deleted_profiles') || '[]');
@@ -11072,7 +11069,6 @@ async function handleFirebaseRegister(event) {
 
         // 2. Guardar localmente solo tras validación en Firebase Auth
         localStorage.setItem('rp_user_profile_name_' + emailLower, nombre);
-        localStorage.setItem('rp_user_pass_' + emailLower, password);
         const localProfiles = JSON.parse(localStorage.getItem('rp_local_profiles')) || [];
         const existingIdx = localProfiles.findIndex(p => p.email && p.email.toLowerCase() === emailLower);
         if (existingIdx >= 0) {
@@ -11083,14 +11079,15 @@ async function handleFirebaseRegister(event) {
         localStorage.setItem('rp_local_profiles', JSON.stringify(localProfiles));
 
         try {
+            const nowIso = new Date().toISOString();
             await client.from('profiles').upsert({
                 id: newId,
                 nombre,
                 email,
                 rol,
                 departamento: depto,
-                password,
-                updated_at: new Date().toISOString()
+                created_at: nowIso,
+                updated_at: nowIso
             });
         } catch (e) {
             console.warn("DB profile insert warning:", e);

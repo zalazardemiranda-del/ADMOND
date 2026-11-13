@@ -526,13 +526,11 @@
                                         ref = ref.where(f.field, f.op, f.val);
                                     }
                                 }
-                                const canOrderInFirestore = (filters.length === 0) || (orders.length > 0 && filters.every(f => f.field === orders[0].field));
+                                const canOrderInFirestore = Boolean(limitNum) && ((filters.length === 0) || (orders.length > 0 && filters.every(f => f.field === orders[0].field)));
                                 if (canOrderInFirestore) {
                                     for (let o of orders) {
                                         ref = ref.orderBy(o.field, o.ascending ? 'asc' : 'desc');
                                     }
-                                }
-                                if (limitNum && canOrderInFirestore) {
                                     ref = ref.limit(limitNum);
                                 }
                                 const snap = await ref.get();
