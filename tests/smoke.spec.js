@@ -63,7 +63,7 @@ async function openApp(page, requests = []) {
   page.on("pageerror", (e) => errors.push(e.message));
   await mockNetwork(page, requests);
   await page.goto("/");
-  await page.waitForFunction(() => window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.client, null, { timeout: 15000 });
+  await page.waitForFunction(() => (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.client) || (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.client), null, { timeout: 15000 });
   await page.waitForTimeout(1500); // deja terminar el arranque asincrono
   return errors;
 }
