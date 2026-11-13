@@ -3,22 +3,10 @@
     "rules": "firestore.rules"
   },
   "hosting": {
-    "public": ".",
+    "public": "www",
     "ignore": [
       "firebase.json",
-      "**/.*",
-      "**/node_modules/**",
-      "tests/**",
-      "fastlane/**",
-      "ios/**",
-      "tools/**",
-      "docs/**",
-      "package.json",
-      "package-lock.json",
-      "playwright.config.js",
-      "eslint.config.js",
-      "playwright-report/**",
-      "test-results/**"
+      "**/.*"
     ],
     "headers": [
       {

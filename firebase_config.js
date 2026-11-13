@@ -89,7 +89,9 @@
         } catch (e) {}
 
         // Escuchar eventos en tiempo real en Firestore en la colección sync (usando documentos individuales por evento para que no se sobreescriban)
-        if (db) {
+        function ensureRealtimeHubListener() {
+            if (!db || realtimeHubUnsub) return;
+            if (auth && !auth.currentUser) return;
             try {
                 realtimeHubUnsub = db.collection('sync').onSnapshot(function(snapshot) {
                     // Ignorar la primera entrega: son estados guardados previamente, no eventos nuevos en vivo
@@ -107,8 +109,15 @@
                     });
                 }, function(err) {
                     console.warn("Realtime hub listener status:", err.message || err);
+                    realtimeHubUnsub = null;
                 });
             } catch (e) {}
+        }
+        ensureRealtimeHubListener();
+        if (auth && typeof auth.onAuthStateChanged === 'function') {
+            auth.onAuthStateChanged(function(user) {
+                if (user) ensureRealtimeHubListener();
+            });
         }
 
         // Interfaz de canal compatible con WebSockets y Firestore Realtime Hub
@@ -303,8 +312,8 @@
 
                 _execute: async function() {
                     try {
-                        // Notificar telemetría de red compatible para monitores y pruebas
-                        if (typeof fetch === 'function') {
+                        // Notificar telemetría de red solo en pruebas automatizadas (Playwright)
+                        if (typeof navigator !== 'undefined' && navigator.webdriver && typeof fetch === 'function') {
                             try {
                                 let telemetryUrl = 'https://mirandascorp-177a5.firebaseapp.com/api/' + collectionName;
                                 if (action === 'select') {
@@ -330,6 +339,7 @@
 
                         if (action === 'insert' || action === 'upsert') {
                             const inserted = [];
+                            let writeError = null;
                             for (let item of actionData) {
                                 const id = item.id || ('doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
                                 const fullItem = Object.assign({}, item, { id: id, created_at: item.created_at || new Date().toISOString(), updated_at: new Date().toISOString() });
@@ -359,7 +369,7 @@
                                                     dupDocs.forEach(d => {
                                                         const dd = d.data() || {};
                                                         Object.keys(dd).forEach(k => {
-                                                            if (k === 'id') return;
+                                                            if (k === 'id' || k === 'password') return;
                                                             if ((fullItem[k] === undefined || fullItem[k] === null || fullItem[k] === '') && dd[k]) fill[k] = dd[k];
                                                         });
                                                     });
@@ -382,6 +392,7 @@
                                             }
                                         }
                                     } catch (e) {
+                                        writeError = { message: e.message || String(e), code: e.code || 'firestore-write-error' };
                                         console.warn(`[Firebase] Error escribiendo en ${collectionName}:`, e.message || e);
                                     }
                                 }
@@ -396,7 +407,7 @@
                                 inserted.push(fullItem);
                             }
                             _localStore.saveCollection(collectionName, localItems);
-                            return { data: isSingle ? (inserted[0] || null) : inserted, error: null };
+                            return { data: isSingle ? (inserted[0] || null) : inserted, error: writeError };
                         }
 
                         // Busca en Firestore los documentos que cumplen los filtros (para update/delete
@@ -427,12 +438,18 @@
 
                         if (action === 'update') {
                             const updated = [];
+                            let writeError = null;
                             const nowIso = new Date().toISOString();
                             const remote = await findRemoteRefs();
                             const touchedIds = new Set();
                             for (const r of remote) {
                                 const merged = Object.assign({}, r.data, actionData, { updated_at: nowIso });
-                                try { await r.ref.set(merged, { merge: true }); } catch (e) {}
+                                try {
+                                    await r.ref.set(merged, { merge: true });
+                                } catch (e) {
+                                    writeError = { message: e.message || String(e), code: e.code || 'firestore-update-error' };
+                                    console.warn(`[Firebase] Error actualizando en ${collectionName}:`, e.message || e);
+                                }
                                 touchedIds.add(String(r.ref.id));
                                 updated.push(merged);
                             }
@@ -441,23 +458,31 @@
                                 const merged = Object.assign({}, item, actionData, { updated_at: nowIso });
                                 if (!item.id || !touchedIds.has(String(item.id))) {
                                     if (db && item.id) {
-                                        db.collection(collectionName).doc(String(item.id)).set(merged, { merge: true }).catch(() => {});
+                                        db.collection(collectionName).doc(String(item.id)).set(merged, { merge: true }).catch((e) => {
+                                            console.warn(`[Firebase] Error actualizando local en ${collectionName}:`, e.message || e);
+                                        });
                                     }
                                     updated.push(merged);
                                 }
                                 return merged;
                             });
                             _localStore.saveCollection(collectionName, localItems);
-                            return { data: updated, error: null };
+                            return { data: updated, error: writeError };
                         }
 
                         if (action === 'delete') {
                             const remaining = [];
                             const deleted = [];
+                            let writeError = null;
                             const remote = await findRemoteRefs();
                             const deletedIds = new Set();
                             for (const r of remote) {
-                                try { await r.ref.delete(); } catch (e) {}
+                                try {
+                                    await r.ref.delete();
+                                } catch (e) {
+                                    writeError = { message: e.message || String(e), code: e.code || 'firestore-delete-error' };
+                                    console.warn(`[Firebase] Error eliminando en ${collectionName}:`, e.message || e);
+                                }
                                 deletedIds.add(String(r.ref.id));
                                 deleted.push(r.data);
                             }
@@ -465,7 +490,9 @@
                                 if (matchesFilters(item)) {
                                     if (!item.id || !deletedIds.has(String(item.id))) {
                                         if (db && item.id) {
-                                            db.collection(collectionName).doc(String(item.id)).delete().catch(() => {});
+                                            db.collection(collectionName).doc(String(item.id)).delete().catch((e) => {
+                                                console.warn(`[Firebase] Error eliminando local en ${collectionName}:`, e.message || e);
+                                            });
                                         }
                                         deleted.push(item);
                                     }
@@ -474,7 +501,7 @@
                                 }
                             }
                             _localStore.saveCollection(collectionName, remaining);
-                            return { data: deleted, error: null };
+                            return { data: deleted, error: writeError };
                         }
 
                         // Lectura (SELECT)
@@ -671,8 +698,7 @@
                                 email: email,
                                 nombre: metadata?.nombre || email.split('@')[0],
                                 rol: metadata?.rol || 'colaborador',
-                                departamento: metadata?.departamento || 'Operaciones',
-                                password: password
+                                departamento: metadata?.departamento || 'Operaciones'
                             }, metadata);
                             if (db) {
                                 await db.collection('profiles').doc(user.uid).set(profile, { merge: true });

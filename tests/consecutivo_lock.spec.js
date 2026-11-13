@@ -70,7 +70,7 @@ async function openAppAsAdmin(page) {
   page.on("pageerror", (e) => errors.push(e.message));
   await mockNetwork(page);
   await page.goto("/");
-  await page.waitForFunction(() => window.appState && window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.client, null, { timeout: 15000 });
+  await page.waitForFunction(() => window.appState && ((window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.client) || (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.client)), null, { timeout: 15000 });
   await page.waitForTimeout(500);
 
   // Iniciar sesión como Gerente/Administrador y entrar a ficha consecutivo

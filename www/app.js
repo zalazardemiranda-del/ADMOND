@@ -16,6 +16,18 @@ window.showCustomNotification = function (message, type) {
 };
 window.showStatusMessage = window.showCustomNotification;
 
+let _lastCloudSyncErrorNotifyAt = 0;
+window.notifyCloudSyncError = function (contextLabel, err) {
+    const msg = (err && (err.message || err.code)) ? (err.message || err.code) : String(err || 'Error de conexión');
+    console.warn(`[CloudSync] ${contextLabel}:`, msg);
+    const now = Date.now();
+    if (now - _lastCloudSyncErrorNotifyAt < 10000) return;
+    _lastCloudSyncErrorNotifyAt = now;
+    if (typeof window.showCustomNotification === 'function') {
+        window.showCustomNotification(`No se pudo guardar ${contextLabel} en la nube (${msg}). Revisa tu conexión o sesión.`, 'error');
+    }
+};
+
 // Default Application Data (Datos falsos e inventados eliminados)
 const defaultTasks = [];
 
@@ -1729,12 +1741,15 @@ function syncAdminConceptsToCloud(forceImmediate = false) {
                 impuestos: appState.concepts?.impuestos !== undefined ? appState.concepts.impuestos : 0,
                 updatedAt: new Date().toISOString()
             };
-            await client.from('messages').insert({
+            const { error: snapErr } = await client.from('messages').insert({
                 chat_id: '__cloud_sync_admin_concepts__',
                 contenido: JSON.stringify(payload),
                 emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
                 emisor_role: 'sistema'
             });
+            if (snapErr && typeof window.notifyCloudSyncError === 'function') {
+                window.notifyCloudSyncError('Conceptos', snapErr);
+            }
             const db = (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.db) || (window.firebase && firebase.firestore && firebase.firestore());
             if (db) {
                 await db.collection('sync_snapshots').doc('cloud_sync_admin_concepts').set({
@@ -2744,14 +2759,17 @@ function syncNominasToCloud(forceImmediate = false) {
                 archivosQuincenales: appState.archivosQuincenales || [],
                 updatedAt: new Date().toISOString()
             };
-            await client.from('messages').insert({
+            const { error: nomErr } = await client.from('messages').insert({
                 chat_id: '__cloud_sync_nominas__',
                 contenido: JSON.stringify(payload),
                 emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
                 emisor_role: 'sistema'
             });
+            if (nomErr && typeof window.notifyCloudSyncError === 'function') {
+                window.notifyCloudSyncError('Nóminas', nomErr);
+            }
         } catch (e) {
-            console.warn("⚠️ Error persisting nominas to Firebase:", e);
+            if (typeof window.notifyCloudSyncError === 'function') window.notifyCloudSyncError('Nóminas', e);
         }
     };
 
@@ -3171,14 +3189,17 @@ function syncGastosIndirectosToCloud(forceImmediate = false) {
     const doSync = async () => {
         try {
             const list = (appState.gastosIndirectos || []).filter(g => !window.isFictitiousGastoIndirecto || !window.isFictitiousGastoIndirecto(g));
-            await client.from('messages').insert({
+            const { error: giErr } = await client.from('messages').insert({
                 chat_id: '__cloud_sync_gastos_indirectos__',
                 contenido: JSON.stringify(list),
                 emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
                 emisor_role: 'sistema'
             });
+            if (giErr && typeof window.notifyCloudSyncError === 'function') {
+                window.notifyCloudSyncError('Gastos Indirectos', giErr);
+            }
         } catch (e) {
-            console.warn("⚠️ Error persisting gastos indirectos to Firebase:", e);
+            if (typeof window.notifyCloudSyncError === 'function') window.notifyCloudSyncError('Gastos Indirectos', e);
         }
     };
 
@@ -4108,15 +4129,18 @@ function syncProveedoresToCloud(forceImmediate = false) {
         try {
             window._lastLocalProveedoresSyncTime = Date.now();
             const list = appState.proveedores || [];
-            await client.from('messages').insert({
+            const { error: provErr } = await client.from('messages').insert({
                 chat_id: '__cloud_sync_proveedores_data__',
                 contenido: JSON.stringify(list),
                 emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
                 emisor_role: 'sistema'
             });
+            if (provErr && typeof window.notifyCloudSyncError === 'function') {
+                window.notifyCloudSyncError('Proveedores', provErr);
+            }
             window._lastLocalProveedoresSyncTime = Date.now();
         } catch (e) {
-            console.warn("⚠️ Error persisting proveedores data to Firebase:", e);
+            if (typeof window.notifyCloudSyncError === 'function') window.notifyCloudSyncError('Proveedores', e);
         }
     };
 
@@ -10257,11 +10281,11 @@ function setupRealtimeSubscriptions() {
 
                 // Auto-detector de nuevas versiones publicadas en línea (aplica actualizaciones sin que el usuario tenga que dar refresh)
                 window._liveVersionCheckTick = (window._liveVersionCheckTick || 0) + 1;
-                if (window._liveVersionCheckTick % 2 === 0 && typeof window.checkLiveDeploymentVersion === 'function') {
+                if (window._liveVersionCheckTick % 10 === 0 && typeof window.checkLiveDeploymentVersion === 'function') {
                     window.checkLiveDeploymentVersion();
                 }
             } catch (e) {}
-        }, 3000);
+        }, 30000);
         window._operacionesHeartbeatInterval = window._realtimeHeartbeatInterval; // compatibilidad
     }
 }
@@ -11001,13 +11025,9 @@ async function handleFirebaseLogin(event) {
             email: email,
             nombre: (matchedProfile && matchedProfile.nombre) || email.split('@')[0],
             rol: (matchedProfile && matchedProfile.rol) || 'administrador',
-            departamento: (matchedProfile && matchedProfile.departamento) || 'Operaciones',
-            password: password
+            departamento: (matchedProfile && matchedProfile.departamento) || 'Operaciones'
         };
         appState.currentUser = userObj;
-        sessionStorage.setItem("rp_session_pass", password);
-        localStorage.setItem("rp_user_pass", password);
-        if (email) localStorage.setItem("rp_user_pass_" + email.toLowerCase(), password);
         localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
         localStorage.setItem("rp_session_active", "true");
         localStorage.setItem("rp_auth_epoch", CURRENT_AUTH_EPOCH);
@@ -11076,12 +11096,10 @@ async function handleFirebaseLogin(event) {
             }
 
             if (data.user) {
-                data.user.password = password;
-                sessionStorage.setItem("rp_session_pass", password);
-                localStorage.setItem("rp_user_pass", password);
-                if (email) localStorage.setItem("rp_user_pass_" + emailLower, password);
                 try {
-                    await client.from('profiles').update({ password, updated_at: new Date().toISOString() }).eq('email', emailLower);
+                    localStorage.removeItem("rp_user_pass");
+                    localStorage.removeItem("rp_user_pass_" + emailLower);
+                    sessionStorage.removeItem("rp_session_pass");
                 } catch (e) {}
             }
             await handleUserSession(data.user);
@@ -11544,12 +11562,10 @@ async function handleGlobalLoginSubmit(event) {
             }
 
             if (data.user) {
-                data.user.password = password;
-                sessionStorage.setItem("rp_session_pass", password);
-                localStorage.setItem("rp_user_pass", password);
-                if (email) localStorage.setItem("rp_user_pass_" + emailLower, password);
                 try {
-                    await client.from('profiles').update({ password, updated_at: new Date().toISOString() }).eq('email', emailLower);
+                    localStorage.removeItem("rp_user_pass");
+                    localStorage.removeItem("rp_user_pass_" + emailLower);
+                    sessionStorage.removeItem("rp_session_pass");
                 } catch (e) {}
             }
             clearLoginFailures();
@@ -11569,12 +11585,9 @@ async function handleGlobalLoginSubmit(event) {
                 email: email,
                 nombre: matchedProfile?.nombre || (email ? email.split('@')[0] : 'Usuario'),
                 rol: matchedProfile?.rol || (isManager ? 'gerente' : 'administrador'),
-                departamento: matchedProfile?.departamento || 'Operaciones',
-                password: password || ''
+                departamento: matchedProfile?.departamento || 'Operaciones'
             };
             appState.currentUser = userObj;
-            sessionStorage.setItem("rp_session_pass", password);
-            localStorage.setItem("rp_user_pass", password);
             localStorage.setItem("rp_logged_user", JSON.stringify(userObj));
             setRole(userObj.rol);
         }
@@ -11813,11 +11826,8 @@ async function saveNewVerifiedPassword(event) {
             }
         }
         
-        // Save new password in session, local storage and current user object
-        sessionStorage.setItem("rp_session_pass", pass1);
-        localStorage.setItem("rp_user_pass", pass1);
         if (appState.currentUser) {
-            appState.currentUser.password = pass1;
+            delete appState.currentUser.password;
             localStorage.setItem("rp_logged_user", JSON.stringify(appState.currentUser));
         }
         updateUserSessionUI();
@@ -12043,8 +12053,7 @@ function updateUserProfileUI() {
     const resolvedEmail = isAuth ? ((appState.currentUser && appState.currentUser.email) || "") : "";
 
     const user = isAuth ? (appState.currentUser || { nombre: resolvedName, email: resolvedEmail, rol: appState.currentRole || "administrador" }) : { nombre: "Iniciar Sesión", email: "", rol: "administrador" };
-    const userEmailKey = (user && user.email) ? user.email.toLowerCase() : "";
-    const currentPass = isAuth ? ((user && user.password) || (userEmailKey && localStorage.getItem("rp_user_pass_" + userEmailKey)) || sessionStorage.getItem("rp_session_pass") || "") : "";
+    const currentPass = "";
 
     const r = (user.rol || appState.currentRole || '').toLowerCase();
     const isGerente = (r === 'gerente' || r === 'manager' || r === 'director') && (typeof isManagerUser === 'function' ? isManagerUser() : true);
@@ -13971,14 +13980,17 @@ function syncOperacionesToCloud(forceImmediate = false) {
             const safeList = cleanProjectsForCloud(list);
 
             // A. Guardar snapshot en tabla messages con chat_id especial para garantizar persistencia universal (< 100KB, nunca excede el límite de 1MB de Firestore)
+            let opSyncError = null;
             try {
-                await client.from('messages').insert({
+                const { error: snapErr } = await client.from('messages').insert({
                     chat_id: '__cloud_sync_operaciones__',
                     contenido: JSON.stringify(safeList),
                     emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
                     emisor_role: 'sistema'
                 });
+                if (snapErr) opSyncError = snapErr;
             } catch (errSnap) {
+                opSyncError = errSnap;
                 console.warn("⚠️ Error saving snapshot to messages:", errSnap);
             }
 
@@ -13987,7 +13999,7 @@ function syncOperacionesToCloud(forceImmediate = false) {
                 try {
                     const cNum = proj.consecutivo || proj.numConsecutivo || proj.id;
                     const isProjClosed = proj.archivado === true || proj.estatus === 'CERRADO';
-                    await client.from('operaciones').upsert({
+                    const { error: opErr } = await client.from('operaciones').upsert({
                         id: String(proj.id || cNum),
                         consecutivo: String(cNum),
                         tipo_proyecto: proj.tipoProyecto || 'servicio_local',
@@ -14000,12 +14012,17 @@ function syncOperacionesToCloud(forceImmediate = false) {
                         }),
                         updated_at: new Date().toISOString()
                     }, { onConflict: 'id' });
+                    if (opErr && !opSyncError) opSyncError = opErr;
                 } catch (errDb) {
+                    if (!opSyncError) opSyncError = errDb;
                     console.warn("⚠️ Error upserting individual project to operaciones:", errDb);
                 }
             }
+            if (opSyncError && typeof window.notifyCloudSyncError === 'function') {
+                window.notifyCloudSyncError('Operaciones', opSyncError);
+            }
         } catch (err) {
-            console.warn("⚠️ Error persisting operaciones to Firebase:", err);
+            if (typeof window.notifyCloudSyncError === 'function') window.notifyCloudSyncError('Operaciones', err);
         }
     };
 
@@ -14049,14 +14066,17 @@ function syncConsecutivoToCloud(forceImmediate = false) {
             window._lastLocalConsecutivoSyncTime = Date.now();
             const dataToSave = appState.consecutivo || [];
             // Guardar snapshot en tabla messages con chat_id __cloud_sync_consecutivo__
-            await client.from('messages').insert({
+            const { error: conErr } = await client.from('messages').insert({
                 chat_id: '__cloud_sync_consecutivo__',
                 contenido: JSON.stringify(dataToSave),
                 emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
                 emisor_role: 'sistema'
             });
+            if (conErr && typeof window.notifyCloudSyncError === 'function') {
+                window.notifyCloudSyncError('Consecutivo', conErr);
+            }
         } catch (errSnap) {
-            console.warn("⚠️ Error saving consecutivo snapshot to Firebase:", errSnap);
+            if (typeof window.notifyCloudSyncError === 'function') window.notifyCloudSyncError('Consecutivo', errSnap);
         }
     };
 
