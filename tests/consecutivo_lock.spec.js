@@ -190,6 +190,7 @@ test("4. Columnas de Consecutivo son de solo lectura y solo ST es editable", asy
       referenciaOp: 'RDP2610901-F',
       servicio: 'Flete'
     }];
+    window.appState.consecutivoStFilter = 'all';
     window.renderConsecutivo();
   });
   await page.waitForTimeout(300);
@@ -276,6 +277,7 @@ test("6. Sin Estatus eliminado y todos los proyectos por defecto empiezan en 'PP
     const item = window.appState.consecutivo.find(c => c.referenciaOp === 'RDP2610903-F');
     if (item) {
       item.st = 'C';
+      window.appState.consecutivoStFilter = 'C';
       window.renderConsecutivo();
     }
   });
@@ -348,14 +350,16 @@ test("7. Cambiar estatus asigna fecha de pago, preserva el filtro activo y no ca
   const activeFilterBtnAfter = page.locator(".consecutivo-filter-btn.active");
   await expect(activeFilterBtnAfter).toHaveAttribute("data-st", "all");
 
-  // La fila sigue visible en la tabla con el badge P y fecha asignada
-  const pBadge = page.locator("#tbody-consecutivo .st-badge-trigger.st-badge-p");
-  await expect(pBadge).toBeVisible();
-  await expect(pBadge).toContainText("Cobrado");
-
+  // Los registros Cobrados ('P') pasan a Archivo con fechaPago asignada; al abrir Archivo el badge P es visible
   const row = await page.evaluate(() => window.appState.consecutivo[0]);
   expect(row.st).toBe("P");
   expect(row.fechaPago).toBeTruthy();
+
+  await page.evaluate(() => window.toggleConsecutivoArchivoView(true));
+  await page.waitForTimeout(200);
+  const pBadge = page.locator("#tbody-consecutivo .st-badge-trigger.st-badge-p");
+  await expect(pBadge).toBeVisible();
+  await expect(pBadge).toContainText("Cobrado");
 });
 
 test("8. Cambiar de P a C quita la fecha de pago y los cambios solo se guardan al dar clic en Guardar (Consecutivo y Proveedores)", async ({ page }) => {
@@ -585,7 +589,7 @@ test("10. Reglas de bloqueo y edición en Operaciones: fila gris para otros usua
 
   const lockedRow = page.locator("#tbody-operaciones-proyectos tr[data-op-id='RDP2610951-F']");
   await expect(lockedRow).toHaveClass(/op-row-locked/);
-  await expect(lockedRow).toContainText("El proyecto está siendo editado por Maria Perez");
+  await expect(lockedRow).toContainText("En uso por Maria Perez");
   const lockedBtn = lockedRow.locator(".btn-op-abrir");
   await expect(lockedBtn).toBeDisabled();
   await expect(lockedBtn).toContainText("BLOQUEADO");
@@ -718,7 +722,7 @@ test("11. Condición de carrera (el que dio clic antes se queda) y expulsión po
   await page.waitForTimeout(200);
   await expect(page.locator("#operaciones-view-detail")).toBeHidden();
   await expect(page.locator("#operaciones-view-list")).toBeVisible();
-  await expect(page.locator("#tbody-operaciones-proyectos tr[data-op-id='RDP2610952-F']")).toContainText("El proyecto está siendo editado por Diego Miranda");
+  await expect(page.locator("#tbody-operaciones-proyectos tr[data-op-id='RDP2610952-F']")).toContainText("En uso por Diego Miranda");
 
   // Caso C: Actualización en línea ("suelta los globos") saca a los usuarios de los proyectos, limpia bloqueos y después los deja volver a entrar
   await page.evaluate(async () => {
@@ -802,25 +806,25 @@ test("13. Visualización: Fórmulas exactas (Bancos + fecha, Ingresos = C + PP, 
 
   // Verificar cálculos exactos:
   // Bancos = 10,000
-  // Ingresos = resultado del total de Consecutivo (solo Pendiente Cobro C = 11,600)
-  // 1 Balance parcial = 10,000 + 11,600 = 21,600
+  // Ingresos = resultado del total de Consecutivo Por Programar (PP = 5,800)
+  // 1 Balance parcial = 10,000 + 5,800 = 15,800
   // Gastos proveedores (solo por pagar / PROG) = 3,480
-  // 2 Balance parcial = 21,600 - 3,480 = 18,120
+  // 2 Balance parcial = 15,800 - 3,480 = 12,320
   // Gastos Indirectos = 1,000
-  // 3 Balance parcial = 18,120 - 1,000 = 17,120
+  // 3 Balance parcial = 12,320 - 1,000 = 11,320
   // Nominas = 2,000
-  // 4 Balance parcial = 17,120 - 2,000 = 15,120
+  // 4 Balance parcial = 11,320 - 2,000 = 9,320
   // Impuestos = 500
-  // TOTAL GENERAL = 15,120 - 500 = 14,620
-  await expect(page.locator("#concept-ingresos-val")).toHaveText("$11,600.00");
-  await expect(page.locator("#balance-subtotal-1")).toHaveText("$21,600.00");
+  // TOTAL GENERAL = 9,320 - 500 = 8,820
+  await expect(page.locator("#concept-ingresos-val")).toHaveText("$5,800.00");
+  await expect(page.locator("#balance-subtotal-1")).toHaveText("$15,800.00");
   await expect(page.locator("#concept-gastos-prov-val")).toHaveText("$3,480.00");
-  await expect(page.locator("#balance-subtotal-2")).toHaveText("$18,120.00");
+  await expect(page.locator("#balance-subtotal-2")).toHaveText("$12,320.00");
   await expect(page.locator("#concept-gastos-ind-val")).toHaveText("$1,000.00");
-  await expect(page.locator("#balance-subtotal-3")).toHaveText("$17,120.00");
+  await expect(page.locator("#balance-subtotal-3")).toHaveText("$11,320.00");
   await expect(page.locator("#concept-nominas-val")).toHaveText("$2,000.00");
-  await expect(page.locator("#balance-subtotal-4")).toHaveText("$15,120.00");
-  await expect(page.locator("#concept-total-final")).toHaveText("$14,620.00");
+  await expect(page.locator("#balance-subtotal-4")).toHaveText("$9,320.00");
+  await expect(page.locator("#concept-total-final")).toHaveText("$8,820.00");
 
   // Verificar títulos y clases de colores solicitados
   await expect(page.locator("#row-vis-balance-1")).toContainText("1 Balance parcial");
@@ -1485,7 +1489,7 @@ test("18. Control de Proveedores: Añadir o quitar proveedores requiere 'Editar'
 test("19. Consecutivo KPI y fila Total reflejan 'Pendiente Cobro', y Retención ISR en Operaciones es número directo", async ({ page }) => {
   await openAppAsAdmin(page);
 
-  // 1. Consecutivo: Cargar items y verificar que Total Facturado y Footer Total reflejan Pendiente Cobro (C)
+  // 1. Consecutivo: Cargar items y verificar que en filtro 'C' refleja Pendiente Cobro ($34,800.00) y en 'all' refleja activos C + PP ($40,600.00)
   await page.evaluate(() => {
     window.appState.consecutivo = [
       { consecutivo: 1, factura: 'FE-101', subtotal: 10000, iva: 1600, total: 11600, st: 'C' },
@@ -1493,18 +1497,26 @@ test("19. Consecutivo KPI y fila Total reflejan 'Pendiente Cobro', y Retención 
       { consecutivo: 3, factura: 'FE-103', subtotal: 5000, iva: 800, total: 5800, st: 'PP' },
       { consecutivo: 4, factura: 'FE-104', subtotal: 4000, iva: 640, total: 4640, st: 'P' }
     ];
-    window.appState.consecutivoStFilter = 'all';
+    window.appState.consecutivoStFilter = 'C';
     window.renderConsecutivo();
   });
   await page.waitForTimeout(300);
 
-  // Total facturado (KPI card) = 11600 + 23200 = 34800 (solo C)
+  // Total facturado en filtro 'C' = 11600 + 23200 = 34800
   const kpiTot = page.locator("#consecutivo-kpi-total");
   await expect(kpiTot).toContainText("$34,800.00");
 
-  // Footer Totals Row en la vista general: Columna Total = 34800 (solo C)
   const totalsRow = page.locator("#excel-consecutivo-totals-row");
   await expect(totalsRow).toContainText("$34,800.00");
+
+  // En vista 'all' (Todos los activos no cobrados: C + PP = 34800 + 5800 = 40600)
+  await page.evaluate(() => {
+    window.appState.consecutivoStFilter = 'all';
+    window.renderConsecutivo();
+  });
+  await page.waitForTimeout(200);
+  await expect(kpiTot).toContainText("$40,600.00");
+  await expect(totalsRow).toContainText("$40,600.00");
 
   // 2. Operaciones: Retención ISR es un número directo (no porcentaje)
   await page.evaluate(() => {
@@ -1636,3 +1648,61 @@ test("20. Bloqueo estricto entre múltiples usuarios en Nóminas y Gastos Indire
   await pageB.waitForTimeout(300);
   await pageB.close();
 });
+
+test("21. Tombstones de Operaciones evitan resurrección al sincronizar snapshots y contador reserva folios secuenciales", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  const result = await page.evaluate(async () => {
+    window.switchAdminFicha('operaciones');
+    const p1 = {
+      id: 'RDP2611501-F',
+      numProyecto: 'RDP2611501-F',
+      consecutivo: 'RDP2611501-F',
+      numConsecutivo: 'RDP2611501-F',
+      fechaInicio: '2026-11-13',
+      numFactura: 'FE-501',
+      cliente: 'CLIENTE TOMBSTONE 1',
+      estatus: 'PRIORIDAD',
+      generado: true,
+      tipoProyecto: 'servicio_local'
+    };
+    const p2 = {
+      id: 'RDP2611502-F',
+      numProyecto: 'RDP2611502-F',
+      consecutivo: 'RDP2611502-F',
+      numConsecutivo: 'RDP2611502-F',
+      fechaInicio: '2026-11-13',
+      numFactura: 'FE-502',
+      cliente: 'CLIENTE TOMBSTONE 2',
+      estatus: 'PRIORIDAD',
+      generado: true,
+      tipoProyecto: 'servicio_local'
+    };
+    window.appState.operacionesProyectos = [p1, p2];
+    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify([p1, p2]));
+
+    // Eliminar p1 usando tombstones
+    window.markOperacionesProjectDeleted('RDP2611501-F');
+    window.appState.operacionesProyectos = [p2];
+
+    // Simular llegada de un snapshot obsoleto que aún contiene p1 y p2
+    window.mergeOperacionesProjects([p1, p2]);
+
+    const idsAfterMerge = (window.appState.operacionesProyectos || []).map(x => x.id);
+    const hasDeletedSet = window.getDeletedOperacionesSet().has('RDP2611501-F');
+
+    // Probar reserva de folio consecutivo sin colisión
+    const nextFolio = await window.reserveNextProjectConsecutivo('servicio_local', 502);
+
+    return {
+      idsAfterMerge,
+      hasDeletedSet,
+      nextFolio
+    };
+  });
+
+  expect(result.hasDeletedSet).toBe(true);
+  expect(result.idsAfterMerge).toEqual(['RDP2611502-F']);
+  expect(result.nextFolio).toMatch(/^RDP\d{4}503-F$/);
+});
+

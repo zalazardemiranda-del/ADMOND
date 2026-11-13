@@ -14489,35 +14489,6 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
             });
             merged.documentos = mergedDocs;
 
-            // Respaldo de integridad: Si es RDP2610172-F y proveedoresClaves no tiene datos reales, restaurar
-            const pIdStr = String(merged.id || merged.consecutivo || merged.numProyecto || '').toUpperCase();
-            if (pIdStr.includes('RDP2610172-F')) {
-                const hasValidProv = merged.proveedoresClaves && merged.proveedoresClaves.some(x => x && x.proveedor && (x.subtotal > 0 || x.total > 0));
-                if (!hasValidProv) {
-                    merged.proveedoresClaves = [
-                        {
-                            proveedor: 'Jennufer Marylin Gonzales Franco',
-                            facturaNum: '',
-                            num: 1,
-                            concepto: 'Logistic',
-                            fecha: '2026-10-03',
-                            cantidad: 1,
-                            unitario: 48300,
-                            subtotal: 48300,
-                            iva: 7728,
-                            retencionIvaPct: 1,
-                            retencionIva: 1,
-                            retencionIvaMonto: 483,
-                            ret4: 483,
-                            retencion4: 483,
-                            retencionIsr: 0,
-                            retencionIsrPct: 0,
-                            total: 55545
-                        }
-                    ];
-                }
-            }
-
             appState.operacionesProyectos[idx] = merged;
         }
     });
@@ -14849,12 +14820,6 @@ function cleanOperacionesLegacyData(proyectos) {
 
     proyectos.forEach(p => {
         if (!p) return;
-        const pKey = String(p.consecutivo || p.numConsecutivo || p.numProyecto || p.id || '').trim().toUpperCase();
-        // Todos los proyectos de octubre 2026 (RDP2610...) están definitivamente concluidos y archivados en EXPEDIENTE
-        if (pKey.startsWith('RDP2610')) {
-            p.archivado = true;
-            p.estatus = 'CERRADO';
-        }
         if (!p.tipoProyecto) {
             const sName = (p.servicioName || '').toLowerCase();
             if (sName.includes('lavado')) {
@@ -15016,14 +14981,10 @@ function isLockOwnedByMe(lock) {
     if (!lock || !lock.isLocked) return false;
     const myInfo = getOperacionesCurrentUserInfo();
 
-    // 1. REGLA ESTRICTA DE SESIÓN / DISPOSITIVO:
-    // Cada navegador, pestaña o dispositivo tiene un clientId único.
-    // Si el candado tiene clientId, solo le pertenece al dispositivo que lo abrió.
-    if (lock.clientId && myInfo.clientId) {
-        return lock.clientId === myInfo.clientId;
+    if (lock.clientId && myInfo.clientId && lock.clientId === myInfo.clientId) {
+        return true;
     }
 
-    // 2. Si no hay clientId (datos heredados), comparar por userId exacto
     if (lock.userId && myInfo.userId) {
         return String(lock.userId).trim().toLowerCase() === String(myInfo.userId).trim().toLowerCase();
     }
@@ -15850,6 +15811,8 @@ function renderOperaciones() {
         }
     }
 
+    const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F', 'RDP2610182-F', 'RDP2610182']);
+
     // Purga automática inicial si existen datos fantasma guardados previamente en LocalStorage
     if (!localStorage.getItem('rp_purge_accidental_oct_v6')) {
         try {
@@ -15866,7 +15829,6 @@ function renderOperaciones() {
         } catch(e) {}
     }
 
-    const fakeOpIds = window.purgedProjectIds || new Set(['RDP2609171', 'RDP2609172', 'RDP2609173L', 'RDP2610173L', 'RDP2609112F', 'RDP2610182-F', 'RDP2610182']);
     const inMemoryClosedIds = new Set();
     if (Array.isArray(appState.operacionesProyectos)) {
         appState.operacionesProyectos.forEach(p => {
@@ -16710,13 +16672,6 @@ async function openOperacionesDetail(projectId, clickTimestamp = null) {
         }
         const cleanTargetId = String(projectId || '').trim().toLowerCase();
 
-        // 1. ANTES DE ABRIR: Consultar inmediatamente el estado más fresco de bloqueos en la nube
-        if (typeof window.fetchOperacionesProjectLocksFromCloud === 'function') {
-            try {
-                await window.fetchOperacionesProjectLocksFromCloud();
-            } catch (e) {}
-        }
-
         if (!appState.operacionesProyectos || appState.operacionesProyectos.length === 0) {
             try {
                 const stored = localStorage.getItem('rp_operaciones_proyectos');
@@ -16758,7 +16713,7 @@ async function openOperacionesDetail(projectId, clickTimestamp = null) {
             return;
         }
 
-        // 2. REGLA ESTRICTA DE BLOQUEO EN APERTURA:
+        // 1. REGLA ESTRICTA DE BLOQUEO EN APERTURA:
         // Si el usuario 1 ya dio clic en "ABRIR" (incluso para solo visualizar),
         // el usuario 2 o 3 tiene TOTALMENTE BLOQUEADA la entrada hasta que el usuario 1 regrese a Operaciones.
         const lockByOther = getProjectLockByOther(p);
@@ -16791,9 +16746,6 @@ async function openOperacionesDetail(projectId, clickTimestamp = null) {
 
         // Registrar bloqueo exclusivo de apertura inmediatamente
         claimOperacionesProjectLock(p, clickTimestamp !== null ? clickTimestamp : Date.now());
-        if (typeof window.syncOperacionesProjectLocksToCloud === 'function') {
-            await window.syncOperacionesProjectLocksToCloud();
-        }
 
         const isNewDraft = Boolean(p.isNewProject === true || p.isDraft === true || (typeof isProjectGenerado === 'function' && !isProjectGenerado(p)));
         if (isNewDraft) {
@@ -16881,6 +16833,14 @@ async function openOperacionesDetail(projectId, clickTimestamp = null) {
         }
 
         updateOperacionesDetailEditUI();
+
+        // Sincronizar bloqueo en la nube y verificar colisiones remotas sin bloquear la UI
+        if (typeof window.syncOperacionesProjectLocksToCloud === 'function') {
+            window.syncOperacionesProjectLocksToCloud();
+        }
+        if (typeof window.fetchOperacionesProjectLocksFromCloud === 'function') {
+            window.fetchOperacionesProjectLocksFromCloud();
+        }
     } catch (err) {
         console.error("Error opening operaciones detail:", err);
     }
