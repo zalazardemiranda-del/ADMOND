@@ -151,13 +151,13 @@ const runInitialAppSetup = async () => {
     // Lista de tareas base (Sin tareas fantasma ni inventadas)
     const defaultUserTasks = [];
 
-    appState.deletedTaskIds = JSON.parse(localStorage.getItem('rp_deleted_task_ids')) || [];
+    try { localStorage.removeItem('rp_deleted_task_ids'); } catch (e) {}
+    appState.deletedTaskIds = [];
     let storedTasks = JSON.parse(localStorage.getItem('rp_tasks')) || [];
     
     const isTaskDeleted = (task) => {
         if (!task || !task.title) return true;
-        const sig = `${(task.title || '').trim().toLowerCase()}____${(task.desc || '').trim().toLowerCase()}`;
-        return (appState.deletedTaskIds || []).some(d => d === task.id || (sig && d === sig));
+        return false;
     };
     const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal', 'roberto miranda perez', 'roberto miranda pérez', 'manuel morales']);
     storedTasks = storedTasks.filter(t => {
@@ -5718,13 +5718,20 @@ function handleCreateTask(event) {
         const client = window.FIREBASE_CONFIG.client;
         const dbPriority = priority.charAt(0).toUpperCase() + priority.slice(1).toLowerCase();
         client.from('tasks').insert([{
+            id: newTask.id,
             titulo: title,
             descripcion: desc,
             prioridad: dbPriority,
             estado: 'pendiente',
-            asignado_nombre: assignee || 'Sin asignar'
+            asignado_nombre: assignee || 'Sin asignar',
+            created_at: newTask.createdAt
         }]).then(({ error }) => {
-            if (error) console.warn("Error saving task to Firebase:", error);
+            if (error) {
+                console.warn("Error saving task to Firebase:", error);
+            } else {
+                newTask.uploadedToCloud = true;
+                saveToStorage();
+            }
         });
 
         // Transmisión instantánea en tiempo real por WebSockets
@@ -5784,18 +5791,17 @@ function deleteTask(taskId) {
         return;
     }
 
-    if (!appState.deletedTaskIds) appState.deletedTaskIds = JSON.parse(localStorage.getItem('rp_deleted_task_ids')) || [];
-    
+    if (!window._recentlyDeletedTaskTimestamps) window._recentlyDeletedTaskTimestamps = {};
+    const nowTs = Date.now();
+    window._recentlyDeletedTaskTimestamps[taskId] = nowTs;
+
     const targetTask = appState.tasks.find(t => t.id === taskId);
+    let targetSig = '';
     if (targetTask) {
-        const sig = `${(targetTask.title || '').trim().toLowerCase()}____${(targetTask.desc || '').trim().toLowerCase()}`;
-        if (!appState.deletedTaskIds.includes(taskId)) appState.deletedTaskIds.push(taskId);
-        if (sig && !appState.deletedTaskIds.includes(sig)) appState.deletedTaskIds.push(sig);
-    } else {
-        if (!appState.deletedTaskIds.includes(taskId)) appState.deletedTaskIds.push(taskId);
+        targetSig = `${(targetTask.title || '').trim().toLowerCase()}____${(targetTask.desc || '').trim().toLowerCase()}`;
+        if (targetSig) window._recentlyDeletedTaskTimestamps[targetSig] = nowTs;
     }
 
-    localStorage.setItem('rp_deleted_task_ids', JSON.stringify(appState.deletedTaskIds));
     appState.tasks = appState.tasks.filter(t => t.id !== taskId);
     saveToStorage();
     renderTasks();
@@ -5808,12 +5814,15 @@ function deleteTask(taskId) {
         client.from('tasks').delete().eq('id', taskId).then(({ error }) => {
             if (error) console.warn("Error deleting task on Firebase:", error);
         });
+        if (targetTask && targetTask.title) {
+            client.from('tasks').delete().eq('titulo', targetTask.title).then(() => {}, () => {});
+        }
 
         if (window.chatRealtimeChannel) {
             window.chatRealtimeChannel.send({
                 type: 'broadcast',
                 event: 'task_event',
-                payload: { action: 'deleted', id: taskId }
+                payload: { action: 'deleted', id: taskId, sig: targetSig }
             }).catch(e => console.warn("Broadcast task warning:", e));
         }
     }
@@ -9233,25 +9242,47 @@ function setupRealtimeSubscriptions() {
         const data = payload.payload;
         if (!data) return;
         if (data.action === 'created' && data.task) {
-            if (!appState.tasks.some(t => t.id === data.task.id)) {
-                appState.tasks.unshift(data.task);
+            const sig = `${(data.task.title || '').trim().toLowerCase()}____${(data.task.desc || '').trim().toLowerCase()}`;
+            const exists = appState.tasks.some(t => t.id === data.task.id || `${(t.title || '').trim().toLowerCase()}____${(t.desc || '').trim().toLowerCase()}` === sig);
+            if (!exists) {
+                appState.tasks.unshift({ ...data.task, uploadedToCloud: true });
                 saveToStorage();
                 renderTasks();
                 updateGlobalStats();
+                if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
             }
         } else if (data.action === 'updated' && data.id) {
             const t = appState.tasks.find(x => x.id === data.id);
             if (t) {
-                t.status = data.status;
+                if (data.task) {
+                    if (data.task.title !== undefined) t.title = data.task.title;
+                    if (data.task.desc !== undefined) t.desc = data.task.desc;
+                    if (data.task.assignee !== undefined) t.assignee = data.task.assignee;
+                    if (data.task.priority !== undefined) t.priority = data.task.priority;
+                    if (data.task.status !== undefined) t.status = data.task.status;
+                }
+                if (data.status !== undefined) t.status = data.status;
                 saveToStorage();
                 renderTasks();
                 updateGlobalStats();
+                if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
             }
-        } else if (data.action === 'deleted' && data.id) {
-            appState.tasks = appState.tasks.filter(x => x.id !== data.id);
+        } else if (data.action === 'deleted' && (data.id || data.sig)) {
+            if (!window._recentlyDeletedTaskTimestamps) window._recentlyDeletedTaskTimestamps = {};
+            if (data.id) window._recentlyDeletedTaskTimestamps[data.id] = Date.now();
+            if (data.sig) window._recentlyDeletedTaskTimestamps[data.sig] = Date.now();
+            appState.tasks = appState.tasks.filter(x => {
+                if (data.id && x.id === data.id) return false;
+                if (data.sig) {
+                    const xSig = `${(x.title || '').trim().toLowerCase()}____${(x.desc || '').trim().toLowerCase()}`;
+                    if (xSig === data.sig) return false;
+                }
+                return true;
+            });
             saveToStorage();
             renderTasks();
             updateGlobalStats();
+            if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
         }
     });
 
@@ -10142,6 +10173,10 @@ function setupRealtimeSubscriptions() {
                         }
                         if (typeof window.renderVisualizacion === 'function') window.renderVisualizacion();
                     }
+                } else if (appState.currentTab === 'tasks') {
+                    if (typeof fetchTasksFromCloud === 'function') {
+                        await fetchTasksFromCloud();
+                    }
                 } else if (appState.currentTab === 'users' || appState.currentTab === 'profile') {
                     window._usersHeartbeatTick = (window._usersHeartbeatTick || 0) + 1;
                     if (window._usersHeartbeatTick % 5 === 0 && typeof loadProfilesList === 'function') {
@@ -10401,11 +10436,19 @@ async function fetchCloudData() {
 async function fetchTasksFromCloud() {
     if (!window.isFirebaseActive()) return;
     const client = window.FIREBASE_CONFIG.client;
-    if (!appState.deletedTaskIds) appState.deletedTaskIds = JSON.parse(localStorage.getItem('rp_deleted_task_ids')) || [];
-    
+    try { localStorage.removeItem('rp_deleted_task_ids'); } catch (e) {}
+    appState.deletedTaskIds = [];
+    const recentDeleted = window._recentlyDeletedTaskTimestamps || {};
+    const nowTs = Date.now();
+    const isRecentlyDeleted = (key) => Boolean(key && recentDeleted[key] && (nowTs - recentDeleted[key] < 15000));
+
     try {
         const { data: dbTasks, error } = await client.from('tasks').select('*').order('created_at', { ascending: false });
-        
+        if (error) {
+            console.warn("Error fetching cloud tasks:", error);
+            return;
+        }
+
         const cloudTasks = (dbTasks || []).map(t => {
             const rawP = (t.prioridad || '').toString().trim().toLowerCase();
             let normP = 'alta';
@@ -10420,16 +10463,16 @@ async function fetchTasksFromCloud() {
             return {
                 id: t.id,
                 title: t.titulo,
-                desc: t.descripcion,
+                desc: t.descripcion || '',
                 priority: normP,
                 status: normStatus,
                 assignee: t.asignado_nombre || 'Sin asignar',
-                createdAt: t.created_at,
+                createdAt: t.created_at || t.updated_at || '',
                 uploadedToCloud: true
             };
         });
 
-        // Filtrar tareas que hayan sido eliminadas o asignadas a usuarios inventados
+        // Filtrar únicamente tareas de demostración antiguas o recién eliminadas en los últimos 15s
         const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal', 'roberto miranda perez', 'roberto miranda pérez', 'manuel morales']);
         const filteredCloudTasks = cloudTasks.filter(ct => {
             if (!ct || !ct.title) return false;
@@ -10437,48 +10480,40 @@ async function fetchTasksFromCloud() {
             const assignee = (ct.assignee || '').trim().toLowerCase();
             if (fakeAssignees.has(assignee)) return false;
             if (ct.id === '6929c3c3-9be4-40ec-87a8-358386733c2b' || ct.id === 'c772ff39-1ddb-4911-ba44-a924d5efb841') return false;
-            return !appState.deletedTaskIds.includes(ct.id) && !appState.deletedTaskIds.includes(sig);
+            if (isRecentlyDeleted(ct.id) || isRecentlyDeleted(sig)) return false;
+            return true;
         });
 
-        // Mapa combinado para fusionar tareas locales y remotas
+        // Firebase (filteredCloudTasks) es la fuente autoritativa de la verdad para todos los usuarios.
+        // Solo se conservan tareas locales que estén en vuelo (creadas hace < 60s y aún con uploadedToCloud !== true).
         const mergedMap = new Map();
 
-        // 1. Agregar tareas locales actuales
+        filteredCloudTasks.forEach(ct => {
+            const cleanTitle = (ct.title || '').trim().toLowerCase();
+            const cleanDesc = (ct.desc || '').trim().toLowerCase();
+            const sig = `${cleanTitle}____${cleanDesc}`;
+            if (!mergedMap.has(ct.id) && !mergedMap.has(sig)) {
+                mergedMap.set(ct.id, ct);
+                mergedMap.set(sig, ct);
+            }
+        });
+
         (appState.tasks || []).forEach(lt => {
-            if (!lt || !lt.title) return;
+            if (!lt || !lt.title || lt.uploadedToCloud) return;
+            const createdMs = lt.createdAt ? new Date(lt.createdAt).getTime() : 0;
+            if (!createdMs || (nowTs - createdMs > 60000)) return;
             const cleanTitle = (lt.title || '').trim().toLowerCase();
             const cleanDesc = (lt.desc || '').trim().toLowerCase();
             const sig = `${cleanTitle}____${cleanDesc}`;
             const assignee = (lt.assignee || '').trim().toLowerCase();
             if (fakeAssignees.has(assignee)) return;
-            if (lt.id === '6929c3c3-9be4-40ec-87a8-358386733c2b' || lt.id === 'c772ff39-1ddb-4911-ba44-a924d5efb841') return;
-            if (appState.deletedTaskIds.includes(lt.id) || appState.deletedTaskIds.includes(sig)) return;
-
-            // Normalizar estado por seguridad
-            if (lt.status === 'completada') lt.status = 'completed';
-            if (lt.status === 'pendiente') lt.status = 'pending';
-
-            mergedMap.set(lt.id, lt);
-            mergedMap.set(sig, lt);
-        });
-
-        // 2. Fusionar tareas provenientes de Firebase
-        filteredCloudTasks.forEach(ct => {
-            const cleanTitle = (ct.title || '').trim().toLowerCase();
-            const cleanDesc = (ct.desc || '').trim().toLowerCase();
-            const sig = `${cleanTitle}____${cleanDesc}`;
-            const existingLocal = mergedMap.get(ct.id) || mergedMap.get(sig);
-            if (existingLocal) {
-                existingLocal.id = ct.id;
-                existingLocal.priority = ct.priority || existingLocal.priority;
-                existingLocal.status = ct.status || existingLocal.status;
-                existingLocal.uploadedToCloud = true;
-            } else {
-                mergedMap.set(ct.id, ct);
+            if (isRecentlyDeleted(lt.id) || isRecentlyDeleted(sig)) return;
+            if (!mergedMap.has(lt.id) && !mergedMap.has(sig)) {
+                mergedMap.set(lt.id, lt);
+                mergedMap.set(sig, lt);
             }
         });
 
-        // Reconstruir lista limpia deduplicada por ID y por (título + descripción)
         const finalTasksList = [];
         const seenIds = new Set();
         const seenSignatures = new Set();
@@ -10488,7 +10523,7 @@ async function fetchTasksFromCloud() {
             const cleanTitle = (t.title || '').trim().toLowerCase();
             const cleanDesc = (t.desc || '').trim().toLowerCase();
             const sig = `${cleanTitle}____${cleanDesc}`;
-            if (appState.deletedTaskIds.includes(t.id) || appState.deletedTaskIds.includes(sig)) return;
+            if (isRecentlyDeleted(t.id) || isRecentlyDeleted(sig)) return;
 
             if (!seenIds.has(t.id) && !seenSignatures.has(sig)) {
                 seenIds.add(t.id);
@@ -10501,35 +10536,12 @@ async function fetchTasksFromCloud() {
         saveToStorage();
         renderTasks();
         updateGlobalStats();
-
-        // Subir a Firebase cualquier tarea local no sincronizada
-        if (appState.currentRole === 'gerente') {
-            const cloudTitleSet = new Set((dbTasks || []).map(t => (t.titulo || '').trim().toLowerCase()));
-            appState.tasks.forEach(t => {
-                const normT = (t.title || '').trim().toLowerCase();
-                const sig = `${normT}____${(t.desc || '').trim().toLowerCase()}`;
-                if (appState.deletedTaskIds.includes(t.id) || appState.deletedTaskIds.includes(sig)) return;
-
-                if (!cloudTitleSet.has(normT) && !t.uploadedToCloud) {
-                    t.uploadedToCloud = true;
-                    const dbPriority = (t.priority || 'alta').charAt(0).toUpperCase() + (t.priority || 'alta').slice(1).toLowerCase();
-                    const dbStatus = t.status === 'completed' ? 'completada' : 'pendiente';
-                    client.from('tasks').insert([{
-                        titulo: t.title,
-                        descripcion: t.desc,
-                        prioridad: dbPriority,
-                        estado: dbStatus,
-                        asignado_nombre: t.assignee || 'Sin asignar'
-                    }]).then(({ error: insertErr }) => {
-                        if (insertErr) console.warn("Notice: Task cloud sync:", insertErr.message || insertErr);
-                    });
-                }
-            });
-        }
+        if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
     } catch (err) {
         console.warn("Error fetching cloud tasks:", err);
     }
 }
+window.fetchTasksFromCloud = fetchTasksFromCloud;
 
 function updateAssigneeDropdown(profiles) {
     if (profiles && profiles.length > 0) {
