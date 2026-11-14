@@ -5792,15 +5792,34 @@ function deleteTask(taskId) {
     }
 
     if (!window._recentlyDeletedTaskTimestamps) window._recentlyDeletedTaskTimestamps = {};
+    if (!window._cloudDeletedTasksSet) window._cloudDeletedTasksSet = new Set();
     const nowTs = Date.now();
     window._recentlyDeletedTaskTimestamps[taskId] = nowTs;
+    window._cloudDeletedTasksSet.add(taskId);
 
     const targetTask = appState.tasks.find(t => t.id === taskId);
     let targetSig = '';
     if (targetTask) {
         targetSig = `${(targetTask.title || '').trim().toLowerCase()}____${(targetTask.desc || '').trim().toLowerCase()}`;
-        if (targetSig) window._recentlyDeletedTaskTimestamps[targetSig] = nowTs;
+        if (targetSig) {
+            window._recentlyDeletedTaskTimestamps[targetSig] = nowTs;
+            window._cloudDeletedTasksSet.add(targetSig);
+        }
     }
+
+    try {
+        const rawFbTasks = JSON.parse(localStorage.getItem('rp_fb_col_tasks') || '[]');
+        if (Array.isArray(rawFbTasks)) {
+            const cleanedFb = rawFbTasks.filter(item => {
+                if (!item) return false;
+                if (item.id === taskId) return false;
+                const iSig = `${(item.titulo || item.title || '').trim().toLowerCase()}____${(item.descripcion || item.desc || '').trim().toLowerCase()}`;
+                if (targetSig && iSig === targetSig) return false;
+                return true;
+            });
+            localStorage.setItem('rp_fb_col_tasks', JSON.stringify(cleanedFb));
+        }
+    } catch (e) {}
 
     appState.tasks = appState.tasks.filter(t => t.id !== taskId);
     saveToStorage();
@@ -5817,6 +5836,13 @@ function deleteTask(taskId) {
         if (targetTask && targetTask.title) {
             client.from('tasks').delete().eq('titulo', targetTask.title).then(() => {}, () => {});
         }
+        const tombstoneArr = Array.from(window._cloudDeletedTasksSet);
+        client.from('messages').insert({
+            chat_id: '__cloud_sync_tasks_deleted__',
+            contenido: JSON.stringify(tombstoneArr),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        }).then(() => {}, () => {});
 
         if (window.chatRealtimeChannel) {
             window.chatRealtimeChannel.send({
@@ -9269,8 +9295,28 @@ function setupRealtimeSubscriptions() {
             }
         } else if (data.action === 'deleted' && (data.id || data.sig)) {
             if (!window._recentlyDeletedTaskTimestamps) window._recentlyDeletedTaskTimestamps = {};
-            if (data.id) window._recentlyDeletedTaskTimestamps[data.id] = Date.now();
-            if (data.sig) window._recentlyDeletedTaskTimestamps[data.sig] = Date.now();
+            if (!window._cloudDeletedTasksSet) window._cloudDeletedTasksSet = new Set();
+            if (data.id) {
+                window._recentlyDeletedTaskTimestamps[data.id] = Date.now();
+                window._cloudDeletedTasksSet.add(data.id);
+            }
+            if (data.sig) {
+                window._recentlyDeletedTaskTimestamps[data.sig] = Date.now();
+                window._cloudDeletedTasksSet.add(data.sig);
+            }
+            try {
+                const rawFbTasks = JSON.parse(localStorage.getItem('rp_fb_col_tasks') || '[]');
+                if (Array.isArray(rawFbTasks)) {
+                    const cleanedFb = rawFbTasks.filter(item => {
+                        if (!item) return false;
+                        if (data.id && item.id === data.id) return false;
+                        const iSig = `${(item.titulo || item.title || '').trim().toLowerCase()}____${(item.descripcion || item.desc || '').trim().toLowerCase()}`;
+                        if (data.sig && iSig === data.sig) return false;
+                        return true;
+                    });
+                    localStorage.setItem('rp_fb_col_tasks', JSON.stringify(cleanedFb));
+                }
+            } catch (e) {}
             appState.tasks = appState.tasks.filter(x => {
                 if (data.id && x.id === data.id) return false;
                 if (data.sig) {
@@ -9283,6 +9329,18 @@ function setupRealtimeSubscriptions() {
             renderTasks();
             updateGlobalStats();
             if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
+        }
+    });
+
+    // 3b. Solicitud entre computadoras para subir tareas locales pendientes a Firebase
+    window.chatRealtimeChannel.on('broadcast', { event: 'request_tasks_sync' }, async payload => {
+        const data = payload?.payload;
+        if (data && data.senderClientId && window._myClientId && data.senderClientId === window._myClientId) return;
+        if (typeof window.checkLiveDeploymentVersion === 'function') {
+            window.checkLiveDeploymentVersion();
+        }
+        if (typeof fetchTasksFromCloud === 'function') {
+            await fetchTasksFromCloud();
         }
     });
 
@@ -10186,7 +10244,7 @@ function setupRealtimeSubscriptions() {
 
                 // Auto-detector de nuevas versiones publicadas en línea (aplica actualizaciones sin que el usuario tenga que dar refresh)
                 window._liveVersionCheckTick = (window._liveVersionCheckTick || 0) + 1;
-                if (window._liveVersionCheckTick % 10 === 0 && typeof window.checkLiveDeploymentVersion === 'function') {
+                if (typeof window.checkLiveDeploymentVersion === 'function') {
                     window.checkLiveDeploymentVersion();
                 }
             } catch (e) {}
@@ -10438,9 +10496,33 @@ async function fetchTasksFromCloud() {
     const client = window.FIREBASE_CONFIG.client;
     try { localStorage.removeItem('rp_deleted_task_ids'); } catch (e) {}
     appState.deletedTaskIds = [];
+    if (!window._cloudDeletedTasksSet) window._cloudDeletedTasksSet = new Set();
     const recentDeleted = window._recentlyDeletedTaskTimestamps || {};
     const nowTs = Date.now();
-    const isRecentlyDeleted = (key) => Boolean(key && recentDeleted[key] && (nowTs - recentDeleted[key] < 15000));
+
+    try {
+        const { data: delMsgs } = await client.from('messages')
+            .select('contenido')
+            .eq('chat_id', '__cloud_sync_tasks_deleted__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+        if (delMsgs && delMsgs.length > 0 && delMsgs[0].contenido) {
+            try {
+                const parsedDel = JSON.parse(delMsgs[0].contenido);
+                if (Array.isArray(parsedDel)) {
+                    parsedDel.forEach(k => { if (k) window._cloudDeletedTasksSet.add(String(k)); });
+                }
+            } catch (e) {}
+        }
+    } catch (e) {}
+
+    const isTaskDeletedOrBlocked = (id, sig) => {
+        if (id && recentDeleted[id] && (nowTs - recentDeleted[id] < 15000)) return true;
+        if (sig && recentDeleted[sig] && (nowTs - recentDeleted[sig] < 15000)) return true;
+        if (id && window._cloudDeletedTasksSet.has(String(id))) return true;
+        if (sig && window._cloudDeletedTasksSet.has(String(sig))) return true;
+        return false;
+    };
 
     try {
         const { data: dbTasks, error } = await client.from('tasks').select('*').order('created_at', { ascending: false });
@@ -10449,68 +10531,91 @@ async function fetchTasksFromCloud() {
             return;
         }
 
-        const cloudTasks = (dbTasks || []).map(t => {
-            const rawP = (t.prioridad || '').toString().trim().toLowerCase();
+        const normalizeTaskObj = (raw, fromCloud) => {
+            if (!raw) return null;
+            const title = (raw.titulo || raw.title || '').toString().trim();
+            if (!title) return null;
+            const desc = (raw.descripcion !== undefined ? raw.descripcion : (raw.desc || '')).toString().trim();
+            const rawP = (raw.prioridad || raw.priority || '').toString().trim().toLowerCase();
             let normP = 'alta';
             if (rawP.includes('alt')) normP = 'alta';
             else if (rawP.includes('med')) normP = 'media';
             else if (rawP.includes('baj')) normP = 'baja';
 
-            const rawState = (t.estado || '').toString().trim().toLowerCase();
+            const rawState = (raw.estado || raw.status || '').toString().trim().toLowerCase();
             let normStatus = 'pending';
             if (rawState === 'completada' || rawState === 'completed') normStatus = 'completed';
 
             return {
-                id: t.id,
-                title: t.titulo,
-                desc: t.descripcion || '',
+                id: raw.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                title: title,
+                desc: desc,
                 priority: normP,
                 status: normStatus,
-                assignee: t.asignado_nombre || 'Sin asignar',
-                createdAt: t.created_at || t.updated_at || '',
-                uploadedToCloud: true
+                assignee: (raw.asignado_nombre || raw.assignee || 'Sin asignar').toString().trim(),
+                createdAt: raw.created_at || raw.createdAt || raw.updated_at || new Date().toISOString(),
+                uploadedToCloud: Boolean(fromCloud)
             };
-        });
+        };
 
-        // Filtrar únicamente tareas de demostración antiguas o recién eliminadas en los últimos 15s
         const fakeAssignees = new Set(['sofía castro', 'sofia castro', 'carlos ruiz', 'juan pérez', 'juan perez', 'maría gómez', 'maria gomez', 'gerente principal', 'roberto miranda perez', 'roberto miranda pérez', 'manuel morales']);
-        const filteredCloudTasks = cloudTasks.filter(ct => {
-            if (!ct || !ct.title) return false;
-            const sig = `${(ct.title || '').trim().toLowerCase()}____${(ct.desc || '').trim().toLowerCase()}`;
-            const assignee = (ct.assignee || '').trim().toLowerCase();
+        const bannedIds = new Set(['task-1', 'task-2', 'task-portilaw-init', '6929c3c3-9be4-40ec-87a8-358386733c2b', 'c772ff39-1ddb-4911-ba44-a924d5efb841']);
+
+        const isValidTask = (t) => {
+            if (!t || !t.title) return false;
+            if (bannedIds.has(String(t.id))) return false;
+            const assignee = (t.assignee || '').trim().toLowerCase();
             if (fakeAssignees.has(assignee)) return false;
-            if (ct.id === '6929c3c3-9be4-40ec-87a8-358386733c2b' || ct.id === 'c772ff39-1ddb-4911-ba44-a924d5efb841') return false;
-            if (isRecentlyDeleted(ct.id) || isRecentlyDeleted(sig)) return false;
+            const sig = `${t.title.toLowerCase()}____${(t.desc || '').toLowerCase()}`;
+            if (isTaskDeletedOrBlocked(t.id, sig)) return false;
             return true;
+        };
+
+        const filteredCloudTasks = (dbTasks || []).map(t => normalizeTaskObj(t, true)).filter(isValidTask);
+
+        const cloudById = new Map();
+        const cloudBySig = new Map();
+        filteredCloudTasks.forEach(ct => {
+            const sig = `${ct.title.toLowerCase()}____${(ct.desc || '').toLowerCase()}`;
+            cloudById.set(ct.id, ct);
+            cloudBySig.set(sig, ct);
         });
 
-        // Firebase (filteredCloudTasks) es la fuente autoritativa de la verdad para todos los usuarios.
-        // Solo se conservan tareas locales que estén en vuelo (creadas hace < 60s y aún con uploadedToCloud !== true).
-        const mergedMap = new Map();
+        // Recolectar tareas locales tanto de appState.tasks (rp_tasks) como del respaldo local del adaptador (rp_fb_col_tasks)
+        let fbColTasksRaw = [];
+        try {
+            fbColTasksRaw = JSON.parse(localStorage.getItem('rp_fb_col_tasks') || '[]') || [];
+        } catch (e) { fbColTasksRaw = []; }
 
+        const combinedLocalCandidates = [
+            ...(appState.tasks || []).map(t => normalizeTaskObj(t, false)),
+            ...(Array.isArray(fbColTasksRaw) ? fbColTasksRaw.map(t => normalizeTaskObj(t, false)) : [])
+        ].filter(isValidTask);
+
+        const mergedMap = new Map();
         filteredCloudTasks.forEach(ct => {
-            const cleanTitle = (ct.title || '').trim().toLowerCase();
-            const cleanDesc = (ct.desc || '').trim().toLowerCase();
-            const sig = `${cleanTitle}____${cleanDesc}`;
+            const sig = `${ct.title.toLowerCase()}____${(ct.desc || '').toLowerCase()}`;
             if (!mergedMap.has(ct.id) && !mergedMap.has(sig)) {
                 mergedMap.set(ct.id, ct);
                 mergedMap.set(sig, ct);
             }
         });
 
-        (appState.tasks || []).forEach(lt => {
-            if (!lt || !lt.title || lt.uploadedToCloud) return;
-            const createdMs = lt.createdAt ? new Date(lt.createdAt).getTime() : 0;
-            if (!createdMs || (nowTs - createdMs > 60000)) return;
-            const cleanTitle = (lt.title || '').trim().toLowerCase();
-            const cleanDesc = (lt.desc || '').trim().toLowerCase();
-            const sig = `${cleanTitle}____${cleanDesc}`;
-            const assignee = (lt.assignee || '').trim().toLowerCase();
-            if (fakeAssignees.has(assignee)) return;
-            if (isRecentlyDeleted(lt.id) || isRecentlyDeleted(sig)) return;
-            if (!mergedMap.has(lt.id) && !mergedMap.has(sig)) {
+        const tasksToUploadToCloud = [];
+        const tasksToUpdateStatusInCloud = [];
+
+        combinedLocalCandidates.forEach(lt => {
+            const sig = `${lt.title.toLowerCase()}____${(lt.desc || '').toLowerCase()}`;
+            const matchingCloud = cloudById.get(lt.id) || cloudBySig.get(sig);
+            if (matchingCloud) {
+                if (lt.status === 'completed' && matchingCloud.status !== 'completed') {
+                    matchingCloud.status = 'completed';
+                    tasksToUpdateStatusInCloud.push(matchingCloud);
+                }
+            } else if (!mergedMap.has(lt.id) && !mergedMap.has(sig)) {
                 mergedMap.set(lt.id, lt);
                 mergedMap.set(sig, lt);
+                tasksToUploadToCloud.push(lt);
             }
         });
 
@@ -10519,12 +10624,8 @@ async function fetchTasksFromCloud() {
         const seenSignatures = new Set();
 
         Array.from(mergedMap.values()).forEach(t => {
-            if (!t || !t.title) return;
-            const cleanTitle = (t.title || '').trim().toLowerCase();
-            const cleanDesc = (t.desc || '').trim().toLowerCase();
-            const sig = `${cleanTitle}____${cleanDesc}`;
-            if (isRecentlyDeleted(t.id) || isRecentlyDeleted(sig)) return;
-
+            if (!isValidTask(t)) return;
+            const sig = `${t.title.toLowerCase()}____${(t.desc || '').toLowerCase()}`;
             if (!seenIds.has(t.id) && !seenSignatures.has(sig)) {
                 seenIds.add(t.id);
                 seenSignatures.add(sig);
@@ -10537,6 +10638,82 @@ async function fetchTasksFromCloud() {
         renderTasks();
         updateGlobalStats();
         if (typeof window.populateTaskUserFilterOptions === 'function') window.populateTaskUserFilterOptions();
+
+        // Subir inmediatamente a Firebase cualquier tarea local que no existía en la colección remota 'tasks'
+        tasksToUploadToCloud.forEach(t => {
+            const dbPriority = (t.priority || 'alta').charAt(0).toUpperCase() + (t.priority || 'alta').slice(1).toLowerCase();
+            const dbStatus = t.status === 'completed' ? 'completada' : 'pendiente';
+            client.from('tasks').insert([{
+                id: t.id,
+                titulo: t.title,
+                descripcion: t.desc,
+                prioridad: dbPriority,
+                estado: dbStatus,
+                asignado_nombre: t.assignee || 'Sin asignar',
+                created_at: t.createdAt || new Date().toISOString()
+            }]).then(({ error: insertErr }) => {
+                if (!insertErr) {
+                    t.uploadedToCloud = true;
+                    saveToStorage();
+                    if (window.chatRealtimeChannel) {
+                        window.chatRealtimeChannel.send({
+                            type: 'broadcast',
+                            event: 'task_event',
+                            payload: { action: 'created', task: t }
+                        }).then(() => {}, () => {});
+                    }
+                }
+            }, () => {});
+        });
+
+        // Sincronizar estatus completado local hacia Firebase si estaba desfasado
+        tasksToUpdateStatusInCloud.forEach(ct => {
+            client.from('tasks').update({ estado: 'completada' }).eq('id', ct.id).then(({ error: upErr }) => {
+                if (!upErr && window.chatRealtimeChannel) {
+                    window.chatRealtimeChannel.send({
+                        type: 'broadcast',
+                        event: 'task_event',
+                        payload: { action: 'updated', id: ct.id, status: 'completed', task: ct }
+                    }).then(() => {}, () => {});
+                }
+            }, () => {});
+        });
+
+        // Solicitar a otros navegadores conectados que suban sus tareas locales pendientes
+        if (!window._requestedPeerTasksSyncOnce && window.chatRealtimeChannel) {
+            window._requestedPeerTasksSyncOnce = true;
+            window.chatRealtimeChannel.send({
+                type: 'broadcast',
+                event: 'request_tasks_sync',
+                payload: { senderClientId: window._myClientId || 'peer', timestamp: Date.now() }
+            }).catch(() => {});
+
+            const isWebdriver = typeof navigator !== 'undefined' && navigator.webdriver;
+            if (!isWebdriver && !localStorage.getItem('rp_tasks_sync_release_v2')) {
+                const syncReleaseId = 'release_tasks_sync_v2';
+                try {
+                    localStorage.setItem('rp_tasks_sync_release_v2', 'true');
+                    localStorage.setItem('rp_applied_system_release', syncReleaseId);
+                } catch (e) {}
+                const relPayload = {
+                    releaseId: syncReleaseId,
+                    version: syncReleaseId,
+                    timestamp: Date.now(),
+                    message: "🔄 Sincronizando tablero de tareas con la nube..."
+                };
+                window.chatRealtimeChannel.send({
+                    type: 'broadcast',
+                    event: 'system_release_update',
+                    payload: relPayload
+                }).catch(() => {});
+                client.from('messages').insert({
+                    chat_id: '__cloud_sync_system_release__',
+                    contenido: JSON.stringify(relPayload),
+                    emisor_nombre: 'Sistema Rodipack',
+                    emisor_role: 'sistema'
+                }).then(() => {}, () => {});
+            }
+        }
     } catch (err) {
         console.warn("Error fetching cloud tasks:", err);
     }

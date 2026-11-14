@@ -424,7 +424,13 @@
                                 for (let f of usable) ref = ref.where(f.field, f.op, f.val);
                                 const snap = await ref.get();
                                 const refs = [];
-                                snap.forEach(d => refs.push({ ref: d.ref, data: d.data() }));
+                                snap.forEach(d => refs.push({ ref: d.ref, data: Object.assign({ id: d.id }, d.data()) }));
+                                if (refs.length === 0 && usable.length === 1 && usable[0].field === 'id' && usable[0].op === '==' && usable[0].val) {
+                                    const directDoc = await db.collection(collectionName).doc(String(usable[0].val)).get();
+                                    if (directDoc.exists) {
+                                        refs.push({ ref: directDoc.ref, data: Object.assign({ id: directDoc.id }, directDoc.data()) });
+                                    }
+                                }
                                 return refs;
                             } catch (e) {
                                 console.warn(`[Firebase] Error buscando documentos en ${collectionName}:`, e.message || e);
@@ -536,7 +542,11 @@
                                 const snap = await ref.get();
                                 fetchedFromRemoteDb = true;
                                 if (!snap.empty) {
-                                    snap.forEach(doc => resultList.push(doc.data()));
+                                    snap.forEach(doc => {
+                                        const d = doc.data() || {};
+                                        if (!d.id) d.id = doc.id;
+                                        resultList.push(d);
+                                    });
                                 }
                                 if (collectionName === 'profiles' && filters.length === 0) {
                                     _localStore.saveCollection('profiles', resultList);
@@ -554,7 +564,11 @@
                                     const snap2 = await fallbackRef.get();
                                     fetchedFromRemoteDb = true;
                                     if (!snap2.empty) {
-                                        snap2.forEach(doc => resultList.push(doc.data()));
+                                        snap2.forEach(doc => {
+                                            const d = doc.data() || {};
+                                            if (!d.id) d.id = doc.id;
+                                            resultList.push(d);
+                                        });
                                     }
                                     if (collectionName === 'profiles' && filters.length === 0) {
                                         _localStore.saveCollection('profiles', resultList);
