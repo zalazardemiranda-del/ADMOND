@@ -1382,12 +1382,12 @@ function calculateAdminTotals() {
     // 1 Balance parcial = Bancos + Ingresos
     const subtotal1 = Math.round((bancos + ingresos) * 100) / 100;
     
-    // Gastos proveedores: Todo lo que esté por pagar / programar a pago en Proveedores (excluyendo Pagado)
+    // Gastos proveedores: Solo los registros en estatus "Programado" (excluyendo "Pendiente" y "Pagado")
     let totalGastosProveedores = 0;
     (appState.proveedores || []).forEach(p => {
         if (!p) return;
         const st = String(p.p || p.estatus || 'PROG').trim().toLowerCase();
-        if (st !== 'pagado') {
+        if (st !== 'pagado' && st !== 'pendiente') {
             totalGastosProveedores += Number(p.total) || 0;
         }
     });
@@ -15079,7 +15079,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_17_proveedores_pendiente_sync';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_17_gastos_prov_solo_programado';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
