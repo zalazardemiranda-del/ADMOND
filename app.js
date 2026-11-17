@@ -4034,6 +4034,7 @@ function broadcastProveedoresUpdate() {
                 payload: {
                     proveedores: appState.proveedores || [],
                     sender: appState.currentUser?.email || 'admin',
+                    senderClientId: window._myClientId || null,
                     timestamp: new Date().toISOString()
                 }
             });
@@ -4083,9 +4084,10 @@ async function fetchProveedoresDataFromCloud() {
                         if (match) {
                             let rowChanged = false;
                             if (match.p !== undefined || match.estatus !== undefined) {
-                                const rawSt = match.p || match.estatus;
-                                const normSt = String(rawSt || '').trim().toLowerCase() === 'pagado' ? 'PAGADO' : 'PROG';
-                                const curSt = String(localR.p || localR.estatus || '').trim().toLowerCase() === 'pagado' ? 'PAGADO' : 'PROG';
+                                const rawSt = String(match.p || match.estatus || '').trim().toLowerCase();
+                                const normSt = rawSt === 'pagado' ? 'PAGADO' : (rawSt === 'pendiente' ? 'PENDIENTE' : 'PROG');
+                                const rawCurSt = String(localR.p || localR.estatus || '').trim().toLowerCase();
+                                const curSt = rawCurSt === 'pagado' ? 'PAGADO' : (rawCurSt === 'pendiente' ? 'PENDIENTE' : 'PROG');
                                 if (curSt !== normSt || localR.p !== normSt || localR.estatus !== normSt) {
                                     localR.p = normSt;
                                     localR.estatus = normSt;
@@ -15077,7 +15079,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_07_expediente_diff_row_1794079080000';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_17_proveedores_pendiente_sync';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
