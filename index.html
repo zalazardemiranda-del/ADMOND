@@ -269,6 +269,18 @@
 
                     </li>
 
+                    <li id="sidebar-item-visualizacion">
+
+                        <a href="#" class="nav-item" id="nav-visualizacion" onclick="switchTab('visualizacion')" title="Visualización">
+
+                            <span class="material-symbols-outlined">pie_chart</span>
+
+                            <span class="nav-text-label">Visualización</span>
+
+                        </a>
+
+                    </li>
+
                     <li id="sidebar-item-users" style="display: none !important;">
 
                         <a href="#" class="nav-item" id="nav-users" onclick="switchTab('users')" title="Usuarios">
@@ -1030,23 +1042,11 @@
 
 
 
-                        <!-- 3 Main Interactive Fichas Selection Header -->
+                        <!-- 2 Main Interactive Fichas Selection Header -->
 
-                        <div class="admin-fichas-nav">
+                        <div class="admin-fichas-nav" id="admin-fichas-nav">
 
-                            <button class="admin-ficha-card active" id="ficha-btn-visualizacion" onclick="switchAdminFicha('visualizacion')">
-
-                                <div class="ficha-icon"><span class="material-symbols-outlined">pie_chart</span></div>
-
-                                <div class="ficha-text">
-
-                                    <h4>Visualización</h4>
-
-                                </div>
-
-                            </button>
-
-                            <button class="admin-ficha-card" id="ficha-btn-quincenal" onclick="switchAdminFicha('quincenal')">
+                            <button class="admin-ficha-card active" id="ficha-btn-quincenal" onclick="switchAdminFicha('quincenal')">
 
                                 <div class="ficha-icon"><span class="material-symbols-outlined">account_balance_wallet</span></div>
 
@@ -1080,7 +1080,7 @@
 
                             <div class="visualizacion-layout-grid">
 
-                                <!-- Left Column: Pie Chart and KPI Cards -->
+                                <!-- Left Column: Pie Chart -->
 
                                 <div class="visualizacion-charts-col">
 
@@ -1105,44 +1105,6 @@
                                             <canvas id="admin-pie-chart"></canvas>
 
                                         </div>
-
-                                    </div>
-
-
-
-                                    <!-- Quick KPI Cards Grid -->
-
-                                    <div class="admin-kpi-grid">
-
-                                        <div class="kpi-mini-card kpi-bancos">
-
-                                            <span class="material-symbols-outlined">account_balance</span>
-
-                                            <div>
-
-                                                <span class="kpi-title">Bancos Inicial</span>
-
-                                                <h4 id="kpi-bancos-val">$10,000.00</h4>
-
-                                            </div>
-
-                                        </div>
-
-                                        <div class="kpi-mini-card kpi-proveedores">
-
-                                            <span class="material-symbols-outlined">local_shipping</span>
-
-                                            <div>
-
-                                                <span class="kpi-title">Gastos Proveedores</span>
-
-                                                <h4 id="kpi-proveedores-val">$0.00</h4>
-
-                                            </div>
-
-                                        </div>
-
-
 
                                     </div>
 
@@ -1345,6 +1307,34 @@
                                     
 
                                     <div class="admin-kpi-grid">
+
+                                        <div class="kpi-mini-card kpi-bancos">
+
+                                            <span class="material-symbols-outlined">account_balance</span>
+
+                                            <div>
+
+                                                <span class="kpi-title">Bancos Inicial</span>
+
+                                                <h4 id="kpi-bancos-val">$10,000.00</h4>
+
+                                            </div>
+
+                                        </div>
+
+                                        <div class="kpi-mini-card kpi-proveedores">
+
+                                            <span class="material-symbols-outlined">local_shipping</span>
+
+                                            <div>
+
+                                                <span class="kpi-title">Gastos Proveedores</span>
+
+                                                <h4 id="kpi-proveedores-val">$0.00</h4>
+
+                                            </div>
+
+                                        </div>
 
                                         <div class="kpi-mini-card kpi-nominas">
 

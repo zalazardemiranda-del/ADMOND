@@ -89,7 +89,7 @@ if (window.isLocalhostEnvironment()) {
 let appState = {
     currentRole: 'gerente', // 'gerente' or 'colaborador'
     currentTab: 'tasks', // 'tasks', 'chat', 'meetings', 'administracion'
-    currentAdminFicha: 'visualizacion', // 'visualizacion', 'quincenal', 'proveedores', 'consecutivo'
+    currentAdminFicha: 'quincenal', // 'visualizacion', 'quincenal', 'proveedores', 'consecutivo', 'operaciones'
     selectedProveedorFilter: 'all', // 'all' or specific name
     proveedorStatusFilter: 'PROG', // 'PENDIENTE', 'PROG', 'PAGADO', 'all'
     proveedoresArchivoMode: false,
@@ -563,7 +563,7 @@ const runInitialAppSetup = async () => {
     if (hashTab === 'meetings') hashTab = 'tasks';
     if (storedTab === 'meetings') storedTab = 'tasks';
 
-    if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'users', 'profile'].includes(hashTab)) {
+    if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'visualizacion', 'users', 'profile'].includes(hashTab)) {
         appState.currentTab = hashTab;
     } else if (storedTab) {
         appState.currentTab = storedTab;
@@ -585,7 +585,7 @@ const runInitialAppSetup = async () => {
     window._isBootstrappingApp = true;
     setRole(appState.currentRole);
     switchTab(appState.currentTab);
-    if (appState.currentAdminFicha && typeof switchAdminFicha === 'function') {
+    if (appState.currentTab !== 'visualizacion' && appState.currentAdminFicha && typeof switchAdminFicha === 'function') {
         switchAdminFicha(appState.currentAdminFicha);
     }
     window._isBootstrappingApp = false;
@@ -739,6 +739,7 @@ function setRole(role) {
     }
 
     const sidebarAdminItem = document.getElementById("sidebar-item-administracion");
+    const sidebarVisItem = document.getElementById("sidebar-item-visualizacion");
     const sidebarUsersItem = document.getElementById("sidebar-item-users");
     const newTaskCard = document.getElementById("new-task-card");
     const tasksControlPanel = document.querySelector(".tasks-control-panel");
@@ -752,6 +753,7 @@ function setRole(role) {
         if (tasksControlPanel) tasksControlPanel.style.display = "flex";
         if (tasksLayout) tasksLayout.classList.remove("full-width-tasks");
         if (sidebarAdminItem) sidebarAdminItem.style.setProperty("display", "flex", "important");
+        if (sidebarVisItem) sidebarVisItem.style.setProperty("display", "flex", "important");
         if (sidebarUsersItem) sidebarUsersItem.style.setProperty("display", "flex", "important");
         if (adminWorkspace) adminWorkspace.style.display = "block";
         if (adminLockScreen) adminLockScreen.style.display = "none";
@@ -765,6 +767,7 @@ function setRole(role) {
         if (tasksControlPanel) tasksControlPanel.style.display = "none";
         if (tasksLayout) tasksLayout.classList.add("full-width-tasks");
         if (sidebarAdminItem) sidebarAdminItem.style.setProperty("display", "flex", "important");
+        if (sidebarVisItem) sidebarVisItem.style.setProperty("display", "flex", "important");
         if (sidebarUsersItem) sidebarUsersItem.style.setProperty("display", "none", "important");
         if (adminWorkspace) adminWorkspace.style.display = "block";
         if (adminLockScreen) adminLockScreen.style.display = "none";
@@ -1135,8 +1138,8 @@ function switchTab(tabName) {
         tabName = 'tasks';
     }
 
-    // Administración accesible por Gerente y Administrativo/Administrador
-    if (tabName === 'administracion' && !isGerente && !isAdmin) {
+    // Administración y Visualización accesible por Gerente y Administrativo/Administrador
+    if ((tabName === 'administracion' || tabName === 'visualizacion') && !isGerente && !isAdmin) {
         tabName = 'tasks';
     }
 
@@ -1150,7 +1153,8 @@ function switchTab(tabName) {
     }
     
     document.querySelectorAll(".tab-pane").forEach(pane => pane.classList.remove("active"));
-    const activePane = document.getElementById(`tab-${tabName}`);
+    const paneTarget = tabName === 'visualizacion' ? 'administracion' : tabName;
+    const activePane = document.getElementById(`tab-${paneTarget}`);
     if (activePane) activePane.classList.add("active");
     
     document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
@@ -1165,6 +1169,8 @@ function switchTab(tabName) {
             closeOperacionesDetail();
         }
     }
+
+    const adminFichasNav = document.getElementById("admin-fichas-nav") || document.querySelector(".admin-fichas-nav");
 
     if (tabName === 'schema') {
         titleEl.innerText = "Esquematización de Sistema";
@@ -1185,6 +1191,22 @@ function switchTab(tabName) {
             renderChatChannels();
             renderChatMessages(true);
         }
+    } else if (tabName === 'visualizacion') {
+        titleEl.innerText = "Visualización";
+        subtitleEl.innerText = "Distribución de capital, egresos y balance general por departamento";
+        if (isGerente || isAdmin) {
+            const adminWs = document.getElementById("administracion-manager-workspace");
+            const adminLock = document.getElementById("administracion-lock-screen");
+            if (adminWs) adminWs.style.display = "block";
+            if (adminLock) adminLock.style.display = "none";
+        }
+        if (adminFichasNav) adminFichasNav.style.display = "none";
+        if (typeof switchAdminFicha === 'function') {
+            switchAdminFicha('visualizacion');
+        } else {
+            appState.currentAdminFicha = 'visualizacion';
+            if (!window._isBootstrappingApp) renderAdministracion();
+        }
     } else if (tabName === 'administracion') {
         titleEl.innerText = "Administración General";
         subtitleEl.innerText = "Control financiero, estadísticas por departamento, nóminas quincenales y proveedores";
@@ -1194,7 +1216,14 @@ function switchTab(tabName) {
             if (adminWs) adminWs.style.display = "block";
             if (adminLock) adminLock.style.display = "none";
         }
-        if (!window._isBootstrappingApp) {
+        if (adminFichasNav) adminFichasNav.style.display = "flex";
+        if (!appState.currentAdminFicha || appState.currentAdminFicha === 'visualizacion') {
+            if (typeof switchAdminFicha === 'function') {
+                switchAdminFicha('quincenal');
+            } else {
+                appState.currentAdminFicha = 'quincenal';
+            }
+        } else if (!window._isBootstrappingApp) {
             renderAdministracion();
         }
     } else if (tabName === 'users') {
@@ -10187,7 +10216,7 @@ function setupRealtimeSubscriptions() {
                 }
 
                 // Sincronización continua de la ficha activa para garantizar actualización instantánea entre computadoras sin refresh
-                if (appState.currentTab === 'admin' || appState.currentTab === 'administracion') {
+                if (appState.currentTab === 'admin' || appState.currentTab === 'administracion' || appState.currentTab === 'visualizacion') {
                     if (appState.currentAdminFicha === 'operaciones') {
                         if (!appState.isEditingOperacionesDetail && typeof window.fetchOperacionesFromCloud === 'function') {
                             await window.fetchOperacionesFromCloud();

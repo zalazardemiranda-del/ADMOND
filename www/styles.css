@@ -2175,6 +2175,7 @@ select option {
     grid-template-columns: 1fr 1fr;
     gap: 24px;
     align-items: stretch; /* Make both columns same height */
+    min-height: calc(100vh - 148px);
 }
 
 .visualizacion-charts-col,
@@ -2183,16 +2184,44 @@ select option {
     flex-direction: column;
 }
 
-.visualizacion-charts-col > .chart-card,
+.visualizacion-charts-col > .chart-card {
+    flex: 1;
+    margin-bottom: 0;
+    padding: 24px !important;
+    display: flex;
+    flex-direction: column;
+}
+
 .visualizacion-table-col > .table-card {
-    flex-grow: 1; /* Stretch to push KPI grid down */
-    margin-bottom: 12px; /* Space above KPI grid */
-    padding: 16px !important;
+    flex: 1;
+    margin-bottom: 16px;
+    padding: 22px 24px !important;
+    display: flex;
+    flex-direction: column;
+}
+
+.visualizacion-table-col > .table-card .table-responsive {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.visualizacion-table-col > .table-card .excel-table {
+    flex: 1;
+    height: 100%;
+}
+
+.visualizacion-table-col > .table-card .excel-table td,
+.visualizacion-table-col > .table-card .excel-table th {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    font-size: 13.5px;
 }
 
 @media (max-width: 1100px) {
     .visualizacion-layout-grid {
         grid-template-columns: 1fr;
+        min-height: auto;
     }
     .admin-fichas-nav {
         grid-template-columns: 1fr;
@@ -2200,7 +2229,7 @@ select option {
 }
 
 .chart-card {
-    padding: 16px;
+    padding: 20px;
     margin-bottom: 12px;
 }
 
@@ -2208,17 +2237,17 @@ select option {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
 }
 
 .card-header-flex h3 {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
     margin-bottom: 4px;
 }
 
 .card-header-flex p {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary);
 }
 
@@ -2229,7 +2258,9 @@ select option {
 
 .chart-canvas-wrapper {
     position: relative;
-    height: 180px;
+    flex: 1;
+    min-height: 440px;
+    width: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -2238,14 +2269,14 @@ select option {
 .admin-kpi-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 16px;
 }
 
 .kpi-mini-card {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px 16px;
+    gap: 14px;
+    padding: 18px 20px;
     background: #FFFFFF;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-subtle);
