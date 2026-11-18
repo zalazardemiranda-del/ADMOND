@@ -1366,7 +1366,7 @@ test("18. Control de Proveedores: Añadir o quitar proveedores requiere 'Editar'
   const bannerProv = page.locator("#proveedores-lock-banner");
 
   // 2. En modo lectura, no se muestran los botones de edición ni eliminación en los chips
-  const deleteButtonsCount = await page.locator(".proveedor-chip .chip-delete-btn").count();
+  const deleteButtonsCount = await page.locator("#proveedor-chips-container .chip-delete-btn").count();
   expect(deleteButtonsCount).toBe(0);
 
   // 3. Intentar añadir proveedor sin haber dado clic en 'Editar' muestra alerta y no añade
@@ -1389,7 +1389,7 @@ test("18. Control de Proveedores: Añadir o quitar proveedores requiere 'Editar'
   await expect(btnSave).toBeEnabled();
 
   // En modo edición ahora sí se muestran los botones de editar y eliminar en los chips
-  const deleteButtonsInEdit = await page.locator(".proveedor-chip .chip-delete-btn").count();
+  const deleteButtonsInEdit = await page.locator("#proveedor-chips-container .chip-delete-btn").count();
   expect(deleteButtonsInEdit).toBeGreaterThan(0);
 
   // 5. Añadir un proveedor mientras se edita (en memoria)
