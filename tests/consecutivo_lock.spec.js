@@ -959,15 +959,17 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
   await expect(page.locator("#table-gastos-indirectos thead")).not.toContainText("Subtotal");
   await expect(page.locator("#table-gastos-indirectos thead")).not.toContainText("IVA");
 
-  // Botones principales en la barra superior
+  // Botones principales en la barra superior y boton agregar gasto indirecto
   await expect(page.locator("#btn-edit-admin-top")).toBeVisible();
   await expect(page.locator("#btn-save-admin-top")).toBeDisabled();
+  await expect(page.locator("#btn-add-gasto-indirecto")).toBeDisabled();
 
   // Dar clic en Editar en Gastos Indirectos (barra superior)
   await page.locator("#btn-edit-admin-top").click();
   await page.waitForTimeout(200);
 
   await expect(page.locator("#btn-save-admin-top")).toBeEnabled();
+  await expect(page.locator("#btn-add-gasto-indirecto")).toBeEnabled();
   await expect(page.locator("#gastos-indirectos-lock-banner")).toBeVisible();
   await expect(page.locator("#gastos-indirectos-lock-banner")).toContainText("Esta tabla está siendo editada por");
   await expect(page.locator("#gastos-indirectos-table-container")).toHaveClass(/tabla-filtro-gris-edicion/);
@@ -1003,6 +1005,7 @@ test("14. Colores de gráfica coinciden con tabla, Gastos Indirectos sin info fi
   await page.waitForTimeout(200);
 
   await expect(page.locator("#btn-save-admin-top")).toBeDisabled();
+  await expect(page.locator("#btn-add-gasto-indirecto")).toBeDisabled();
   await expect(page.locator("#gastos-indirectos-lock-banner")).toBeHidden();
 
   const giStoredAfterSave = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_gastos_indirectos') || '[]'));
@@ -1705,4 +1708,69 @@ test("21. Tombstones de Operaciones evitan resurrección al sincronizar snapshot
   expect(result.idsAfterMerge).toEqual(['RDP2611502-F']);
   expect(result.nextFolio).toMatch(/^RDP\d{4}503-F$/);
 });
+
+test("22. Gastos Indirectos: Bloqueo estricto - '+ Añadir Gasto Indirecto' y celdas deshabilitadas sin Editar, habilitadas con Editar, y persistencia solo con Guardar", async ({ page }) => {
+  await openAppAsAdmin(page);
+
+  await page.evaluate(() => {
+    window.switchAdminFicha('quincenal');
+    window.switchAdminSubSection('gastos-indirectos');
+  });
+  await page.waitForTimeout(200);
+
+  // 1. Verificar estado inicial de sólo lectura
+  await expect(page.locator("#btn-edit-admin-top")).toBeVisible();
+  await expect(page.locator("#btn-edit-admin-top")).toBeEnabled();
+  await expect(page.locator("#btn-save-admin-top")).toBeDisabled();
+  await expect(page.locator("#btn-add-gasto-indirecto")).toBeDisabled();
+
+  // Intentar agregar fila sin dar clic en Editar no debe aumentar las filas
+  const initialRowCount = await page.locator("#tbody-gastos-indirectos tr[id^='gi-row-']").count();
+  await page.evaluate(async () => {
+    await window.addNewGastoIndirectoRow();
+  });
+  const afterAttemptRowCount = await page.locator("#tbody-gastos-indirectos tr[id^='gi-row-']").count();
+  expect(afterAttemptRowCount).toBe(initialRowCount);
+
+  // 2. Dar clic en 'Editar'
+  await page.locator("#btn-edit-admin-top").click();
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("#btn-save-admin-top")).toBeEnabled();
+  await expect(page.locator("#btn-add-gasto-indirecto")).toBeEnabled();
+
+  // 3. Dar clic en '+ Añadir Gasto Indirecto' en modo edición
+  await page.locator("#btn-add-gasto-indirecto").click();
+  await page.waitForTimeout(200);
+
+  const newRowCount = await page.locator("#tbody-gastos-indirectos tr[id^='gi-row-']").count();
+  expect(newRowCount).toBe(initialRowCount + 1);
+
+  // Llenar el nuevo gasto indirecto
+  const lastIdx = newRowCount - 1;
+  const conceptoInput = page.locator(`#gi-concepto-input-${lastIdx}`);
+  await expect(conceptoInput).toBeEnabled();
+  await conceptoInput.fill("Pago internet fibra");
+  await page.evaluate((idx) => {
+    window.updateGastoIndirectoCell(idx, 'concepto', 'Pago internet fibra');
+    window.updateGastoIndirectoCell(idx, 'categoria', 'Sistemas');
+    const el = document.getElementById(`gi-total-input-${idx}`);
+    if (el) el.value = '1500';
+    window.liveUpdateGastoIndirectoFromTotal(idx);
+  }, lastIdx);
+
+  // 4. Guardar cambios
+  await page.locator("#btn-save-admin-top").click();
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("#btn-save-admin-top")).toBeDisabled();
+  await expect(page.locator("#btn-add-gasto-indirecto")).toBeDisabled();
+  await expect(page.locator("#btn-edit-admin-top")).toBeEnabled();
+
+  const savedList = await page.evaluate(() => JSON.parse(localStorage.getItem('rp_gastos_indirectos') || '[]'));
+  const found = savedList.find(g => g.concepto === 'Pago internet fibra');
+  expect(found).toBeTruthy();
+  expect(found.total).toBe(1500);
+});
+
 

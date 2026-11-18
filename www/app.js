@@ -3436,6 +3436,19 @@ async function startEditingGastosIndirectos() {
     broadcastGastosIndirectosLockState(true, currentUserName, currentUserId, lockTime, myClientId);
     await syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, lockTime, myClientId);
 
+    // Heartbeat de bloqueo cada 15 segundos mientras esté editando
+    if (window._gastosIndirectosLockHeartbeatTimer) clearInterval(window._gastosIndirectosLockHeartbeatTimer);
+    window._gastosIndirectosLockHeartbeatTimer = setInterval(() => {
+        if (appState.isEditingGastosIndirectos) {
+            const now = Date.now();
+            if (appState.gastosIndirectosLockedBy) appState.gastosIndirectosLockedBy.timestamp = now;
+            syncGastosIndirectosLockToCloud(true, currentUserName, currentUserId, now, myClientId);
+        } else {
+            clearInterval(window._gastosIndirectosLockHeartbeatTimer);
+            window._gastosIndirectosLockHeartbeatTimer = null;
+        }
+    }, 15000);
+
     if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
     _editGastosIndirectosTimeout = setTimeout(() => {
         if (appState.isEditingGastosIndirectos) {
@@ -3448,12 +3461,21 @@ window.startEditingGastosIndirectos = startEditingGastosIndirectos;
 async function saveEditingGastosIndirectos(isAuto = false) {
     window.saveEditingGastosIndirectos = saveEditingGastosIndirectos;
     if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
+    if (window._gastosIndirectosLockHeartbeatTimer) {
+        clearInterval(window._gastosIndirectosLockHeartbeatTimer);
+        window._gastosIndirectosLockHeartbeatTimer = null;
+    }
 
+    const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : (window._myClientId || 'client_main');
     window._lastLocalGastosIndSyncTime = Date.now();
 
     appState.isEditingGastosIndirectos = false;
     appState.gastosIndirectosLockedBy = null;
     appState._gastosIndirectosSnapshot = null;
+
+    try {
+        localStorage.removeItem('rp_gastos_indirectos_lock');
+    } catch (e) {}
 
     registerSectionMovementDate('gastosInd');
     saveToStorage();
@@ -3468,8 +3490,8 @@ async function saveEditingGastosIndirectos(isAuto = false) {
     broadcastGastosIndirectosUpdate();
     syncGastosIndirectosToCloud(true);
 
-    broadcastGastosIndirectosLockState(false, null, null);
-    await syncGastosIndirectosLockToCloud(false, null, null);
+    broadcastGastosIndirectosLockState(false, null, null, Date.now(), myClientId);
+    await syncGastosIndirectosLockToCloud(false, null, null, Date.now(), myClientId);
 
     if (!isAuto && typeof showCustomNotification === 'function') {
         showCustomNotification("Cambios de Gastos Indirectos guardados y tabla liberada con éxito.", "success");
@@ -3480,9 +3502,18 @@ window.saveEditingGastosIndirectos = saveEditingGastosIndirectos;
 async function cancelEditingGastosIndirectos() {
     window.cancelEditingGastosIndirectos = cancelEditingGastosIndirectos;
     if (_editGastosIndirectosTimeout) clearTimeout(_editGastosIndirectosTimeout);
+    if (window._gastosIndirectosLockHeartbeatTimer) {
+        clearInterval(window._gastosIndirectosLockHeartbeatTimer);
+        window._gastosIndirectosLockHeartbeatTimer = null;
+    }
 
+    const myClientId = (typeof getMyClientId === 'function') ? getMyClientId() : (window._myClientId || 'client_main');
     appState.isEditingGastosIndirectos = false;
     appState.gastosIndirectosLockedBy = null;
+
+    try {
+        localStorage.removeItem('rp_gastos_indirectos_lock');
+    } catch (e) {}
 
     if (appState._gastosIndirectosSnapshot) {
         appState.gastosIndirectos = JSON.parse(JSON.stringify(appState._gastosIndirectosSnapshot));
@@ -3493,8 +3524,8 @@ async function cancelEditingGastosIndirectos() {
     renderGastosIndirectos();
     renderVisualizacion();
 
-    broadcastGastosIndirectosLockState(false, null, null);
-    await syncGastosIndirectosLockToCloud(false, null, null);
+    broadcastGastosIndirectosLockState(false, null, null, Date.now(), myClientId);
+    await syncGastosIndirectosLockToCloud(false, null, null, Date.now(), myClientId);
 }
 window.cancelEditingGastosIndirectos = cancelEditingGastosIndirectos;
 
@@ -3511,7 +3542,7 @@ function updateGastosIndirectosEditButtonsUI() {
 
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
     const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
-    const isLockedByOther = !appState.isEditingGastosIndirectos && Boolean(appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.isLocked !== false && appState.gastosIndirectosLockedBy.userId !== currentUserId);
+    const isLockedByOther = !appState.isEditingGastosIndirectos && Boolean(appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.gastosIndirectosLockedBy));
     const isGastosIndSubtab = appState.adminSubSection === 'gastos-indirectos';
 
     const applyBtnState = (editEl, saveEl) => {
@@ -3567,10 +3598,12 @@ function updateGastosIndirectosEditButtonsUI() {
         applyBtnState(btnTopEdit, btnTopSave);
     }
 
+    const canEditGastos = Boolean(appState.isEditingGastosIndirectos);
     if (btnAddRow) {
-        btnAddRow.disabled = Boolean(isLockedByOther);
-        btnAddRow.style.opacity = isLockedByOther ? "0.55" : "1";
-        btnAddRow.style.cursor = isLockedByOther ? "not-allowed" : "pointer";
+        btnAddRow.disabled = !canEditGastos;
+        btnAddRow.style.opacity = canEditGastos ? "1" : "0.55";
+        btnAddRow.style.cursor = canEditGastos ? "pointer" : "not-allowed";
+        btnAddRow.title = canEditGastos ? "Agregar nuevo Gasto Indirecto" : "Haz clic en 'Editar' arriba para agregar un gasto indirecto";
     }
 
     if (isLockedByOther) {
@@ -4005,17 +4038,12 @@ window.selectGastoIndCategoria = selectGastoIndCategoria;
 
 function handleGastoIndCellClick(index, inputId) {
     window.handleGastoIndCellClick = handleGastoIndCellClick;
-    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
-    const isLockedByOther = Boolean(appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId);
-    if (!appState.isEditingGastosIndirectos && !isLockedByOther) {
-        startEditingGastosIndirectos().then(() => {
-            if (inputId) {
-                setTimeout(() => {
-                    const el = document.getElementById(inputId);
-                    if (el) el.focus();
-                }, 30);
-            }
-        });
+    if (!appState.isEditingGastosIndirectos) {
+        return;
+    }
+    if (inputId) {
+        const el = document.getElementById(inputId);
+        if (el && !el.disabled) el.focus();
     }
 }
 window.handleGastoIndCellClick = handleGastoIndCellClick;
@@ -4110,15 +4138,20 @@ window.renderGastosIndirectos = renderGastosIndirectos;
 async function addNewGastoIndirectoRow() {
     window.addNewGastoIndirectoRow = addNewGastoIndirectoRow;
     const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
-    if (appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.userId !== currentUserId) {
+    if (appState.gastosIndirectosLockedBy && appState.gastosIndirectosLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.gastosIndirectosLockedBy)) {
         const elapsed = Date.now() - (appState.gastosIndirectosLockedBy.timestamp || 0);
-        if (elapsed < 5 * 60 * 1000) {
-            alert(`⚠️ Esta tabla está siendo editada por ${appState.gastosIndirectosLockedBy.userName}. Por favor espera a que termine de guardar.`);
+        if (elapsed < 30 * 60 * 1000) {
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.gastosIndirectosLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
             return;
         }
     }
     if (!appState.isEditingGastosIndirectos) {
-        await startEditingGastosIndirectos();
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' arriba para agregar un Gasto Indirecto.", "warning");
+        } else {
+            alert("Haz clic en 'Editar' arriba para agregar un Gasto Indirecto.");
+        }
+        return;
     }
     if (!appState.gastosIndirectos) appState.gastosIndirectos = [];
     const nextFolioNum = appState.gastosIndirectos.length + 1;
@@ -15813,7 +15846,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_fix_nomina_status_filter';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_gastos_indirectos_modo_edicion_estricto';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
