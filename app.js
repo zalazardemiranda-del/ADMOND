@@ -2758,6 +2758,48 @@ async function handleNominaCellClick(index, fieldId) {
 }
 window.handleNominaCellClick = handleNominaCellClick;
 
+function updateNominaStatusCounts() {
+    window.updateNominaStatusCounts = updateNominaStatusCounts;
+    const allList = window.getActiveNominasList() || [];
+    let pend = 0;
+    let prog = 0;
+    let pag = 0;
+    allList.forEach(item => {
+        if (!item) return;
+        const rawSt = String(item.estatus || item.p || 'PROG').trim().toLowerCase();
+        if (rawSt === 'pagado') {
+            pag++;
+        } else if (rawSt === 'pendiente') {
+            pend++;
+        } else {
+            prog++;
+        }
+    });
+    const cPend = document.getElementById("count-nomina-status-pendientes");
+    const cProg = document.getElementById("count-nomina-status-prog");
+    const cPag = document.getElementById("count-nomina-status-pagado");
+    if (cPend) cPend.innerText = pend;
+    if (cProg) cProg.innerText = prog;
+    if (cPag) cPag.innerText = pag;
+}
+window.updateNominaStatusCounts = updateNominaStatusCounts;
+
+function filterNominasByStatus(status, btnEl) {
+    window.filterNominasByStatus = filterNominasByStatus;
+    const stNorm = String(status || 'PROG').toUpperCase();
+    appState.nominaStatusFilter = stNorm;
+
+    const group = document.getElementById("nomina-status-filter-group");
+    if (group) {
+        group.querySelectorAll(".btn-status-filter").forEach(b => b.classList.remove("active"));
+    }
+    if (btnEl) {
+        btnEl.classList.add("active");
+    }
+    renderNominas();
+}
+window.filterNominasByStatus = filterNominasByStatus;
+
 function renderNominas() {
     const tbody = document.getElementById("tbody-nominas");
     if (!tbody) return;
@@ -2771,9 +2813,9 @@ function renderNominas() {
     const disabledAttr = isEditable ? "" : "disabled";
 
     const frag = document.createDocumentFragment();
-    const list = window.getActiveNominasList();
-    if (!appState.viewingArchiveId && Array.isArray(list) && list.length === 0) {
-        list.push({
+    const allList = window.getActiveNominasList();
+    if (!appState.viewingArchiveId && Array.isArray(allList) && allList.length === 0) {
+        allList.push({
             folio: "1",
             empleado: "",
             fecha: new Date().toISOString().split('T')[0],
@@ -2789,42 +2831,66 @@ function renderNominas() {
             total: 0
         });
     }
-    
-    list.forEach((item, index) => {
-        let totalVal = 0;
-        if (item.total !== undefined && item.total !== null && item.total !== "" && !isNaN(item.total) && Number(item.total) !== 0) {
-            totalVal = Number(item.total);
-        } else if (item.nomina !== undefined && item.nomina !== null && item.nomina !== "" && !isNaN(item.nomina)) {
-            totalVal = Number(item.nomina);
-        } else if (item.servicio !== undefined && item.servicio !== null && !isNaN(item.servicio) && String(item.servicio).trim() !== "" && String(item.servicio).toLowerCase() !== "nomina") {
-            totalVal = Number(item.servicio);
-        }
-        item.nomina = totalVal;
-        item.total = totalVal;
 
-        const tr = document.createElement("tr");
-        tr.setAttribute("data-row-key", `nom_${index}`);
-        tr.setAttribute("oncontextmenu", `if(appState.isEditingNominas && confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
-        tr.title = isEditable ? "Clic derecho para eliminar fila" : "Haz clic en 'Editar' o en una celda para modificar esta tabla";
-        tr.innerHTML = `
-            <td onclick="handleNominaCellClick(${index}, 'nom-folio-input-${index}')">
-                <input type="text" id="nom-folio-input-${index}" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
-            </td>
-            <td onclick="handleNominaCellClick(${index}, 'nom-empleado-input-${index}')">
-                <input type="text" id="nom-empleado-input-${index}" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" ${disabledAttr} style="font-weight: 700;">
-            </td>
-            <td onclick="handleNominaCellClick(${index}, 'nom-fecha-input-${index}')">
-                <input type="date" id="nom-fecha-input-${index}" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)" ${disabledAttr}>
-            </td>
-            <td onclick="handleNominaCellClick(${index}, 'nom-total-input-${index}')">
-                <div class="excel-currency-wrap">
-                    <span class="currency-symbol">$</span>
-                    <input type="number" id="nom-total-input-${index}" class="excel-input number-input" value="${totalVal || 0}" step="any" oninput="updateNominaManualTotal(${index}, this.value)" placeholder="0.00" ${disabledAttr} style="font-weight: 800; background: rgba(31, 78, 120, 0.06);">
-                </div>
-            </td>
-        `;
-        frag.appendChild(tr);
-    });
+    updateNominaStatusCounts();
+
+    let list = allList;
+    if (appState.nominaStatusFilter && appState.nominaStatusFilter !== 'all') {
+        const filterVal = appState.nominaStatusFilter.toLowerCase();
+        if (filterVal === 'pendiente') {
+            list = allList.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pendiente');
+        } else if (filterVal === 'pagado') {
+            list = allList.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pagado');
+        } else if (filterVal === 'prog' || filterVal === 'programado') {
+            list = allList.filter(item => {
+                const rawSt = (item.estatus || item.p || '').trim().toLowerCase();
+                return rawSt !== 'pendiente' && rawSt !== 'pagado';
+            });
+        }
+    }
+    
+    if (list.length === 0) {
+        const trEmpty = document.createElement("tr");
+        trEmpty.innerHTML = `<td colspan="4" style="text-align: center; color: #94A3B8; padding: 24px; font-weight: 600;">No hay nóminas registradas con el estatus seleccionado.</td>`;
+        frag.appendChild(trEmpty);
+    } else {
+        list.forEach((item) => {
+            const index = allList.indexOf(item);
+            let totalVal = 0;
+            if (item.total !== undefined && item.total !== null && item.total !== "" && !isNaN(item.total) && Number(item.total) !== 0) {
+                totalVal = Number(item.total);
+            } else if (item.nomina !== undefined && item.nomina !== null && item.nomina !== "" && !isNaN(item.nomina)) {
+                totalVal = Number(item.nomina);
+            } else if (item.servicio !== undefined && item.servicio !== null && !isNaN(item.servicio) && String(item.servicio).trim() !== "" && String(item.servicio).toLowerCase() !== "nomina") {
+                totalVal = Number(item.servicio);
+            }
+            item.nomina = totalVal;
+            item.total = totalVal;
+
+            const tr = document.createElement("tr");
+            tr.setAttribute("data-row-key", `nom_${index}`);
+            tr.setAttribute("oncontextmenu", `if(appState.isEditingNominas && confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
+            tr.title = isEditable ? "Clic derecho para eliminar fila" : "Haz clic en 'Editar' o en una celda para modificar esta tabla";
+            tr.innerHTML = `
+                <td onclick="handleNominaCellClick(${index}, 'nom-folio-input-${index}')">
+                    <input type="text" id="nom-folio-input-${index}" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
+                </td>
+                <td onclick="handleNominaCellClick(${index}, 'nom-empleado-input-${index}')">
+                    <input type="text" id="nom-empleado-input-${index}" class="excel-input" value="${item.empleado || ""}" oninput="updateNominaCell(${index}, 'empleado', this.value)" ${disabledAttr} style="font-weight: 700;">
+                </td>
+                <td onclick="handleNominaCellClick(${index}, 'nom-fecha-input-${index}')">
+                    <input type="date" id="nom-fecha-input-${index}" class="excel-input" value="${item.fecha || ""}" oninput="updateNominaCell(${index}, 'fecha', this.value)" ${disabledAttr}>
+                </td>
+                <td onclick="handleNominaCellClick(${index}, 'nom-total-input-${index}')">
+                    <div class="excel-currency-wrap">
+                        <span class="currency-symbol">$</span>
+                        <input type="number" id="nom-total-input-${index}" class="excel-input number-input" value="${totalVal || 0}" step="any" oninput="updateNominaManualTotal(${index}, this.value)" placeholder="0.00" ${disabledAttr} style="font-weight: 800; background: rgba(31, 78, 120, 0.06);">
+                    </div>
+                </td>
+            `;
+            frag.appendChild(tr);
+        });
+    }
     
     // Bottom Green Summary Row (Imagen 3 style)
     const summaryTr = document.createElement("tr");
@@ -15548,7 +15614,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_operaciones_proveedores_ui';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_nominas_filter_ui';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {

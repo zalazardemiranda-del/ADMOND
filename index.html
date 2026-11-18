@@ -110,7 +110,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <link rel="stylesheet" href="styles.css?v=8710f015">
+    <link rel="stylesheet" href="styles.css?v=19a00c6e">
 
     <script>
 
@@ -1436,30 +1436,36 @@
 
                                     </div>
 
-                                    <div class="table-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;" id="nomina-action-buttons">
+                                    <div class="table-actions nomina-header-actions" id="nomina-action-buttons">
 
-                                        <button class="btn btn-secondary" onclick="openModalArchivoDigital()" id="btn-archivo-digital">
+                                        <!-- Filtros de Estatus Nóminas (Pendientes, Programado, Pagados) -->
+                                        <div class="proveedor-status-filter-group nomina-status-filter-group" id="nomina-status-filter-group">
+                                            <span class="chips-label">Estatus:</span>
+                                            <button type="button" class="btn-status-filter btn-status-pendientes" id="btn-nomina-filter-pendientes" onclick="filterNominasByStatus('PENDIENTE', this)" title="Filtrar Pendientes">
+                                                Pendientes (<span id="count-nomina-status-pendientes">0</span>)
+                                            </button>
+                                            <button type="button" class="btn-status-filter btn-status-prog active" id="btn-nomina-filter-prog" onclick="filterNominasByStatus('PROG', this)" title="Filtrar Programado">
+                                                Programado (<span id="count-nomina-status-prog">0</span>)
+                                            </button>
+                                            <button type="button" class="btn-status-filter btn-status-pagado" id="btn-nomina-filter-pagado" onclick="filterNominasByStatus('PAGADO', this)" title="Filtrar Pagados">
+                                                Pagados (<span id="count-nomina-status-pagado">0</span>)
+                                            </button>
+                                        </div>
 
+                                        <button class="btn btn-secondary btn-nomina-compact" onclick="openModalArchivoDigital()" id="btn-archivo-digital">
                                             <span class="material-symbols-outlined">folder</span> Archivo digital
-
                                         </button>
 
-                                        <button class="btn btn-primary" style="background-color: #f59e0b; border-color: #f59e0b; color: white;" onclick="archivarQuincenaActual()" id="btn-archivar-quincena">
-
+                                        <button class="btn btn-primary btn-nomina-compact" onclick="archivarQuincenaActual()" id="btn-archivar-quincena">
                                             <span class="material-symbols-outlined">archive</span> Archivar Quincena
-
                                         </button>
 
-                                        <button class="btn btn-primary" id="btn-add-nomina-row" onclick="addNewNominaRow()">
-
+                                        <button class="btn btn-primary btn-nomina-compact" id="btn-add-nomina-row" onclick="addNewNominaRow()">
                                             <span class="material-symbols-outlined">person_add</span> Agregar Empleado / Nómina
-
                                         </button>
 
-                                        <button class="btn btn-secondary" style="display: none; background-color: #ef4444; color: white; border-color: #ef4444;" onclick="exitArchiveMode()" id="btn-exit-archive">
-
+                                        <button class="btn btn-secondary btn-nomina-compact" style="display: none; background-color: #ef4444; color: white; border-color: #ef4444;" onclick="exitArchiveMode()" id="btn-exit-archive">
                                             <span class="material-symbols-outlined">close</span> Cerrar Archivo
-
                                         </button>
 
                                     </div>
@@ -5275,7 +5281,7 @@
     <script src="consecutivo_data.js?v=285df872"></script>
 
     <script src="schema.js?v=c644e61d"></script>
-    <script src="app.js?v=0f63e6f0"></script>
+    <script src="app.js?v=52cf9476"></script>
 
 </body>
 
