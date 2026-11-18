@@ -2692,8 +2692,18 @@ select option {
     gap: 4px !important;
 }
 
+#table-nominas .nomina-estatus-trigger.trigger-locked {
+    cursor: not-allowed !important;
+    opacity: 0.85;
+}
+
 #table-nominas .nomina-estatus-trigger .prov-arrow {
     font-size: 14px !important;
+}
+
+.btn-nomina-compact:disabled {
+    opacity: 0.55 !important;
+    cursor: not-allowed !important;
 }
 
 /* Custom Harmonized Estatus Badge Dropdown for Table Proveedores (Imágenes 1 y 2) */

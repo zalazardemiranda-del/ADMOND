@@ -2575,10 +2575,21 @@ function updateNominasEditButtonsUI() {
         applyBtnState(btnTopEdit, btnTopSave);
     }
 
+    const canEditNominas = Boolean(appState.isEditingNominas);
+
     if (btnAddRow) {
-        btnAddRow.disabled = Boolean(isLockedByOther);
-        btnAddRow.style.opacity = isLockedByOther ? "0.55" : "1";
-        btnAddRow.style.cursor = isLockedByOther ? "not-allowed" : "pointer";
+        btnAddRow.disabled = !canEditNominas;
+        btnAddRow.style.opacity = canEditNominas ? "1" : "0.55";
+        btnAddRow.style.cursor = canEditNominas ? "pointer" : "not-allowed";
+        btnAddRow.title = canEditNominas ? "Agregar nuevo registro de nómina" : "Haz clic en 'Editar' arriba para agregar un empleado o nómina";
+    }
+
+    const btnArchivar = document.getElementById("btn-archivar-quincena");
+    if (btnArchivar) {
+        btnArchivar.disabled = !canEditNominas;
+        btnArchivar.style.opacity = canEditNominas ? "1" : "0.55";
+        btnArchivar.style.cursor = canEditNominas ? "pointer" : "not-allowed";
+        btnArchivar.title = canEditNominas ? "Archivar la quincena actual" : "Haz clic en 'Editar' arriba para archivar la quincena";
     }
 
     if (isLockedByOther) {
@@ -2740,20 +2751,14 @@ async function fetchNominasLockFromCloud() {
 }
 window.fetchNominasLockFromCloud = fetchNominasLockFromCloud;
 
-async function handleNominaCellClick(index, fieldId) {
+function handleNominaCellClick(index, fieldId) {
     window.handleNominaCellClick = handleNominaCellClick;
     if (!appState.isEditingNominas) {
-        if (appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.nominasLockedBy)) {
-            alert(`⚠️ Esta tabla está siendo editada por ${appState.nominasLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
-            return;
-        }
-        await startEditingNominas();
-        if (appState.isEditingNominas && fieldId) {
-            setTimeout(() => {
-                const el = document.getElementById(fieldId);
-                if (el && !el.disabled) el.focus();
-            }, 30);
-        }
+        return;
+    }
+    if (fieldId) {
+        const el = document.getElementById(fieldId);
+        if (el && !el.disabled) el.focus();
     }
 }
 window.handleNominaCellClick = handleNominaCellClick;
@@ -2884,7 +2889,9 @@ function renderNominas() {
             const tr = document.createElement("tr");
             tr.setAttribute("data-row-key", `nom_${index}`);
             tr.setAttribute("oncontextmenu", `if(appState.isEditingNominas && confirm('¿Deseas eliminar este registro de nómina?')){deleteNominaRecord(${index});} return false;`);
-            tr.title = isEditable ? "Clic derecho para eliminar fila" : "Haz clic en 'Editar' o en una celda para modificar esta tabla";
+            tr.title = isEditable ? "Clic derecho para eliminar fila" : "Modo lectura. Haz clic en 'Editar' arriba para modificar esta tabla";
+            const triggerLockedClass = isEditable ? '' : 'trigger-locked';
+            const triggerTitle = isEditable ? `Estatus: ${currentStatus}. Haz clic para cambiar.` : "Haz clic en 'Editar' arriba para modificar el estatus";
             tr.innerHTML = `
                 <td onclick="handleNominaCellClick(${index}, 'nom-folio-input-${index}')">
                     <input type="text" id="nom-folio-input-${index}" class="excel-input" value="${item.folio || (index + 1)}" oninput="updateNominaCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
@@ -2902,7 +2909,7 @@ function renderNominas() {
                     </div>
                 </td>
                 <td class="td-nomina-estatus">
-                    <div class="prov-estatus-trigger nomina-estatus-trigger ${estatusClass}" id="nomina-estatus-trigger-${index}" onclick="handleNominaEstatusClick(${index}, event)" title="Estatus: ${currentStatus}. Haz clic para cambiar.">
+                    <div class="prov-estatus-trigger nomina-estatus-trigger ${estatusClass} ${triggerLockedClass}" id="nomina-estatus-trigger-${index}" onclick="handleNominaEstatusClick(${index}, event)" title="${triggerTitle}">
                         <span>${displayLabel}</span>
                         <span class="material-symbols-outlined prov-arrow">expand_more</span>
                     </div>
@@ -3069,19 +3076,19 @@ function recalculateNominasTableTotals() {
     }
 };
 
-async function handleNominaEstatusClick(index, event) {
+function handleNominaEstatusClick(index, event) {
     window.handleNominaEstatusClick = handleNominaEstatusClick;
     if (event) {
         event.stopPropagation();
         event.preventDefault();
     }
     if (!appState.isEditingNominas) {
-        if (appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.nominasLockedBy)) {
-            alert(`⚠️ Esta tabla está siendo editada por ${appState.nominasLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
-            return;
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para modificar la nómina y cambiar el estatus.", "warning");
+        } else {
+            alert("Haz clic en 'Editar' para modificar la nómina y cambiar el estatus.");
         }
-        await startEditingNominas();
-        if (!appState.isEditingNominas) return;
+        return;
     }
     toggleNominaEstatusDropdown(index, event);
 }
@@ -3189,11 +3196,15 @@ function selectGlobalNominaEstatus(newStatus, event) {
 }
 window.selectGlobalNominaEstatus = selectGlobalNominaEstatus;
 
-async function addNewNominaRow() {
+function addNewNominaRow() {
     window.addNewNominaRow = addNewNominaRow;
     if (!appState.isEditingNominas) {
-        await startEditingNominas();
-        if (!appState.isEditingNominas) return;
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' arriba para agregar un empleado o nómina.", "warning");
+        } else {
+            alert("Haz clic en 'Editar' arriba para agregar un empleado o nómina.");
+        }
+        return;
     }
     const nextNum = window.getActiveNominasList().length + 1;
     window.getActiveNominasList().push({
@@ -9610,6 +9621,14 @@ function renderArchivoDigital() {
 
 function archivarQuincenaActual() {
     window.archivarQuincenaActual = archivarQuincenaActual;
+    if (!appState.isEditingNominas) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' arriba para archivar la quincena actual.", "warning");
+        } else {
+            alert("Haz clic en 'Editar' arriba para archivar la quincena actual.");
+        }
+        return;
+    }
     if (!appState.nominas || appState.nominas.length === 0) {
         alert("No hay registros en la quincena actual para archivar.");
         return;
@@ -9630,10 +9649,11 @@ function archivarQuincenaActual() {
     appState.archivosQuincenales.push(newArchive);
     
     appState.nominas = [];
-    saveToStorage();
     renderNominas();
     renderVisualizacion();
-    if (typeof broadcastNominasUpdate === 'function') broadcastNominasUpdate();
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification("Quincena archivada. Haz clic en 'Guardar' arriba para confirmar los cambios.", "info");
+    }
     
     // Animate success
     const btn = document.getElementById("btn-archivar-quincena");
@@ -9645,8 +9665,8 @@ function archivarQuincenaActual() {
         
         setTimeout(() => {
             btn.innerHTML = originalText;
-            btn.style.backgroundColor = "#f59e0b";
-            btn.style.borderColor = "#f59e0b";
+            btn.style.backgroundColor = "";
+            btn.style.borderColor = "";
         }, 2000);
     }
 };
@@ -15766,7 +15786,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_nominas_columna_estatus';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_nominas_modo_edicion_estricto';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
