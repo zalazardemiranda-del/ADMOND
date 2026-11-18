@@ -257,13 +257,13 @@
 
                     </li>
 
-                    <li id="sidebar-item-administracion">
+                    <li id="sidebar-item-operaciones">
 
-                        <a href="#" class="nav-item" id="nav-administracion" onclick="switchTab('administracion')" title="Administración">
+                        <a href="#" class="nav-item" id="nav-operaciones" onclick="switchTab('operaciones')" title="Operaciones">
 
                             <span class="material-symbols-outlined">analytics</span>
 
-                            <span class="nav-text-label">Administración</span>
+                            <span class="nav-text-label">Operaciones</span>
 
                         </a>
 
@@ -276,6 +276,18 @@
                             <span class="material-symbols-outlined">pie_chart</span>
 
                             <span class="nav-text-label">Visualización</span>
+
+                        </a>
+
+                    </li>
+
+                    <li id="sidebar-item-administracion">
+
+                        <a href="#" class="nav-item" id="nav-administracion" onclick="switchTab('administracion')" title="Administración">
+
+                            <span class="material-symbols-outlined">paid</span>
+
+                            <span class="nav-text-label">Administración</span>
 
                         </a>
 
@@ -1044,7 +1056,7 @@
 
                         <!-- 2 Main Interactive Fichas Selection Header -->
 
-                        <div class="admin-fichas-nav" id="admin-fichas-nav">
+                        <div class="admin-fichas-nav" id="admin-fichas-nav" style="display: none;">
 
                             <button class="admin-ficha-card active" id="ficha-btn-quincenal" onclick="switchAdminFicha('quincenal')">
 
@@ -1053,18 +1065,6 @@
                                 <div class="ficha-text">
 
                                     <h4>Administración</h4>
-
-                                </div>
-
-                            </button>
-
-                            <button class="admin-ficha-card" id="ficha-btn-operaciones" onclick="switchAdminFicha('operaciones')">
-
-                                <div class="ficha-icon"><span class="material-symbols-outlined">folder_managed</span></div>
-
-                                <div class="ficha-text">
-
-                                    <h4>Operaciones</h4>
 
                                 </div>
 
@@ -1118,7 +1118,7 @@
 
                                     <div class="card table-card">
 
-                                        <div class="table-card-header">
+                                        <div class="table-card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
 
                                             <div class="table-title-area">
 
@@ -1128,6 +1128,20 @@
 
                                             </div>
 
+                                            <div class="table-actions" style="display: flex; gap: 10px; align-items: center;" id="visualizacion-action-buttons">
+                                                <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-visualizacion" onclick="startEditingVisualizacion()" title="Habilitar edición de Bancos e Impuestos">
+                                                    <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
+                                                </button>
+                                                <button type="button" class="btn btn-primary btn-save-proveedores" id="btn-save-visualizacion" onclick="saveEditingVisualizacion()" disabled title="Guardar cambios y liberar edición para otros usuarios">
+                                                    <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar
+                                                </button>
+                                            </div>
+
+                                        </div>
+
+                                        <div id="visualizacion-lock-banner" style="display: none; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 10px; border-radius: 8px; background: #FEF3C7; border: 1px solid #F59E0B; color: #92400E; font-size: 12.5px; font-weight: 600;">
+                                            <span class="material-symbols-outlined" style="font-size: 18px;">lock</span>
+                                            <span id="visualizacion-lock-banner-text">Esta sección está siendo editada por otro usuario</span>
                                         </div>
 
                                         <div class="table-responsive">
@@ -1158,7 +1172,7 @@
 
                                                         <td>
 
-                                                            <input type="number" id="concept-bancos-input" class="excel-input number-input" value="10000" step="100" oninput="updateAdminConcept('bancos', this.value)">
+                                                            <input type="number" id="concept-bancos-input" class="excel-input number-input" value="10000" step="100" oninput="updateAdminConcept('bancos', this.value)" disabled>
 
                                                         </td>
 
@@ -1276,7 +1290,7 @@
 
                                                         <td>
 
-                                                            <input type="number" id="concept-impuestos-input" class="excel-input number-input" value="0" step="100" oninput="updateAdminConcept('impuestos', this.value)">
+                                                            <input type="number" id="concept-impuestos-input" class="excel-input number-input" value="0" step="100" oninput="updateAdminConcept('impuestos', this.value)" disabled>
 
                                                         </td>
 
@@ -1652,6 +1666,13 @@
                                     <div class="ficha-icon"><span class="material-symbols-outlined">receipt_long</span></div>
                                     <div class="ficha-text">
                                         <h4>Consecutivo</h4>
+                                    </div>
+                                </button>
+
+                                <button class="admin-ficha-card operaciones-subnav-card active" id="ficha-btn-operaciones" onclick="switchAdminFicha('operaciones')">
+                                    <div class="ficha-icon"><span class="material-symbols-outlined">folder_managed</span></div>
+                                    <div class="ficha-text">
+                                        <h4>Operaciones</h4>
                                     </div>
                                 </button>
                             </div>

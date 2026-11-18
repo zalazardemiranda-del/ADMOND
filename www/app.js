@@ -111,6 +111,8 @@ let appState = {
     gastosIndirectos: [],
     isEditingGastosIndirectos: false,
     gastosIndirectosLockedBy: null,
+    isEditingVisualizacion: false,
+    visualizacionLockedBy: null,
     adminSubSection: 'quincenas', // 'quincenas' o 'gastos-indirectos'
     archivosQuincenales: [],
     viewingArchiveId: null,
@@ -563,7 +565,7 @@ const runInitialAppSetup = async () => {
     if (hashTab === 'meetings') hashTab = 'tasks';
     if (storedTab === 'meetings') storedTab = 'tasks';
 
-    if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'visualizacion', 'users', 'profile'].includes(hashTab)) {
+    if (hashTab && ['schema', 'emails', 'tasks', 'chat', 'administracion', 'visualizacion', 'operaciones', 'users', 'profile'].includes(hashTab)) {
         appState.currentTab = hashTab;
     } else if (storedTab) {
         appState.currentTab = storedTab;
@@ -585,7 +587,7 @@ const runInitialAppSetup = async () => {
     window._isBootstrappingApp = true;
     setRole(appState.currentRole);
     switchTab(appState.currentTab);
-    if (appState.currentTab !== 'visualizacion' && appState.currentAdminFicha && typeof switchAdminFicha === 'function') {
+    if (!['visualizacion', 'operaciones', 'administracion'].includes(appState.currentTab) && appState.currentAdminFicha && typeof switchAdminFicha === 'function') {
         switchAdminFicha(appState.currentAdminFicha);
     }
     window._isBootstrappingApp = false;
@@ -739,6 +741,7 @@ function setRole(role) {
     }
 
     const sidebarAdminItem = document.getElementById("sidebar-item-administracion");
+    const sidebarOpItem = document.getElementById("sidebar-item-operaciones");
     const sidebarVisItem = document.getElementById("sidebar-item-visualizacion");
     const sidebarUsersItem = document.getElementById("sidebar-item-users");
     const newTaskCard = document.getElementById("new-task-card");
@@ -753,6 +756,7 @@ function setRole(role) {
         if (tasksControlPanel) tasksControlPanel.style.display = "flex";
         if (tasksLayout) tasksLayout.classList.remove("full-width-tasks");
         if (sidebarAdminItem) sidebarAdminItem.style.setProperty("display", "flex", "important");
+        if (sidebarOpItem) sidebarOpItem.style.setProperty("display", "flex", "important");
         if (sidebarVisItem) sidebarVisItem.style.setProperty("display", "flex", "important");
         if (sidebarUsersItem) sidebarUsersItem.style.setProperty("display", "flex", "important");
         if (adminWorkspace) adminWorkspace.style.display = "block";
@@ -767,6 +771,7 @@ function setRole(role) {
         if (tasksControlPanel) tasksControlPanel.style.display = "none";
         if (tasksLayout) tasksLayout.classList.add("full-width-tasks");
         if (sidebarAdminItem) sidebarAdminItem.style.setProperty("display", "flex", "important");
+        if (sidebarOpItem) sidebarOpItem.style.setProperty("display", "flex", "important");
         if (sidebarVisItem) sidebarVisItem.style.setProperty("display", "flex", "important");
         if (sidebarUsersItem) sidebarUsersItem.style.setProperty("display", "none", "important");
         if (adminWorkspace) adminWorkspace.style.display = "block";
@@ -1138,8 +1143,8 @@ function switchTab(tabName) {
         tabName = 'tasks';
     }
 
-    // Administración y Visualización accesible por Gerente y Administrativo/Administrador
-    if ((tabName === 'administracion' || tabName === 'visualizacion') && !isGerente && !isAdmin) {
+    // Administración, Visualización y Operaciones accesible por Gerente y Administrativo/Administrador
+    if ((tabName === 'administracion' || tabName === 'visualizacion' || tabName === 'operaciones') && !isGerente && !isAdmin) {
         tabName = 'tasks';
     }
 
@@ -1153,7 +1158,7 @@ function switchTab(tabName) {
     }
     
     document.querySelectorAll(".tab-pane").forEach(pane => pane.classList.remove("active"));
-    const paneTarget = tabName === 'visualizacion' ? 'administracion' : tabName;
+    const paneTarget = (tabName === 'visualizacion' || tabName === 'operaciones') ? 'administracion' : tabName;
     const activePane = document.getElementById(`tab-${paneTarget}`);
     if (activePane) activePane.classList.add("active");
     
@@ -1167,6 +1172,11 @@ function switchTab(tabName) {
     if (appState.activeOperacionesProjectId || appState._myActiveProjectLock) {
         if (typeof closeOperacionesDetail === 'function') {
             closeOperacionesDetail();
+        }
+    }
+    if (tabName !== 'visualizacion' && appState.isEditingVisualizacion) {
+        if (typeof cancelEditingVisualizacion === 'function') {
+            cancelEditingVisualizacion();
         }
     }
 
@@ -1207,24 +1217,41 @@ function switchTab(tabName) {
             appState.currentAdminFicha = 'visualizacion';
             if (!window._isBootstrappingApp) renderAdministracion();
         }
-    } else if (tabName === 'administracion') {
-        titleEl.innerText = "Administración General";
-        subtitleEl.innerText = "Control financiero, estadísticas por departamento, nóminas quincenales y proveedores";
+    } else if (tabName === 'operaciones') {
+        titleEl.innerText = "Operaciones";
+        subtitleEl.innerText = "Gestión de proyectos, proveedores y consecutivo de facturación";
         if (isGerente || isAdmin) {
             const adminWs = document.getElementById("administracion-manager-workspace");
             const adminLock = document.getElementById("administracion-lock-screen");
             if (adminWs) adminWs.style.display = "block";
             if (adminLock) adminLock.style.display = "none";
         }
-        if (adminFichasNav) adminFichasNav.style.display = "flex";
-        if (!appState.currentAdminFicha || appState.currentAdminFicha === 'visualizacion') {
-            if (typeof switchAdminFicha === 'function') {
-                switchAdminFicha('quincenal');
-            } else {
-                appState.currentAdminFicha = 'quincenal';
-            }
-        } else if (!window._isBootstrappingApp) {
-            renderAdministracion();
+        if (adminFichasNav) adminFichasNav.style.display = "none";
+        const targetOpFicha = (appState.currentAdminFicha === 'proveedores' || appState.currentAdminFicha === 'consecutivo')
+            ? appState.currentAdminFicha
+            : 'operaciones';
+        if (typeof switchAdminFicha === 'function') {
+            switchAdminFicha(targetOpFicha);
+        } else {
+            appState.currentAdminFicha = targetOpFicha;
+            if (!window._isBootstrappingApp) renderAdministracion();
+        }
+    } else if (tabName === 'administracion') {
+        titleEl.innerText = "Administración";
+        subtitleEl.innerText = "Control financiero, nóminas quincenales y gastos indirectos";
+        if (isGerente || isAdmin) {
+            const adminWs = document.getElementById("administracion-manager-workspace");
+            const adminLock = document.getElementById("administracion-lock-screen");
+            if (adminWs) adminWs.style.display = "block";
+            if (adminLock) adminLock.style.display = "none";
+        }
+        if (adminFichasNav) adminFichasNav.style.display = "none";
+        const targetAdmFicha = appState.currentAdminFicha === 'archivo-digital' ? 'archivo-digital' : 'quincenal';
+        if (typeof switchAdminFicha === 'function') {
+            switchAdminFicha(targetAdmFicha);
+        } else {
+            appState.currentAdminFicha = targetAdmFicha;
+            if (!window._isBootstrappingApp) renderAdministracion();
         }
     } else if (tabName === 'users') {
         titleEl.innerText = "Administración de Usuarios";
@@ -1251,10 +1278,6 @@ function switchAdminFicha(fichaName) {
     } else if (fichaName === 'archivo-digital') {
         const btnQ = document.getElementById('ficha-btn-quincenal');
         if (btnQ) btnQ.classList.add("active");
-    }
-    if (fichaName === 'proveedores' || fichaName === 'consecutivo') {
-        const btnOp = document.getElementById('ficha-btn-operaciones');
-        if (btnOp) btnOp.classList.add("active");
     }
 
     const opKpisRow = document.getElementById('operaciones-kpis-row');
@@ -1293,6 +1316,11 @@ function switchAdminFicha(fichaName) {
             cancelEditingGastosIndirectos();
         }
     }
+    if (fichaName !== 'visualizacion' && appState.isEditingVisualizacion) {
+        if (typeof cancelEditingVisualizacion === 'function') {
+            cancelEditingVisualizacion();
+        }
+    }
 
     if (!window._isBootstrappingApp) {
         renderAdministracion();
@@ -1307,6 +1335,9 @@ function renderAdministracion() {
     
     if (appState.currentAdminFicha === 'visualizacion') {
         renderVisualizacion();
+        if (typeof window.fetchVisualizacionLockFromCloud === 'function') {
+            window.fetchVisualizacionLockFromCloud();
+        }
         Promise.allSettled([
             typeof window.fetchAdminConceptsFromCloud === 'function' ? window.fetchAdminConceptsFromCloud() : Promise.resolve(),
             typeof window.fetchConsecutivoFromCloud === 'function' ? window.fetchConsecutivoFromCloud() : Promise.resolve(),
@@ -1617,6 +1648,9 @@ function renderVisualizacion() {
     
     // Render Chart.js Pie Chart
     renderPieChart(totals);
+    if (typeof updateVisualizacionEditButtonsUI === 'function') {
+        updateVisualizacionEditButtonsUI();
+    }
 }
 
 let _syncAdminConceptsTimer = null;
@@ -1706,6 +1740,7 @@ window.broadcastAdminConceptsUpdate = broadcastAdminConceptsUpdate;
 
 async function fetchAdminConceptsFromCloud() {
     window.fetchAdminConceptsFromCloud = fetchAdminConceptsFromCloud;
+    if (appState.isEditingVisualizacion) return;
     if (Date.now() - (window._lastLocalAdminConceptsSyncTime || 0) < 3000) return;
     if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
     const client = window.FIREBASE_CONFIG?.client;
@@ -1755,6 +1790,10 @@ function updateAdminConcept(key, value) {
     } else if (key === 'impuestos') {
         appState.concepts.impuestosFecha = dateStr;
     }
+    if (appState.isEditingVisualizacion) {
+        renderVisualizacion();
+        return;
+    }
     saveToStorage();
     try { localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts)); } catch (e) {}
     renderVisualizacion();
@@ -1765,6 +1804,347 @@ function updateAdminConcept(key, value) {
         syncAdminConceptsToCloud();
     }
 };
+
+// ---------------------------------------------------------------------------------
+// CONTROL DE EDICIÓN EXCLUSIVA Y BLOQUEO EN TIEMPO REAL DE VISUALIZACIÓN (BANCOS E IMPUESTOS)
+// ---------------------------------------------------------------------------------
+let _editVisualizacionTimeout = null;
+let _visualizacionLockHeartbeatTimer = null;
+window._lastVisualizacionUnlockTime = 0;
+
+async function startEditingVisualizacion() {
+    window.startEditingVisualizacion = startEditingVisualizacion;
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
+    if (appState.visualizacionLockedBy && appState.visualizacionLockedBy.isLocked !== false && appState.visualizacionLockedBy.userId !== currentUserId) {
+        if (!appState.visualizacionLockedBy.timestamp || appState.visualizacionLockedBy.timestamp > (window._lastVisualizacionUnlockTime || 0)) {
+            const elapsed = Date.now() - (appState.visualizacionLockedBy.timestamp || 0);
+            if (elapsed < 90 * 1000) {
+                alert(`⚠️ Esta sección está siendo editada por ${appState.visualizacionLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+                updateVisualizacionEditButtonsUI();
+                return;
+            }
+        }
+        appState.visualizacionLockedBy = null;
+    }
+
+    appState._visualizacionSnapshot = JSON.parse(JSON.stringify(appState.concepts || {}));
+
+    const lockTime = Date.now();
+    appState.isEditingVisualizacion = true;
+    appState.visualizacionLockedBy = {
+        userId: currentUserId,
+        userName: currentUserName,
+        timestamp: lockTime,
+        isLocked: true
+    };
+    try {
+        localStorage.setItem('rp_visualizacion_lock', JSON.stringify(appState.visualizacionLockedBy));
+    } catch (e) {}
+
+    updateVisualizacionEditButtonsUI();
+
+    try {
+        if (typeof checkCloudLockActive === 'function') {
+            const activeCloudLock = await checkCloudLockActive('__cloud_sync_visualizacion_lock__', currentUserId);
+            if (activeCloudLock && activeCloudLock.isLocked && activeCloudLock.userId !== currentUserId) {
+                appState.isEditingVisualizacion = false;
+                appState.visualizacionLockedBy = activeCloudLock;
+                if (appState._visualizacionSnapshot) {
+                    appState.concepts = JSON.parse(JSON.stringify(appState._visualizacionSnapshot));
+                    appState._visualizacionSnapshot = null;
+                }
+                updateVisualizacionEditButtonsUI();
+                renderVisualizacion();
+                alert(`⚠️ Esta sección está siendo editada por ${activeCloudLock.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+                return;
+            }
+        }
+    } catch (e) {}
+
+    broadcastVisualizacionLockState(true, currentUserName, currentUserId, lockTime);
+    syncVisualizacionLockToCloud(true, currentUserName, currentUserId, lockTime);
+
+    if (_visualizacionLockHeartbeatTimer) clearInterval(_visualizacionLockHeartbeatTimer);
+    _visualizacionLockHeartbeatTimer = setInterval(() => {
+        if (appState.isEditingVisualizacion) {
+            const freshTime = Date.now();
+            if (appState.visualizacionLockedBy) appState.visualizacionLockedBy.timestamp = freshTime;
+            broadcastVisualizacionLockState(true, currentUserName, currentUserId, freshTime);
+            syncVisualizacionLockToCloud(true, currentUserName, currentUserId, freshTime);
+        } else {
+            clearInterval(_visualizacionLockHeartbeatTimer);
+            _visualizacionLockHeartbeatTimer = null;
+        }
+    }, 10000);
+
+    if (typeof showCustomNotification === 'function') {
+        showCustomNotification("Modo de edición activado. Modifica Bancos o Impuestos y haz clic en 'Guardar'.", "info");
+    }
+
+    if (_editVisualizacionTimeout) clearTimeout(_editVisualizacionTimeout);
+    _editVisualizacionTimeout = setTimeout(() => {
+        if (appState.isEditingVisualizacion) {
+            if (typeof showCustomNotification === 'function') {
+                showCustomNotification("Tiempo de edición expirado por inactividad. Los cambios no guardados fueron descartados.", "warning");
+            }
+            cancelEditingVisualizacion();
+        }
+    }, 5 * 60 * 1000);
+}
+window.startEditingVisualizacion = startEditingVisualizacion;
+
+async function saveEditingVisualizacion(isAuto = false) {
+    window.saveEditingVisualizacion = saveEditingVisualizacion;
+    if (_editVisualizacionTimeout) clearTimeout(_editVisualizacionTimeout);
+    if (_visualizacionLockHeartbeatTimer) {
+        clearInterval(_visualizacionLockHeartbeatTimer);
+        _visualizacionLockHeartbeatTimer = null;
+    }
+
+    const unlockTime = Date.now();
+    window._lastVisualizacionUnlockTime = unlockTime;
+    window._lastLocalAdminConceptsSyncTime = unlockTime;
+
+    appState.isEditingVisualizacion = false;
+    appState.visualizacionLockedBy = null;
+    appState._visualizacionSnapshot = null;
+
+    updateVisualizacionEditButtonsUI();
+    renderVisualizacion();
+
+    broadcastVisualizacionLockState(false, null, null, unlockTime);
+    try {
+        localStorage.setItem('rp_visualizacion_lock', JSON.stringify({ isLocked: false, timestamp: unlockTime }));
+    } catch (e) {}
+    syncVisualizacionLockToCloud(false, null, null, unlockTime);
+
+    saveToStorage();
+    try {
+        localStorage.setItem('rp_admin_concepts', JSON.stringify(appState.concepts || {}));
+    } catch (e) {}
+
+    if (typeof broadcastAdminConceptsUpdate === 'function') {
+        broadcastAdminConceptsUpdate();
+    }
+    if (typeof syncAdminConceptsToCloud === 'function') {
+        syncAdminConceptsToCloud(true);
+    }
+
+    if (!isAuto && typeof showCustomNotification === 'function') {
+        showCustomNotification("Cambios de Bancos e Impuestos guardados y sección liberada con éxito.", "success");
+    }
+}
+window.saveEditingVisualizacion = saveEditingVisualizacion;
+
+async function cancelEditingVisualizacion() {
+    window.cancelEditingVisualizacion = cancelEditingVisualizacion;
+    if (_editVisualizacionTimeout) clearTimeout(_editVisualizacionTimeout);
+    if (_visualizacionLockHeartbeatTimer) {
+        clearInterval(_visualizacionLockHeartbeatTimer);
+        _visualizacionLockHeartbeatTimer = null;
+    }
+
+    const unlockTime = Date.now();
+    window._lastVisualizacionUnlockTime = unlockTime;
+
+    appState.isEditingVisualizacion = false;
+    appState.visualizacionLockedBy = null;
+
+    if (appState._visualizacionSnapshot) {
+        appState.concepts = JSON.parse(JSON.stringify(appState._visualizacionSnapshot));
+        appState._visualizacionSnapshot = null;
+    }
+
+    updateVisualizacionEditButtonsUI();
+    renderVisualizacion();
+
+    broadcastVisualizacionLockState(false, null, null, unlockTime);
+    try {
+        localStorage.setItem('rp_visualizacion_lock', JSON.stringify({ isLocked: false, timestamp: unlockTime }));
+    } catch (e) {}
+    syncVisualizacionLockToCloud(false, null, null, unlockTime);
+}
+window.cancelEditingVisualizacion = cancelEditingVisualizacion;
+
+function updateVisualizacionEditButtonsUI() {
+    window.updateVisualizacionEditButtonsUI = updateVisualizacionEditButtonsUI;
+    const btnEdit = document.getElementById("btn-edit-visualizacion");
+    const btnSave = document.getElementById("btn-save-visualizacion");
+    const banner = document.getElementById("visualizacion-lock-banner");
+    const bannerText = document.getElementById("visualizacion-lock-banner-text");
+    const inpBancos = document.getElementById("concept-bancos-input");
+    const inpImpuestos = document.getElementById("concept-impuestos-input");
+
+    const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+    const isLockedByOther = !appState.isEditingVisualizacion && Boolean(appState.visualizacionLockedBy && appState.visualizacionLockedBy.isLocked !== false && appState.visualizacionLockedBy.userId !== currentUserId);
+
+    if (isLockedByOther) {
+        if (banner) {
+            banner.style.display = "flex";
+            if (bannerText) bannerText.innerText = `Esta sección está siendo editada por ${appState.visualizacionLockedBy.userName || 'otro usuario'}`;
+        }
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Bloqueado`;
+            btnEdit.style.cursor = "not-allowed";
+            btnEdit.style.opacity = "0.5";
+            btnEdit.title = `Esta sección está siendo editada por ${appState.visualizacionLockedBy.userName || 'otro usuario'}`;
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.cursor = "not-allowed";
+            btnSave.style.opacity = "0.45";
+        }
+        if (inpBancos) inpBancos.disabled = true;
+        if (inpImpuestos) inpImpuestos.disabled = true;
+    } else if (appState.isEditingVisualizacion) {
+        if (banner) banner.style.display = "none";
+        if (btnEdit) {
+            btnEdit.disabled = true;
+            btnEdit.classList.add("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editando...`;
+            btnEdit.style.cursor = "default";
+            btnEdit.style.opacity = "1";
+            btnEdit.title = "Modo de edición activo";
+        }
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.style.cursor = "pointer";
+            btnSave.style.opacity = "1";
+            btnSave.title = "Guardar cambios y liberar edición para otros usuarios";
+        }
+        if (inpBancos) inpBancos.disabled = false;
+        if (inpImpuestos) inpImpuestos.disabled = false;
+    } else {
+        if (banner) banner.style.display = "none";
+        if (btnEdit) {
+            btnEdit.disabled = false;
+            btnEdit.classList.remove("active-editing");
+            btnEdit.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar`;
+            btnEdit.style.cursor = "pointer";
+            btnEdit.style.opacity = "1";
+            btnEdit.title = "Habilitar edición de Bancos e Impuestos";
+        }
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.style.cursor = "not-allowed";
+            btnSave.style.opacity = "0.45";
+            btnSave.title = "Haz clic en 'Editar' para comenzar";
+        }
+        if (inpBancos) inpBancos.disabled = true;
+        if (inpImpuestos) inpImpuestos.disabled = true;
+    }
+}
+window.updateVisualizacionEditButtonsUI = updateVisualizacionEditButtonsUI;
+
+function broadcastVisualizacionLockState(isLocked, userName, userId, timestamp) {
+    window.broadcastVisualizacionLockState = broadcastVisualizacionLockState;
+    const t = timestamp || Date.now();
+    if (!isLocked) {
+        window._lastVisualizacionUnlockTime = Math.max(window._lastVisualizacionUnlockTime || 0, t);
+    }
+    if (!window.chatRealtimeChannel) return;
+    try {
+        window.chatRealtimeChannel.send({
+            type: 'broadcast',
+            event: 'visualizacion_lock_update',
+            payload: {
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: t
+            }
+        });
+    } catch (e) {
+        console.warn("⚠️ Error broadcasting visualizacion lock state:", e);
+    }
+}
+window.broadcastVisualizacionLockState = broadcastVisualizacionLockState;
+
+async function syncVisualizacionLockToCloud(isLocked, userName, userId, timestamp) {
+    window.syncVisualizacionLockToCloud = syncVisualizacionLockToCloud;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        await client.from('messages').insert({
+            chat_id: '__cloud_sync_visualizacion_lock__',
+            contenido: JSON.stringify({
+                isLocked: Boolean(isLocked),
+                userName: userName || null,
+                userId: userId || null,
+                timestamp: timestamp || Date.now()
+            }),
+            emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+            emisor_role: 'sistema'
+        });
+    } catch (e) {
+        console.warn("⚠️ Error persisting visualizacion lock to cloud:", e);
+    }
+}
+window.syncVisualizacionLockToCloud = syncVisualizacionLockToCloud;
+
+async function fetchVisualizacionLockFromCloud() {
+    window.fetchVisualizacionLockFromCloud = fetchVisualizacionLockFromCloud;
+    if (!window.isFirebaseActive || !window.isFirebaseActive()) return;
+    const client = window.FIREBASE_CONFIG?.client;
+    if (!client) return;
+    try {
+        const { data: msgs } = await client.from('messages')
+            .select('contenido, created_at')
+            .eq('chat_id', '__cloud_sync_visualizacion_lock__')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (msgs && msgs.length > 0 && msgs[0].contenido) {
+            try {
+                const parsed = JSON.parse(msgs[0].contenido);
+                const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+                const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+                const prevLockSig = appState.visualizacionLockedBy ? `${Boolean(appState.visualizacionLockedBy.isLocked)}_${appState.visualizacionLockedBy.userId || ''}_${appState.visualizacionLockedBy.userName || ''}` : 'unlocked';
+
+                if (parsed.isLocked) {
+                    if (parsed.timestamp && parsed.timestamp <= (window._lastVisualizacionUnlockTime || 0)) {
+                        if (!appState.isEditingVisualizacion && appState.visualizacionLockedBy !== null) {
+                            appState.visualizacionLockedBy = null;
+                            updateVisualizacionEditButtonsUI();
+                        }
+                        return;
+                    }
+                    const elapsed = Date.now() - (parsed.timestamp || 0);
+                    if (elapsed < 90 * 1000) {
+                        if (parsed.userId !== currentUserId) {
+                            if (appState.isEditingVisualizacion) {
+                                const myLockTime = appState.visualizacionLockedBy?.timestamp || Date.now();
+                                syncVisualizacionLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                                broadcastVisualizacionLockState(true, currentUserName, currentUserId, myLockTime);
+                                return;
+                            }
+                            appState.visualizacionLockedBy = parsed;
+                        }
+                    } else if (!appState.isEditingVisualizacion) {
+                        appState.visualizacionLockedBy = null;
+                    }
+                } else {
+                    window._lastVisualizacionUnlockTime = Math.max(window._lastVisualizacionUnlockTime || 0, parsed.timestamp || Date.now());
+                    if (!appState.isEditingVisualizacion) {
+                        appState.visualizacionLockedBy = null;
+                    }
+                }
+                const nextLockSig = appState.visualizacionLockedBy ? `${Boolean(appState.visualizacionLockedBy.isLocked)}_${appState.visualizacionLockedBy.userId || ''}_${appState.visualizacionLockedBy.userName || ''}` : 'unlocked';
+                if (prevLockSig !== nextLockSig) {
+                    updateVisualizacionEditButtonsUI();
+                }
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn("⚠️ Error fetching visualizacion lock from cloud:", e);
+    }
+}
+window.fetchVisualizacionLockFromCloud = fetchVisualizacionLockFromCloud;
 
 function renderPieChart(totals) {
     const canvas = document.getElementById("admin-pie-chart");
@@ -4703,6 +5083,9 @@ async function checkCloudLockActive(lockChatId, currentUserId) {
                     return null;
                 }
                 if (lockChatId === '__cloud_sync_gastos_indirectos_lock__' && parsed.timestamp && parsed.timestamp <= (window._lastGastosIndirectosUnlockTime || 0)) {
+                    return null;
+                }
+                if (lockChatId === '__cloud_sync_visualizacion_lock__' && parsed.timestamp && parsed.timestamp <= (window._lastVisualizacionUnlockTime || 0)) {
                     return null;
                 }
                 const elapsed = Date.now() - (parsed.timestamp || 0);
@@ -9743,6 +10126,36 @@ function setupRealtimeSubscriptions() {
         }
     });
 
+    // 4h-vis-lock. Bloqueo de Edición Exclusiva de Visualización (Bancos e Impuestos) en tiempo real
+    window.chatRealtimeChannel.on('broadcast', { event: 'visualizacion_lock_update' }, payload => {
+        const data = payload.payload;
+        if (!data) return;
+        const currentUserId = appState.currentUser?.id || appState.currentUser?.email || 'admin';
+        const currentUserName = appState.currentUser?.nombre || appState.currentUser?.email || 'Administrador';
+
+        if (data.isLocked) {
+            if (data.userId === currentUserId) return;
+            if (data.timestamp && data.timestamp <= (window._lastVisualizacionUnlockTime || 0)) {
+                return;
+            }
+            if (appState.isEditingVisualizacion) {
+                const myLockTime = appState.visualizacionLockedBy?.timestamp || Date.now();
+                broadcastVisualizacionLockState(true, currentUserName, currentUserId, myLockTime);
+                syncVisualizacionLockToCloud(true, currentUserName, currentUserId, myLockTime);
+                return;
+            }
+            appState.visualizacionLockedBy = data;
+        } else {
+            window._lastVisualizacionUnlockTime = Math.max(window._lastVisualizacionUnlockTime || 0, data.timestamp || Date.now());
+            if (!appState.isEditingVisualizacion) {
+                appState.visualizacionLockedBy = null;
+            }
+        }
+        if (typeof window.updateVisualizacionEditButtonsUI === 'function') {
+            window.updateVisualizacionEditButtonsUI();
+        }
+    });
+
     // 4i. Bloqueo visual gris colaborativo en tiempo real (Imagen 3)
     window.chatRealtimeChannel.on('broadcast', { event: 'collaborative_editing' }, payload => {
         if (typeof handleIncomingEditingState === 'function') {
@@ -10216,7 +10629,7 @@ function setupRealtimeSubscriptions() {
                 }
 
                 // Sincronización continua de la ficha activa para garantizar actualización instantánea entre computadoras sin refresh
-                if (appState.currentTab === 'admin' || appState.currentTab === 'administracion' || appState.currentTab === 'visualizacion') {
+                if (appState.currentTab === 'admin' || appState.currentTab === 'administracion' || appState.currentTab === 'visualizacion' || appState.currentTab === 'operaciones') {
                     if (appState.currentAdminFicha === 'operaciones') {
                         if (!appState.isEditingOperacionesDetail && typeof window.fetchOperacionesFromCloud === 'function') {
                             await window.fetchOperacionesFromCloud();
@@ -10256,7 +10669,7 @@ function setupRealtimeSubscriptions() {
                             await window.fetchConsecutivoLockFromCloud();
                         }
                     } else if (appState.currentAdminFicha === 'visualizacion') {
-                        const fetchers = ['fetchAdminConceptsFromCloud', 'fetchNominasFromCloud', 'fetchGastosIndirectosFromCloud', 'fetchConsecutivoFromCloud', 'fetchProveedoresDataFromCloud'];
+                        const fetchers = ['fetchVisualizacionLockFromCloud', 'fetchAdminConceptsFromCloud', 'fetchNominasFromCloud', 'fetchGastosIndirectosFromCloud', 'fetchConsecutivoFromCloud', 'fetchProveedoresDataFromCloud'];
                         for (const fn of fetchers) {
                             if (typeof window[fn] === 'function') { try { await window[fn](); } catch (e) {} }
                         }
