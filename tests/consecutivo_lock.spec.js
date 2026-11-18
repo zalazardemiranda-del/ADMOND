@@ -1718,11 +1718,18 @@ test("22. Gastos Indirectos: Bloqueo estricto - '+ Añadir Gasto Indirecto' y ce
   });
   await page.waitForTimeout(200);
 
-  // 1. Verificar estado inicial de sólo lectura
+  // 1. Verificar estado inicial de sólo lectura y presencia de filtros de estatus
   await expect(page.locator("#btn-edit-admin-top")).toBeVisible();
   await expect(page.locator("#btn-edit-admin-top")).toBeEnabled();
   await expect(page.locator("#btn-save-admin-top")).toBeDisabled();
   await expect(page.locator("#btn-add-gasto-indirecto")).toBeDisabled();
+
+  // Verificar presencia de los 3 filtros de estatus (Pendientes, Programado, Pagados)
+  await expect(page.locator("#gastos-ind-status-filter-group")).toBeVisible();
+  await expect(page.locator("#btn-gastos-ind-filter-pendientes")).toBeVisible();
+  await expect(page.locator("#btn-gastos-ind-filter-prog")).toBeVisible();
+  await expect(page.locator("#btn-gastos-ind-filter-prog")).toHaveClass(/active/);
+  await expect(page.locator("#btn-gastos-ind-filter-pagado")).toBeVisible();
 
   // Intentar agregar fila sin dar clic en Editar no debe aumentar las filas
   const initialRowCount = await page.locator("#tbody-gastos-indirectos tr[id^='gi-row-']").count();
@@ -1771,6 +1778,14 @@ test("22. Gastos Indirectos: Bloqueo estricto - '+ Añadir Gasto Indirecto' y ce
   const found = savedList.find(g => g.concepto === 'Pago internet fibra');
   expect(found).toBeTruthy();
   expect(found.total).toBe(1500);
+
+  // Probar filtrado por Pendiente / Programado / Pagado
+  await page.locator("#btn-gastos-ind-filter-pendientes").click();
+  await page.waitForTimeout(150);
+  await expect(page.locator("#btn-gastos-ind-filter-pendientes")).toHaveClass(/active/);
+  await page.locator("#btn-gastos-ind-filter-prog").click();
+  await page.waitForTimeout(150);
+  await expect(page.locator("#btn-gastos-ind-filter-prog")).toHaveClass(/active/);
 });
 
 

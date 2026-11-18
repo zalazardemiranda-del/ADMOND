@@ -110,7 +110,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <link rel="stylesheet" href="styles.css?v=a48b5917">
+    <link rel="stylesheet" href="styles.css?v=45f6615b">
 
     <script>
 
@@ -1524,6 +1524,20 @@
                                             <p>Control, registro y cálculo de gastos indirectos y operativos</p>
                                         </div>
                                         <div class="table-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;" id="gastos-ind-action-buttons">
+                                            <!-- Filtros de Estatus Gastos Indirectos (Pendientes, Programado, Pagados) -->
+                                            <div class="proveedor-status-filter-group gastos-ind-status-filter-group" id="gastos-ind-status-filter-group">
+                                                <span class="chips-label">Estatus:</span>
+                                                <button type="button" class="btn-status-filter btn-status-pendientes" id="btn-gastos-ind-filter-pendientes" onclick="filterGastosIndByStatus('PENDIENTE', this)" title="Filtrar Pendientes">
+                                                    Pendientes (<span id="count-gastos-ind-status-pendientes">0</span>)
+                                                </button>
+                                                <button type="button" class="btn-status-filter btn-status-prog active" id="btn-gastos-ind-filter-prog" onclick="filterGastosIndByStatus('PROG', this)" title="Filtrar Programado">
+                                                    Programado (<span id="count-gastos-ind-status-prog">0</span>)
+                                                </button>
+                                                <button type="button" class="btn-status-filter btn-status-pagado" id="btn-gastos-ind-filter-pagado" onclick="filterGastosIndByStatus('PAGADO', this)" title="Filtrar Pagados">
+                                                    Pagados (<span id="count-gastos-ind-status-pagado">0</span>)
+                                                </button>
+                                            </div>
+
                                             <button type="button" class="btn btn-primary" id="btn-add-gasto-indirecto" onclick="addNewGastoIndirectoRow()" disabled title="Haz clic en 'Editar' arriba para agregar un gasto indirecto">
                                                 <span class="material-symbols-outlined">add_circle</span> + Añadir Gasto Indirecto
                                             </button>
@@ -1543,12 +1557,13 @@
                                             <thead>
                                                 <tr>
                                                     <th style="width: 8%; text-align: center;">Folio</th>
-                                                    <th style="width: 11%; text-align: center;">Fecha</th>
-                                                    <th style="width: 33%; text-align: left; padding-left: 8px;">Concepto / Descripción</th>
-                                                    <th style="width: 18%; text-align: left; padding-left: 8px;">Categoría</th>
-                                                    <th style="width: 13%; text-align: right; padding-right: 6px;">Total</th>
-                                                    <th style="width: 11%; text-align: center;">Factura / Ref</th>
-                                                    <th style="width: 6%; text-align: center;">Acción</th>
+                                                    <th style="width: 10%; text-align: center;">Fecha</th>
+                                                    <th style="width: 28%; text-align: left; padding-left: 8px;">Concepto / Descripción</th>
+                                                    <th style="width: 16%; text-align: left; padding-left: 8px;">Categoría</th>
+                                                    <th style="width: 12%; text-align: right; padding-right: 6px;">Total</th>
+                                                    <th style="width: 10%; text-align: center;">Factura / Ref</th>
+                                                    <th style="width: 11%; text-align: center;">Estatus</th>
+                                                    <th style="width: 5%; text-align: center;">Acción</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="tbody-gastos-indirectos">
@@ -5283,7 +5298,7 @@
     <script src="consecutivo_data.js?v=285df872"></script>
 
     <script src="schema.js?v=c644e61d"></script>
-    <script src="app.js?v=f88a0a7b"></script>
+    <script src="app.js?v=a1ea4869"></script>
 
 </body>
 

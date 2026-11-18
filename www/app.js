@@ -112,6 +112,7 @@ let appState = {
     gastosIndirectos: [],
     isEditingGastosIndirectos: false,
     gastosIndirectosLockedBy: null,
+    gastosIndStatusFilter: 'PROG',
     isEditingVisualizacion: false,
     visualizacionLockedBy: null,
     adminSubSection: 'quincenas', // 'quincenas' o 'gastos-indirectos'
@@ -4036,6 +4037,174 @@ function selectGastoIndCategoria(newCat, event) {
 }
 window.selectGastoIndCategoria = selectGastoIndCategoria;
 
+function updateGastosIndStatusCounts() {
+    window.updateGastosIndStatusCounts = updateGastosIndStatusCounts;
+    const allList = appState.gastosIndirectos || [];
+    let pend = 0;
+    let prog = 0;
+    let pag = 0;
+    allList.forEach(item => {
+        if (!item) return;
+        const rawSt = String(item.estatus || item.p || 'PROG').trim().toLowerCase();
+        if (rawSt === 'pendiente') pend++;
+        else if (rawSt === 'pagado') pag++;
+        else prog++;
+    });
+    const elPend = document.getElementById("count-gastos-ind-status-pendientes");
+    const elProg = document.getElementById("count-gastos-ind-status-prog");
+    const elPag = document.getElementById("count-gastos-ind-status-pagado");
+    if (elPend) elPend.innerText = String(pend);
+    if (elProg) elProg.innerText = String(prog);
+    if (elPag) elPag.innerText = String(pag);
+}
+window.updateGastosIndStatusCounts = updateGastosIndStatusCounts;
+
+function filterGastosIndByStatus(status, btnEl) {
+    window.filterGastosIndByStatus = filterGastosIndByStatus;
+    const stNorm = String(status || 'PROG').toUpperCase();
+    appState.gastosIndStatusFilter = stNorm;
+
+    const group = document.getElementById("gastos-ind-status-filter-group");
+    if (group) {
+        group.querySelectorAll(".btn-status-filter").forEach(b => b.classList.remove("active"));
+    }
+    if (btnEl) {
+        btnEl.classList.add("active");
+    }
+    renderGastosIndirectos();
+}
+window.filterGastosIndByStatus = filterGastosIndByStatus;
+
+function handleGastoIndEstatusClick(index, event) {
+    window.handleGastoIndEstatusClick = handleGastoIndEstatusClick;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingGastosIndirectos) {
+        if (typeof showCustomNotification === 'function') {
+            showCustomNotification("Haz clic en 'Editar' para modificar Gastos Indirectos y cambiar el estatus.", "warning");
+        } else {
+            alert("Haz clic en 'Editar' para modificar Gastos Indirectos y cambiar el estatus.");
+        }
+        return;
+    }
+    toggleGastoIndEstatusDropdown(index, event);
+}
+window.handleGastoIndEstatusClick = handleGastoIndEstatusClick;
+
+function toggleGastoIndEstatusDropdown(index, event) {
+    window.toggleGastoIndEstatusDropdown = toggleGastoIndEstatusDropdown;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    
+    let menu = document.getElementById("global-gastos-ind-estatus-menu");
+    if (!menu) {
+        menu = document.createElement("div");
+        menu.id = "global-gastos-ind-estatus-menu";
+        menu.className = "prov-estatus-global-menu";
+        document.body.appendChild(menu);
+    }
+    menu.innerHTML = `
+        <div class="prov-dropdown-option option-pendiente" onclick="selectGlobalGastoIndEstatus('PENDIENTE', event)">
+            <span class="prov-badge-dot badge-dot-pendiente" style="background:#2563EB;"></span>
+            <span class="option-name">Pendiente</span>
+        </div>
+        <div class="prov-dropdown-option option-prog" onclick="selectGlobalGastoIndEstatus('PROG', event)">
+            <span class="prov-badge-dot badge-dot-prog" style="background:#2563EB;"></span>
+            <span class="option-name">Programado</span>
+        </div>
+        <div class="prov-dropdown-option option-pagado" onclick="selectGlobalGastoIndEstatus('PAGADO', event)">
+            <span class="prov-badge-dot badge-dot-pagado" style="background:#059669;"></span>
+            <span class="option-name">Pagado</span>
+        </div>
+    `;
+    
+    if (menu.style.display === "block" && menu.dataset.currentIndex === String(index)) {
+        menu.style.display = "none";
+        return;
+    }
+    
+    menu.dataset.currentIndex = String(index);
+    
+    const allList = appState.gastosIndirectos || [];
+    const currentItem = allList[index];
+    const currentSt = currentItem ? String(currentItem.estatus || currentItem.p || 'PROG').trim().toLowerCase() : 'prog';
+    
+    menu.querySelectorAll(".prov-dropdown-option").forEach(opt => opt.classList.remove("selected"));
+    if (currentSt === 'pagado') {
+        const oPag = menu.querySelector(".option-pagado");
+        if (oPag) oPag.classList.add("selected");
+    } else if (currentSt === 'pendiente') {
+        const oPend = menu.querySelector(".option-pendiente");
+        if (oPend) oPend.classList.add("selected");
+    } else {
+        const oProg = menu.querySelector(".option-prog");
+        if (oProg) oProg.classList.add("selected");
+    }
+
+    const trigger = (event && (event.currentTarget || event.target.closest(".prov-estatus-trigger"))) || document.getElementById(`gastos-ind-estatus-trigger-${index}`);
+    if (trigger) {
+        const rect = trigger.getBoundingClientRect();
+        menu.style.position = "fixed";
+        menu.style.zIndex = "99999999";
+        menu.style.display = "block";
+        
+        const menuHeight = Math.max(menu.offsetHeight || 0, 140);
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        const shouldOpenUp = (spaceBelow < 180 && spaceAbove > 140) || (spaceBelow < menuHeight + 20 && spaceAbove > spaceBelow);
+        
+        if (shouldOpenUp) {
+            menu.style.setProperty("top", "auto", "important");
+            menu.style.setProperty("bottom", `${Math.max(8, window.innerHeight - rect.top + 6)}px`, "important");
+            menu.classList.add("open-upwards");
+        } else {
+            menu.style.setProperty("bottom", "auto", "important");
+            menu.style.setProperty("top", `${rect.bottom + 6}px`, "important");
+            menu.classList.remove("open-upwards");
+        }
+        
+        let left = rect.left;
+        const menuWidth = menu.offsetWidth || 150;
+        if (left + menuWidth > window.innerWidth - 10) {
+            left = window.innerWidth - menuWidth - 10;
+        }
+        if (left < 10) left = 10;
+        menu.style.left = `${left}px`;
+    }
+}
+window.toggleGastoIndEstatusDropdown = toggleGastoIndEstatusDropdown;
+
+function selectGlobalGastoIndEstatus(newStatus, event) {
+    window.selectGlobalGastoIndEstatus = selectGlobalGastoIndEstatus;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const menu = document.getElementById("global-gastos-ind-estatus-menu");
+    if (!menu) return;
+    const idx = parseInt(menu.dataset.currentIndex, 10);
+    menu.style.display = "none";
+    if (isNaN(idx)) return;
+
+    const allList = appState.gastosIndirectos || [];
+    const item = allList[idx];
+    if (!item) return;
+
+    let displayStatus = 'Programado';
+    if (newStatus === 'PENDIENTE') displayStatus = 'Pendiente';
+    else if (newStatus === 'PAGADO') displayStatus = 'Pagado';
+
+    item.estatus = displayStatus;
+    item.p = displayStatus;
+    renderGastosIndirectos();
+    renderVisualizacion();
+}
+window.selectGlobalGastoIndEstatus = selectGlobalGastoIndEstatus;
+
 function handleGastoIndCellClick(index, inputId) {
     window.handleGastoIndCellClick = handleGastoIndCellClick;
     if (!appState.isEditingGastosIndirectos) {
@@ -4074,7 +4243,35 @@ function renderGastosIndirectos() {
             subtotal: 0,
             iva: 0,
             total: 0,
-            factura: ''
+            factura: '',
+            estatus: 'Programado',
+            p: 'Programado'
+        });
+    }
+
+    updateGastosIndStatusCounts();
+
+    const curFilt = (appState.gastosIndStatusFilter || 'PROG').toUpperCase();
+    const group = document.getElementById("gastos-ind-status-filter-group");
+    if (group) {
+        const btnPend = document.getElementById("btn-gastos-ind-filter-pendientes");
+        const btnProg = document.getElementById("btn-gastos-ind-filter-prog");
+        const btnPag = document.getElementById("btn-gastos-ind-filter-pagado");
+        if (btnPend) btnPend.classList.toggle("active", curFilt === 'PENDIENTE');
+        if (btnProg) btnProg.classList.toggle("active", curFilt === 'PROG' || curFilt === 'PROGRAMADO');
+        if (btnPag) btnPag.classList.toggle("active", curFilt === 'PAGADO');
+    }
+
+    let list = appState.gastosIndirectos;
+    const filterVal = (appState.gastosIndStatusFilter || 'PROG').toLowerCase();
+    if (filterVal === 'pendiente') {
+        list = appState.gastosIndirectos.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pendiente');
+    } else if (filterVal === 'pagado') {
+        list = appState.gastosIndirectos.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pagado');
+    } else if (filterVal === 'prog' || filterVal === 'programado' || filterVal !== 'all') {
+        list = appState.gastosIndirectos.filter(item => {
+            const rawSt = (item.estatus || item.p || '').trim().toLowerCase();
+            return rawSt !== 'pendiente' && rawSt !== 'pagado';
         });
     }
 
@@ -4083,40 +4280,72 @@ function renderGastosIndirectos() {
 
     const frag = document.createDocumentFragment();
 
-    appState.gastosIndirectos.forEach((item, index) => {
-        const tr = document.createElement('tr');
-        tr.id = `gi-row-${index}`;
-        tr.setAttribute('data-row-key', `gasto_ind_${index}`);
-        tr.innerHTML = `
-            <td style="text-align: center;" onclick="handleGastoIndCellClick(${index}, 'gi-folio-input-${index}')">
-                <input type="text" id="gi-folio-input-${index}" class="excel-input" value="${item.folio || ('GI-' + String(index + 1).padStart(3, '0'))}" oninput="updateGastoIndirectoCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
-            </td>
-            <td style="text-align: center;" onclick="handleGastoIndCellClick(${index}, 'gi-fecha-input-${index}')">
-                <input type="date" id="gi-fecha-input-${index}" class="excel-input" value="${item.fecha || ''}" oninput="updateGastoIndirectoCell(${index}, 'fecha', this.value)" ${disabledAttr} style="text-align: center;">
-            </td>
-            <td onclick="handleGastoIndCellClick(${index}, 'gi-concepto-input-${index}')">
-                <input type="text" id="gi-concepto-input-${index}" class="excel-input" value="${item.concepto || ''}" oninput="updateGastoIndirectoCell(${index}, 'concepto', this.value)" placeholder="Descripción del gasto..." ${disabledAttr} style="font-weight: 600;">
-            </td>
-            <td onclick="handleGastoIndCellClick(${index}, 'gi-categoria-input-${index}')">
-                <input type="text" id="gi-categoria-input-${index}" list="gi-categorias-datalist" class="excel-input" value="${item.categoria || ''}" oninput="updateGastoIndirectoCell(${index}, 'categoria', this.value)" placeholder="Categoría..." ${disabledAttr} style="font-weight: 600;">
-            </td>
-            <td onclick="handleGastoIndCellClick(${index}, 'gi-total-input-${index}')">
-                <div class="excel-currency-wrap">
-                    <span class="currency-symbol">$</span>
-                    <input type="number" id="gi-total-input-${index}" class="excel-input number-input" value="${item.total || 0}" step="any" oninput="liveUpdateGastoIndirectoFromTotal(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 800; color: #1E293B;">
-                </div>
-            </td>
-            <td onclick="handleGastoIndCellClick(${index}, 'gi-factura-input-${index}')">
-                <input type="text" id="gi-factura-input-${index}" class="excel-input" value="${item.factura || ''}" oninput="updateGastoIndirectoCell(${index}, 'factura', this.value)" placeholder="Folio/Factura" ${disabledAttr} style="text-align: center;">
-            </td>
-            <td style="text-align: center;">
-                <button type="button" class="btn-icon text-danger" onclick="deleteGastoIndirectoRow(${index})" ${disabledAttr} title="${isEditable ? 'Eliminar este gasto indirecto' : 'Haz clic en Editar para eliminar'}" style="background: none; border: none; cursor: ${isEditable ? 'pointer' : 'not-allowed'}; color: #EF4444; opacity: ${isEditable ? '1' : '0.45'};">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
-                </button>
-            </td>
-        `;
-        frag.appendChild(tr);
-    });
+    if (list.length === 0) {
+        const trEmpty = document.createElement("tr");
+        trEmpty.innerHTML = `<td colspan="8" style="text-align: center; color: #94A3B8; padding: 24px; font-weight: 600;">No hay gastos indirectos registrados con el estatus seleccionado.</td>`;
+        frag.appendChild(trEmpty);
+    } else {
+        list.forEach((item) => {
+            const index = appState.gastosIndirectos.indexOf(item);
+            const rawSt = String(item.estatus || item.p || 'PROG').trim().toLowerCase();
+            let currentStatus = 'Programado';
+            let displayLabel = 'Programado';
+            let estatusClass = 'estatus-prog';
+            if (rawSt === 'pagado') {
+                currentStatus = 'Pagado';
+                displayLabel = 'Pagado';
+                estatusClass = 'estatus-pagado';
+            } else if (rawSt === 'pendiente') {
+                currentStatus = 'Pendiente';
+                displayLabel = 'Pendiente';
+                estatusClass = 'estatus-pendiente';
+            }
+            item.estatus = currentStatus;
+            item.p = currentStatus;
+
+            const triggerLockedClass = isEditable ? '' : 'trigger-locked';
+            const triggerTitle = isEditable ? `Estatus: ${currentStatus}. Haz clic para cambiar.` : "Haz clic en 'Editar' arriba para modificar el estatus";
+
+            const tr = document.createElement('tr');
+            tr.id = `gi-row-${index}`;
+            tr.setAttribute('data-row-key', `gasto_ind_${index}`);
+            tr.innerHTML = `
+                <td style="text-align: center;" onclick="handleGastoIndCellClick(${index}, 'gi-folio-input-${index}')">
+                    <input type="text" id="gi-folio-input-${index}" class="excel-input" value="${item.folio || ('GI-' + String(index + 1).padStart(3, '0'))}" oninput="updateGastoIndirectoCell(${index}, 'folio', this.value)" ${disabledAttr} style="text-align: center; font-weight: 700;">
+                </td>
+                <td style="text-align: center;" onclick="handleGastoIndCellClick(${index}, 'gi-fecha-input-${index}')">
+                    <input type="date" id="gi-fecha-input-${index}" class="excel-input" value="${item.fecha || ''}" oninput="updateGastoIndirectoCell(${index}, 'fecha', this.value)" ${disabledAttr} style="text-align: center;">
+                </td>
+                <td onclick="handleGastoIndCellClick(${index}, 'gi-concepto-input-${index}')">
+                    <input type="text" id="gi-concepto-input-${index}" class="excel-input" value="${item.concepto || ''}" oninput="updateGastoIndirectoCell(${index}, 'concepto', this.value)" placeholder="Descripción del gasto..." ${disabledAttr} style="font-weight: 600;">
+                </td>
+                <td onclick="handleGastoIndCellClick(${index}, 'gi-categoria-input-${index}')">
+                    <input type="text" id="gi-categoria-input-${index}" list="gi-categorias-datalist" class="excel-input" value="${item.categoria || ''}" oninput="updateGastoIndirectoCell(${index}, 'categoria', this.value)" placeholder="Categoría..." ${disabledAttr} style="font-weight: 600;">
+                </td>
+                <td onclick="handleGastoIndCellClick(${index}, 'gi-total-input-${index}')">
+                    <div class="excel-currency-wrap">
+                        <span class="currency-symbol">$</span>
+                        <input type="number" id="gi-total-input-${index}" class="excel-input number-input" value="${item.total || 0}" step="any" oninput="liveUpdateGastoIndirectoFromTotal(${index})" placeholder="0.00" ${disabledAttr} style="font-weight: 800; color: #1E293B;">
+                    </div>
+                </td>
+                <td onclick="handleGastoIndCellClick(${index}, 'gi-factura-input-${index}')">
+                    <input type="text" id="gi-factura-input-${index}" class="excel-input" value="${item.factura || ''}" oninput="updateGastoIndirectoCell(${index}, 'factura', this.value)" placeholder="Folio/Factura" ${disabledAttr} style="text-align: center;">
+                </td>
+                <td class="td-nomina-estatus" style="text-align: center;">
+                    <div class="prov-estatus-trigger nomina-estatus-trigger ${estatusClass} ${triggerLockedClass}" id="gastos-ind-estatus-trigger-${index}" onclick="handleGastoIndEstatusClick(${index}, event)" title="${triggerTitle}">
+                        <span>${displayLabel}</span>
+                        <span class="material-symbols-outlined prov-arrow">expand_more</span>
+                    </div>
+                </td>
+                <td style="text-align: center;">
+                    <button type="button" class="btn-icon text-danger" onclick="deleteGastoIndirectoRow(${index})" ${disabledAttr} title="${isEditable ? 'Eliminar este gasto indirecto' : 'Haz clic en Editar para eliminar'}" style="background: none; border: none; cursor: ${isEditable ? 'pointer' : 'not-allowed'}; color: #EF4444; opacity: ${isEditable ? '1' : '0.45'};">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+                    </button>
+                </td>
+            `;
+            frag.appendChild(tr);
+        });
+    }
 
     const totalsRow = document.createElement('tr');
     totalsRow.id = 'excel-gastos-indirectos-totals-row';
@@ -4164,7 +4393,9 @@ async function addNewGastoIndirectoRow() {
         subtotal: 0,
         iva: 0,
         total: 0,
-        factura: ''
+        factura: '',
+        estatus: 'Programado',
+        p: 'Programado'
     };
     appState.gastosIndirectos.push(newRow);
     renderGastosIndirectos();
@@ -4196,7 +4427,9 @@ function deleteGastoIndirectoRow(index) {
                 subtotal: 0,
                 iva: 0,
                 total: 0,
-                factura: ''
+                factura: '',
+                estatus: 'Programado',
+                p: 'Programado'
             });
         }
         renderGastosIndirectos();
@@ -4242,6 +4475,8 @@ function recalculateGastosIndirectosTotals() {
 
     (appState.gastosIndirectos || []).forEach(item => {
         if (!item) return;
+        const rawSt = String(item.estatus || item.p || 'PROG').trim().toLowerCase();
+        if (rawSt === 'pendiente' || rawSt === 'pagado') return;
         sumTotal += Number(item.total) || 0;
     });
 
@@ -4253,6 +4488,7 @@ function recalculateGastosIndirectosTotals() {
             <td></td>
             <td></td>
             <td style="font-weight: 800; text-align: right; padding-right: 6px; color: #B91C1C;">${formatCurrency(sumTotal)}</td>
+            <td></td>
             <td></td>
             <td style="text-align: center;"><span class="material-symbols-outlined" style="font-size: 15px;">lock</span></td>
         `;
@@ -9200,6 +9436,12 @@ document.addEventListener("click", function(event) {
             globalNomMenu.style.display = "none";
         }
     }
+    const globalGiMenu = document.getElementById("global-gastos-ind-estatus-menu");
+    if (globalGiMenu && globalGiMenu.style.display === "block") {
+        if (!event.target.closest("#global-gastos-ind-estatus-menu") && !event.target.closest(".gastos-ind-estatus-trigger")) {
+            globalGiMenu.style.display = "none";
+        }
+    }
     if (!event.target.closest(".assignee-autocomplete-wrapper")) {
         if (typeof closeAssigneeDropdown === 'function') closeAssigneeDropdown();
         if (window.schemaEngine && typeof window.schemaEngine.closeSchemaAssigneeDropdown === 'function') {
@@ -9223,6 +9465,10 @@ window.addEventListener("scroll", function(e) {
     const globalNomMenu = document.getElementById("global-nomina-estatus-menu");
     if (globalNomMenu && globalNomMenu.style.display === "block") {
         globalNomMenu.style.display = "none";
+    }
+    const globalGiMenu = document.getElementById("global-gastos-ind-estatus-menu");
+    if (globalGiMenu && globalGiMenu.style.display === "block") {
+        globalGiMenu.style.display = "none";
     }
 }, false);
 
@@ -15846,7 +16092,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_gastos_indirectos_modo_edicion_estricto';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_filtros_gastos_indirectos';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
