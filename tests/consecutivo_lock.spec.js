@@ -1779,13 +1779,36 @@ test("22. Gastos Indirectos: Bloqueo estricto - '+ Añadir Gasto Indirecto' y ce
   expect(found).toBeTruthy();
   expect(found.total).toBe(1500);
 
-  // Probar filtrado por Pendiente / Programado / Pagado
+  // Probar filtrado por Pendiente / Programado / Pagado y cálculo dinámico de totales
+  await page.evaluate(() => {
+    window.appState.gastosIndirectos = [
+      { id: 'gi-1', folio: 'GI-001', concepto: 'Servicio Cloud', total: 3000, estatus: 'Programado', p: 'Programado' },
+      { id: 'gi-2', folio: 'GI-002', concepto: 'Pago Factura Expo', total: 1500, estatus: 'Pagado', p: 'Pagado' }
+    ];
+    window.renderGastosIndirectos();
+  });
+  await page.waitForTimeout(150);
+
+  // En Programado: debe sumar 3000
+  await expect(page.locator("#excel-gastos-indirectos-totals-row")).toContainText("$3,000.00");
+
+  // En Pagados: debe sumar 1500
+  await page.locator("#btn-gastos-ind-filter-pagado").click();
+  await page.waitForTimeout(150);
+  await expect(page.locator("#btn-gastos-ind-filter-pagado")).toHaveClass(/active/);
+  await expect(page.locator("#excel-gastos-indirectos-totals-row")).toContainText("$1,500.00");
+
+  // En Pendientes: debe sumar 0
   await page.locator("#btn-gastos-ind-filter-pendientes").click();
   await page.waitForTimeout(150);
   await expect(page.locator("#btn-gastos-ind-filter-pendientes")).toHaveClass(/active/);
+  await expect(page.locator("#excel-gastos-indirectos-totals-row")).toContainText("$0.00");
+
+  // Regresar a Programado
   await page.locator("#btn-gastos-ind-filter-prog").click();
   await page.waitForTimeout(150);
   await expect(page.locator("#btn-gastos-ind-filter-prog")).toHaveClass(/active/);
+  await expect(page.locator("#excel-gastos-indirectos-totals-row")).toContainText("$3,000.00");
 });
 
 

@@ -4473,10 +4473,21 @@ function recalculateGastosIndirectosTotals() {
     window.recalculateGastosIndirectosTotals = recalculateGastosIndirectosTotals;
     let sumTotal = 0;
 
-    (appState.gastosIndirectos || []).forEach(item => {
+    let list = appState.gastosIndirectos || [];
+    const filter = (appState.gastosIndStatusFilter || 'PROG').toLowerCase();
+    if (filter === 'pendiente') {
+        list = list.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pendiente');
+    } else if (filter === 'pagado') {
+        list = list.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pagado');
+    } else if (filter === 'prog' || filter === 'programado' || filter !== 'all') {
+        list = list.filter(item => {
+            const rawSt = (item.estatus || item.p || '').trim().toLowerCase();
+            return rawSt !== 'pendiente' && rawSt !== 'pagado';
+        });
+    }
+
+    list.forEach(item => {
         if (!item) return;
-        const rawSt = String(item.estatus || item.p || 'PROG').trim().toLowerCase();
-        if (rawSt === 'pendiente' || rawSt === 'pagado') return;
         sumTotal += Number(item.total) || 0;
     });
 
@@ -4494,10 +4505,21 @@ function recalculateGastosIndirectosTotals() {
         `;
     }
 
+    // Para Visualización (Balance y Capital por Departamento), se mantiene el total de Programados
+    // para consistencia con Nóminas y Gastos Proveedores (solo lo programado impacta la proyección financiera)
+    let progTotal = 0;
+    (appState.gastosIndirectos || []).forEach(item => {
+        if (!item) return;
+        const rawSt = String(item.estatus || item.p || 'PROG').trim().toLowerCase();
+        if (rawSt !== 'pendiente' && rawSt !== 'pagado') {
+            progTotal += Number(item.total) || 0;
+        }
+    });
+
     if (!appState.concepts) appState.concepts = {};
-    appState.concepts.gastosInd = Math.round(sumTotal * 100) / 100;
+    appState.concepts.gastosInd = Math.round(progTotal * 100) / 100;
     const inputConcept = document.getElementById("concept-gastos-ind-input");
-    if (inputConcept) inputConcept.value = sumTotal.toFixed(2);
+    if (inputConcept) inputConcept.value = progTotal.toFixed(2);
     if (typeof window.renderVisualizacion === 'function') {
         window.renderVisualizacion();
     }
@@ -16092,7 +16114,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_filtros_gastos_indirectos';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_totales_filtro_gastos_indirectos';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
