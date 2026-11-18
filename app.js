@@ -2851,7 +2851,7 @@ function renderNominas() {
     
     if (list.length === 0) {
         const trEmpty = document.createElement("tr");
-        trEmpty.innerHTML = `<td colspan="4" style="text-align: center; color: #94A3B8; padding: 24px; font-weight: 600;">No hay nóminas registradas con el estatus seleccionado.</td>`;
+        trEmpty.innerHTML = `<td colspan="5" style="text-align: center; color: #94A3B8; padding: 24px; font-weight: 600;">No hay nóminas registradas con el estatus seleccionado.</td>`;
         frag.appendChild(trEmpty);
     } else {
         list.forEach((item) => {
@@ -2866,6 +2866,20 @@ function renderNominas() {
             }
             item.nomina = totalVal;
             item.total = totalVal;
+
+            const rawSt = String(item.estatus || item.p || 'PROG').trim().toLowerCase();
+            let currentStatus = 'Programado';
+            let displayLabel = 'Programado';
+            let estatusClass = 'estatus-prog';
+            if (rawSt === 'pagado') {
+                currentStatus = 'Pagado';
+                displayLabel = 'Pagado';
+                estatusClass = 'estatus-pagado';
+            } else if (rawSt === 'pendiente') {
+                currentStatus = 'Pendiente';
+                displayLabel = 'Pendiente';
+                estatusClass = 'estatus-pendiente';
+            }
 
             const tr = document.createElement("tr");
             tr.setAttribute("data-row-key", `nom_${index}`);
@@ -2885,6 +2899,12 @@ function renderNominas() {
                     <div class="excel-currency-wrap">
                         <span class="currency-symbol">$</span>
                         <input type="number" id="nom-total-input-${index}" class="excel-input number-input" value="${totalVal || 0}" step="any" oninput="updateNominaManualTotal(${index}, this.value)" placeholder="0.00" ${disabledAttr} style="font-weight: 800; background: rgba(31, 78, 120, 0.06);">
+                    </div>
+                </td>
+                <td class="td-nomina-estatus">
+                    <div class="prov-estatus-trigger nomina-estatus-trigger ${estatusClass}" id="nomina-estatus-trigger-${index}" onclick="handleNominaEstatusClick(${index}, event)" title="Estatus: ${currentStatus}. Haz clic para cambiar.">
+                        <span>${displayLabel}</span>
+                        <span class="material-symbols-outlined prov-arrow">expand_more</span>
                     </div>
                 </td>
             `;
@@ -3044,9 +3064,130 @@ function recalculateNominasTableTotals() {
             <td>Suma Calculada</td>
             <td></td>
             <td style="font-weight: 800; text-align: right;">${formatCurrency(sumTotal)}</td>
+            <td></td>
         `;
     }
 };
+
+async function handleNominaEstatusClick(index, event) {
+    window.handleNominaEstatusClick = handleNominaEstatusClick;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!appState.isEditingNominas) {
+        if (appState.nominasLockedBy && appState.nominasLockedBy.isLocked !== false && !isLockOwnedByCurrentUser(appState.nominasLockedBy)) {
+            alert(`⚠️ Esta tabla está siendo editada por ${appState.nominasLockedBy.userName || 'otro usuario'}. Por favor espera a que termine de guardar.`);
+            return;
+        }
+        await startEditingNominas();
+        if (!appState.isEditingNominas) return;
+    }
+    toggleNominaEstatusDropdown(index, event);
+}
+window.handleNominaEstatusClick = handleNominaEstatusClick;
+
+function toggleNominaEstatusDropdown(index, event) {
+    window.toggleNominaEstatusDropdown = toggleNominaEstatusDropdown;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    
+    let menu = document.getElementById("global-nomina-estatus-menu");
+    if (!menu) {
+        menu = document.createElement("div");
+        menu.id = "global-nomina-estatus-menu";
+        menu.className = "prov-estatus-global-menu";
+        document.body.appendChild(menu);
+    }
+    menu.innerHTML = `
+        <div class="prov-dropdown-option option-pendiente" onclick="selectGlobalNominaEstatus('PENDIENTE', event)">
+            <span class="prov-badge-dot badge-dot-pendiente" style="background:#2563EB;"></span>
+            <span class="option-name">Pendiente</span>
+        </div>
+        <div class="prov-dropdown-option option-prog" onclick="selectGlobalNominaEstatus('PROG', event)">
+            <span class="prov-badge-dot badge-dot-prog" style="background:#2563EB;"></span>
+            <span class="option-name">Programado</span>
+        </div>
+        <div class="prov-dropdown-option option-pagado" onclick="selectGlobalNominaEstatus('PAGADO', event)">
+            <span class="prov-badge-dot badge-dot-pagado" style="background:#059669;"></span>
+            <span class="option-name">Pagado</span>
+        </div>
+    `;
+    
+    if (menu.style.display === "block" && menu.dataset.currentIndex === String(index)) {
+        menu.style.display = "none";
+        return;
+    }
+    
+    menu.dataset.currentIndex = String(index);
+    
+    const allList = window.getActiveNominasList() || [];
+    const currentItem = allList[index];
+    const currentSt = currentItem ? String(currentItem.estatus || currentItem.p || 'PROG').trim().toLowerCase() : 'prog';
+    
+    menu.querySelectorAll(".prov-dropdown-option").forEach(opt => opt.classList.remove("selected"));
+    if (currentSt === 'pagado') {
+        const oPag = menu.querySelector(".option-pagado");
+        if (oPag) oPag.classList.add("selected");
+    } else if (currentSt === 'pendiente') {
+        const oPend = menu.querySelector(".option-pendiente");
+        if (oPend) oPend.classList.add("selected");
+    } else {
+        const oProg = menu.querySelector(".option-prog");
+        if (oProg) oProg.classList.add("selected");
+    }
+    
+    const trigger = (event && (event.currentTarget || event.target.closest(".nomina-estatus-trigger"))) || document.getElementById(`nomina-estatus-trigger-${index}`);
+    if (trigger) {
+        const rect = trigger.getBoundingClientRect();
+        menu.style.position = "fixed";
+        menu.style.zIndex = "99999999";
+        menu.style.display = "block";
+
+        const menuHeight = Math.max(menu.offsetHeight || 0, 160);
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        const shouldOpenUp = (spaceBelow < 250 && spaceAbove > 140) || (spaceBelow < menuHeight + 30 && spaceAbove > spaceBelow);
+
+        const leftPos = Math.max(10, Math.min(window.innerWidth - 180, rect.left));
+        menu.style.left = `${leftPos}px`;
+        if (shouldOpenUp) {
+            menu.style.top = `${Math.max(10, rect.top - menuHeight - 4)}px`;
+        } else {
+            menu.style.top = `${rect.bottom + 4}px`;
+        }
+    }
+}
+window.toggleNominaEstatusDropdown = toggleNominaEstatusDropdown;
+
+function selectGlobalNominaEstatus(newStatus, event) {
+    window.selectGlobalNominaEstatus = selectGlobalNominaEstatus;
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const menu = document.getElementById("global-nomina-estatus-menu");
+    if (!menu) return;
+    const idx = parseInt(menu.dataset.currentIndex, 10);
+    menu.style.display = "none";
+    if (isNaN(idx)) return;
+
+    const allList = window.getActiveNominasList() || [];
+    const item = allList[idx];
+    if (!item) return;
+
+    let displayStatus = 'Programado';
+    if (newStatus === 'PENDIENTE') displayStatus = 'Pendiente';
+    else if (newStatus === 'PAGADO') displayStatus = 'Pagado';
+
+    item.estatus = displayStatus;
+    item.p = displayStatus;
+
+    renderNominas();
+}
+window.selectGlobalNominaEstatus = selectGlobalNominaEstatus;
 
 async function addNewNominaRow() {
     window.addNewNominaRow = addNewNominaRow;
@@ -3068,7 +3209,8 @@ async function addNewNominaRow() {
         ret4: 0,
         retIsrPct: 0,
         retIsr: 0,
-        total: 0
+        total: 0,
+        estatus: "Programado"
     });
     renderNominas();
     renderVisualizacion();
@@ -8981,6 +9123,12 @@ document.addEventListener("click", function(event) {
             globalGiCatMenu.style.display = "none";
         }
     }
+    const globalNomMenu = document.getElementById("global-nomina-estatus-menu");
+    if (globalNomMenu && globalNomMenu.style.display === "block") {
+        if (!event.target.closest("#global-nomina-estatus-menu") && !event.target.closest(".nomina-estatus-trigger")) {
+            globalNomMenu.style.display = "none";
+        }
+    }
     if (!event.target.closest(".assignee-autocomplete-wrapper")) {
         if (typeof closeAssigneeDropdown === 'function') closeAssigneeDropdown();
         if (window.schemaEngine && typeof window.schemaEngine.closeSchemaAssigneeDropdown === 'function') {
@@ -9000,6 +9148,10 @@ window.addEventListener("scroll", function(e) {
     const globalGiCatMenu = document.getElementById("global-gi-categoria-menu");
     if (globalGiCatMenu && globalGiCatMenu.style.display === "block") {
         globalGiCatMenu.style.display = "none";
+    }
+    const globalNomMenu = document.getElementById("global-nomina-estatus-menu");
+    if (globalNomMenu && globalNomMenu.style.display === "block") {
+        globalNomMenu.style.display = "none";
     }
 }, false);
 
@@ -15614,7 +15766,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_nominas_filter_ui';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_nominas_columna_estatus';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
