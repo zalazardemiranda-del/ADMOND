@@ -108,6 +108,7 @@ let appState = {
     nominas: [],
     isEditingNominas: false,
     nominasLockedBy: null,
+    nominaStatusFilter: 'PROG',
     gastosIndirectos: [],
     isEditingGastosIndirectos: false,
     gastosIndirectosLockedBy: null,
@@ -2841,19 +2842,28 @@ function renderNominas() {
 
     updateNominaStatusCounts();
 
+    const group = document.getElementById("nomina-status-filter-group");
+    if (group) {
+        const curFilt = (appState.nominaStatusFilter || 'PROG').toUpperCase();
+        const btnPend = document.getElementById("btn-nomina-filter-pendientes");
+        const btnProg = document.getElementById("btn-nomina-filter-prog");
+        const btnPag = document.getElementById("btn-nomina-filter-pagado");
+        if (btnPend) btnPend.classList.toggle("active", curFilt === 'PENDIENTE');
+        if (btnProg) btnProg.classList.toggle("active", curFilt === 'PROG' || curFilt === 'PROGRAMADO');
+        if (btnPag) btnPag.classList.toggle("active", curFilt === 'PAGADO');
+    }
+
     let list = allList;
-    if (appState.nominaStatusFilter && appState.nominaStatusFilter !== 'all') {
-        const filterVal = appState.nominaStatusFilter.toLowerCase();
-        if (filterVal === 'pendiente') {
-            list = allList.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pendiente');
-        } else if (filterVal === 'pagado') {
-            list = allList.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pagado');
-        } else if (filterVal === 'prog' || filterVal === 'programado') {
-            list = allList.filter(item => {
-                const rawSt = (item.estatus || item.p || '').trim().toLowerCase();
-                return rawSt !== 'pendiente' && rawSt !== 'pagado';
-            });
-        }
+    const filterVal = (appState.nominaStatusFilter || 'PROG').toLowerCase();
+    if (filterVal === 'pendiente') {
+        list = allList.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pendiente');
+    } else if (filterVal === 'pagado') {
+        list = allList.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pagado');
+    } else if (filterVal === 'prog' || filterVal === 'programado' || filterVal !== 'all') {
+        list = allList.filter(item => {
+            const rawSt = (item.estatus || item.p || '').trim().toLowerCase();
+            return rawSt !== 'pendiente' && rawSt !== 'pagado';
+        });
     }
     
     if (list.length === 0) {
@@ -3209,6 +3219,7 @@ function selectGlobalNominaEstatus(newStatus, event) {
     item.p = displayStatus;
 
     renderNominas();
+    renderVisualizacion();
 }
 window.selectGlobalNominaEstatus = selectGlobalNominaEstatus;
 
@@ -15802,7 +15813,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_visualizacion_nominas_programadas';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_fix_nomina_status_filter';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
