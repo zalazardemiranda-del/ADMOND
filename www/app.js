@@ -3044,7 +3044,19 @@ function recalculateNominasTableTotals() {
     let sumRetIsr = 0;
     let sumTotal = 0;
     
-    const list = window.getActiveNominasList();
+    let list = window.getActiveNominasList() || [];
+    const filter = (appState.nominaStatusFilter || 'PROG').toLowerCase();
+    if (filter === 'pendiente') {
+        list = list.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pendiente');
+    } else if (filter === 'pagado') {
+        list = list.filter(item => (item.estatus || item.p || '').trim().toLowerCase() === 'pagado');
+    } else if (filter === 'prog' || filter === 'programado' || filter === 'all') {
+        list = list.filter(item => {
+            const rawSt = (item.estatus || item.p || '').trim().toLowerCase();
+            return rawSt !== 'pendiente' && rawSt !== 'pagado';
+        });
+    }
+
     list.forEach(item => {
         const nomVal = Number(item.nomina !== undefined && item.nomina !== null && item.nomina !== '' ? item.nomina : (item.servicio && !isNaN(item.servicio) ? item.servicio : (item.total || 0))) || 0;
         const ivaPct = Number(item.ivaPct) || 0;
@@ -3055,7 +3067,9 @@ function recalculateNominasTableTotals() {
         const sub2 = sub1 + retVal;
         const retIsrPct = Number(item.retIsrPct) || 0;
         const retIsrVal = Number(item.retIsr !== undefined ? item.retIsr : (sub2 * (retIsrPct / 100))) || 0;
-        const totVal = Number(item.total) || (sub2 + retIsrVal);
+        const totVal = (item.total !== undefined && item.total !== null && item.total !== '' && !isNaN(item.total))
+            ? Number(item.total)
+            : (sub2 + retIsrVal);
 
         sumNomina += nomVal;
         sumIva += ivaVal;
@@ -15786,7 +15800,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_nominas_modo_edicion_estricto';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_nominas_total_programado';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
