@@ -212,7 +212,8 @@ body.role-colaborador #sidebar-item-administracion,
     display: none;
 }
 
-.nav-item .material-symbols-outlined {
+.nav-item .material-symbols-outlined,
+.nav-item .nav-ship-icon {
     font-size: 22px;
     color: #64748B;
     transition: all 0.2s ease;
@@ -224,7 +225,8 @@ body.role-colaborador #sidebar-item-administracion,
     transform: translateY(-1px);
 }
 
-.nav-item:hover .material-symbols-outlined {
+.nav-item:hover .material-symbols-outlined,
+.nav-item:hover .nav-ship-icon {
     color: #2563EB;
 }
 
@@ -235,7 +237,8 @@ body.role-colaborador #sidebar-item-administracion,
     border-color: #2563EB;
 }
 
-.nav-item.active .material-symbols-outlined {
+.nav-item.active .material-symbols-outlined,
+.nav-item.active .nav-ship-icon {
     color: #FFFFFF;
 }
 
@@ -2447,6 +2450,32 @@ select option {
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+.proveedor-filter-trigger {
+    min-width: 220px;
+    max-width: 340px;
+    justify-content: space-between;
+}
+
+.proveedor-filter-trigger #proveedor-filter-selected-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.proveedor-filter-menu {
+    min-width: 290px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.proveedor-option-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    flex-shrink: 0;
 }
 
 .proveedor-chip {
@@ -6260,10 +6289,10 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     margin: 0;
 }
 
-/* 3 KPIs + Proveedores/Consecutivo/Operaciones Grid */
+/* Proveedores/Consecutivo/Operaciones Grid */
 .operaciones-kpis-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 16px;
     margin-bottom: 24px;
     align-items: stretch;
@@ -6273,6 +6302,10 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
+}
+
+.operaciones-subview-kpis {
+    margin-bottom: 16px;
 }
 
 .operaciones-nav-right-group {
@@ -6297,13 +6330,13 @@ html.is-localhost .localhost-only-feature.admin-subpane.active,
     border-radius: 16px;
     border: 1px solid #E2E8F0;
     box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
     min-width: 0;
+    cursor: default;
 }
 
 .operaciones-kpi-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    transform: none;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03);
 }
 
 .operaciones-kpi-icon {

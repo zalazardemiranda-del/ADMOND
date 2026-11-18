@@ -110,7 +110,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <link rel="stylesheet" href="styles.css?v=146666b8">
+    <link rel="stylesheet" href="styles.css?v=8710f015">
 
     <script>
 
@@ -261,7 +261,17 @@
 
                         <a href="#" class="nav-item" id="nav-operaciones" onclick="switchTab('operaciones')" title="Operaciones">
 
-                            <span class="material-symbols-outlined">analytics</span>
+                            <svg class="nav-ship-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <rect x="7.2" y="2.2" width="4.4" height="3.2" rx="0.4" fill="currentColor"/>
+                                <rect x="12.4" y="2.2" width="4.4" height="3.2" rx="0.4" fill="currentColor"/>
+                                <rect x="4.8" y="6.2" width="4.3" height="3.1" rx="0.4" fill="currentColor"/>
+                                <rect x="9.85" y="6.2" width="4.3" height="3.1" rx="0.4" fill="currentColor"/>
+                                <rect x="14.9" y="6.2" width="4.3" height="3.1" rx="0.4" fill="currentColor"/>
+                                <path d="M3.5 11.7L12 9.2L20.5 11.7V13.2L12 10.9L3.5 13.2V11.7Z" fill="currentColor"/>
+                                <path d="M3.8 14L11.4 11.8V19.6C9.6 19.6 8.3 18.6 6.8 18.6C6.1 18.6 5.5 18.8 5 19L3.8 14Z" fill="currentColor"/>
+                                <path d="M20.2 14L12.6 11.8V19.6C14.4 19.6 15.7 18.6 17.2 18.6C17.9 18.6 18.5 18.8 19 19L20.2 14Z" fill="currentColor"/>
+                                <path d="M2.8 20.3C4.2 21.8 5.6 21.8 7 20.3C8.4 18.8 9.8 18.8 11.2 20.3C12.6 21.8 14 21.8 15.4 20.3C16.8 18.8 18.2 18.8 19.6 20.3C20.2 20.9 20.7 21.2 21.2 21.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                            </svg>
 
                             <span class="nav-text-label">Operaciones</span>
 
@@ -1620,40 +1630,8 @@
 
 
 
-                        <!-- Fila de Registros de Operación (Izquierda - Imagen 5) + Proveedores y Consecutivo (Derecha - Imagen 4) -->
+                        <!-- Fila de Navegación: Proveedores, Consecutivo y Operaciones -->
                         <div class="operaciones-kpis-grid" id="operaciones-kpis-row" style="display: none;">
-                            <div class="operaciones-kpis-left-group">
-                                <div class="card operaciones-kpi-card" onclick="switchAdminFicha('operaciones')" style="cursor: pointer;" title="Ver Operaciones">
-                                    <div class="operaciones-kpi-icon icon-closed">
-                                        <span class="material-symbols-outlined">folder</span>
-                                    </div>
-                                    <div class="operaciones-kpi-info">
-                                        <span class="kpi-label">Total de carpetas cerradas</span>
-                                        <h2 class="kpi-value" id="op-kpi-closed">4</h2>
-                                    </div>
-                                </div>
-
-                                <div class="card operaciones-kpi-card" onclick="switchAdminFicha('operaciones')" style="cursor: pointer;" title="Ver Operaciones">
-                                    <div class="operaciones-kpi-icon icon-open">
-                                        <span class="material-symbols-outlined">folder_open</span>
-                                    </div>
-                                    <div class="operaciones-kpi-info">
-                                        <span class="kpi-label">Total de carpetas pendientes</span>
-                                        <h2 class="kpi-value" id="op-kpi-open">3</h2>
-                                    </div>
-                                </div>
-
-                                <div class="card operaciones-kpi-card" onclick="switchAdminFicha('operaciones')" style="cursor: pointer;" title="Ver Operaciones">
-                                    <div class="operaciones-kpi-icon icon-total">
-                                        <span class="material-symbols-outlined">bar_chart</span>
-                                    </div>
-                                    <div class="operaciones-kpi-info">
-                                        <span class="kpi-label">Total de proyectos</span>
-                                        <h2 class="kpi-value" id="op-kpi-total">7</h2>
-                                    </div>
-                                </div>
-                            </div>
-
                             <div class="operaciones-nav-right-group">
                                 <button class="admin-ficha-card operaciones-subnav-card" id="ficha-btn-proveedores" onclick="switchAdminFicha('proveedores')">
                                     <div class="ficha-icon"><span class="material-symbols-outlined">local_shipping</span></div>
@@ -1670,7 +1648,27 @@
                                 </button>
 
                                 <button class="admin-ficha-card operaciones-subnav-card active" id="ficha-btn-operaciones" onclick="switchAdminFicha('operaciones')">
-                                    <div class="ficha-icon"><span class="material-symbols-outlined">folder_managed</span></div>
+                                    <div class="ficha-icon">
+                                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                            <path d="M10.5 3.5C10.5 2.67157 11.1716 2 12 2C12.8284 2 13.5 2.67157 13.5 3.5V4.5H10.5V3.5Z" stroke="currentColor" stroke-width="1.5"/>
+                                            <rect x="9" y="4" width="6" height="2.2" rx="0.8" fill="currentColor"/>
+                                            <rect x="5" y="5.2" width="14" height="16.8" rx="2" stroke="currentColor" stroke-width="1.8"/>
+                                            <circle cx="8.5" cy="9.5" r="1.15" stroke="currentColor" stroke-width="1.2"/>
+                                            <path d="M7.6 9.3L8.4 10.1L9.9 8.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <line x1="11.5" y1="8.9" x2="16.5" y2="8.9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                            <line x1="11.5" y1="10.4" x2="16.5" y2="10.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                            <circle cx="8.5" cy="13" r="1.15" stroke="currentColor" stroke-width="1.2"/>
+                                            <path d="M7.6 12.8L8.4 13.6L9.9 11.9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <line x1="11.5" y1="12.4" x2="16.5" y2="12.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                            <line x1="11.5" y1="13.9" x2="16.5" y2="13.9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                            <circle cx="8.5" cy="16.5" r="1.15" stroke="currentColor" stroke-width="1.2"/>
+                                            <line x1="11.5" y1="15.9" x2="16.5" y2="15.9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                            <line x1="11.5" y1="17.4" x2="16.5" y2="17.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                            <circle cx="8.5" cy="19.8" r="1.15" stroke="currentColor" stroke-width="1.2"/>
+                                            <line x1="11.5" y1="19.2" x2="16.5" y2="19.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                            <line x1="11.5" y1="20.7" x2="16.5" y2="20.7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                        </svg>
+                                    </div>
                                     <div class="ficha-text">
                                         <h4>Operaciones</h4>
                                     </div>
@@ -1695,13 +1693,6 @@
                                     </div>
 
                                     <div class="table-actions" style="display: flex; gap: 10px; align-items: center;" id="proveedores-action-buttons">
-                                        <button type="button" class="kpi-mini-card kpi-archivo-card proveedores-archivo-card" id="btn-proveedores-archivo" onclick="toggleProveedoresArchivoView()" title="Ver sección de Archivo (Proveedores Pagados)">
-                                            <span class="material-symbols-outlined">inventory_2</span>
-                                            <div>
-                                                <span class="kpi-title">Archivo (Pagados)</span>
-                                                <h4 id="proveedores-archivo-count">Ver Archivo (0)</h4>
-                                            </div>
-                                        </button>
                                         <button type="button" class="btn btn-secondary btn-edit-proveedores" id="btn-edit-proveedores" onclick="startEditingProveedores()" title="Habilitar edición de estatus en la tabla">
                                             <span class="material-symbols-outlined" style="font-size: 18px;">edit</span> Editar
                                         </button>
@@ -1713,15 +1704,27 @@
 
 
 
-                                <!-- Supplier Filter Chips (Fichas por nombre de proveedores) -->
+                                <!-- Supplier Filter Dropdown -->
 
                                 <div class="proveedor-chips-bar">
 
                                     <span class="chips-label">Filtrar Proveedor:</span>
 
-                                    <div class="proveedor-chips-list" id="proveedor-chips-container">
+                                    <div class="custom-select-wrapper proveedor-filter-dropdown" id="wrapper-proveedor-filter">
 
-                                        <!-- Dynamic chips rendered by JS -->
+                                        <div class="consecutivo-client-trigger proveedor-filter-trigger" onclick="toggleProveedorFilterDropdown(event)" title="Seleccionar proveedor">
+
+                                            <span id="proveedor-filter-selected-label">Todos (0)</span>
+
+                                            <span class="material-symbols-outlined dropdown-arrow" style="font-size: 18px; color: #2563EB;">expand_more</span>
+
+                                        </div>
+
+                                        <div class="custom-dropdown-menu proveedor-filter-menu" id="proveedor-chips-container">
+
+                                            <!-- Dynamic options rendered by JS -->
+
+                                        </div>
 
                                     </div>
 
@@ -1759,20 +1762,6 @@
 
                                     </div>
 
-                                </div>
-
-                                <!-- Banner activo de Sección Archivo de Proveedores -->
-                                <div id="proveedores-archivo-banner" class="consecutivo-archivo-banner proveedores-archivo-banner" style="display: none; margin: 12px 20px 0 20px;">
-                                    <div class="archivo-banner-info">
-                                        <span class="material-symbols-outlined">folder_managed</span>
-                                        <div>
-                                            <strong>Sección de Archivo — Proveedores Pagados</strong>
-                                            <span>Mostrando únicamente los gastos y facturas de proveedores con estatus Pagado.</span>
-                                        </div>
-                                    </div>
-                                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleProveedoresArchivoView(false)">
-                                        <span class="material-symbols-outlined" style="font-size: 16px;">arrow_back</span> Ver proveedores activos
-                                    </button>
                                 </div>
 
                                 <!-- Banner de bloqueo en tiempo real cuando otro usuario está editando -->
@@ -2167,6 +2156,41 @@
 
                             <div id="operaciones-view-list" class="operaciones-subview active">
 
+                                <div class="card operaciones-table-card">
+
+                                <!-- KPIs de Operaciones -->
+                                <div class="operaciones-kpis-left-group operaciones-subview-kpis">
+                                    <div class="card operaciones-kpi-card">
+                                        <div class="operaciones-kpi-icon icon-closed">
+                                            <span class="material-symbols-outlined">folder</span>
+                                        </div>
+                                        <div class="operaciones-kpi-info">
+                                            <span class="kpi-label">Total de carpetas cerradas</span>
+                                            <h2 class="kpi-value" id="op-kpi-closed">4</h2>
+                                        </div>
+                                    </div>
+
+                                    <div class="card operaciones-kpi-card">
+                                        <div class="operaciones-kpi-icon icon-open">
+                                            <span class="material-symbols-outlined">folder_open</span>
+                                        </div>
+                                        <div class="operaciones-kpi-info">
+                                            <span class="kpi-label">Total de carpetas pendientes</span>
+                                            <h2 class="kpi-value" id="op-kpi-open">3</h2>
+                                        </div>
+                                    </div>
+
+                                    <div class="card operaciones-kpi-card">
+                                        <div class="operaciones-kpi-icon icon-total">
+                                            <span class="material-symbols-outlined">bar_chart</span>
+                                        </div>
+                                        <div class="operaciones-kpi-info">
+                                            <span class="kpi-label">Total de proyectos</span>
+                                            <h2 class="kpi-value" id="op-kpi-total">7</h2>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Search, Filter & Add Button Bar -->
 
                                 <div class="operaciones-controls-bar">
@@ -2324,8 +2348,6 @@
 
 
                                 <!-- Table: Proyectos registrados -->
-
-                                <div class="card operaciones-table-card">
 
                                     <h3 class="operaciones-table-title">Proyectos registrados</h3>
 
@@ -5253,7 +5275,7 @@
     <script src="consecutivo_data.js?v=285df872"></script>
 
     <script src="schema.js?v=c644e61d"></script>
-    <script src="app.js?v=20cf45e4"></script>
+    <script src="app.js?v=0f63e6f0"></script>
 
 </body>
 

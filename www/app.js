@@ -3992,6 +3992,19 @@ window.recalculateGastosIndirectosTotals = recalculateGastosIndirectosTotals;
 // ---------------------------------------------------------------------------------
 // 6. FICHA 3: PROVEEDORES CON CHIPS (IMAGEN 4)
 // ---------------------------------------------------------------------------------
+function toggleProveedorFilterDropdown(event) {
+    window.toggleProveedorFilterDropdown = toggleProveedorFilterDropdown;
+    if (event) event.stopPropagation();
+    const wrapper = document.getElementById("wrapper-proveedor-filter");
+    if (!wrapper) return;
+    const isOpen = wrapper.classList.contains("open");
+    document.querySelectorAll(".custom-select-wrapper").forEach(w => w.classList.remove("open"));
+    document.querySelectorAll(".st-custom-dropdown-wrap.open").forEach(w => w.classList.remove("open"));
+    if (!isOpen) {
+        wrapper.classList.add("open");
+    }
+}
+
 function renderProveedorChips() {
     window.renderProveedorChips = renderProveedorChips;
     const container = document.getElementById("proveedor-chips-container");
@@ -4058,50 +4071,64 @@ function renderProveedorChips() {
     container.dataset.lastChipsSig = chipsSig;
     container.innerHTML = "";
 
-    // "Todos" Chip
-    const allChip = document.createElement("button");
-    allChip.type = "button";
-    allChip.className = `proveedor-chip ${appState.selectedProveedorFilter === 'all' ? 'active' : ''}`;
-    allChip.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">apps</span> Todos (${validLinked.length})`;
-    allChip.onclick = (e) => {
+    const selectedLabelEl = document.getElementById("proveedor-filter-selected-label");
+    let activeLabelText = `Todos (${validLinked.length})`;
+
+    // "Todos" Option
+    const allOpt = document.createElement("div");
+    const isAllActive = !appState.selectedProveedorFilter || appState.selectedProveedorFilter === 'all';
+    allOpt.className = `custom-dropdown-option ${isAllActive ? 'selected' : ''}`;
+    allOpt.setAttribute('data-value', 'all');
+    allOpt.innerHTML = `
+        <span class="option-name">Todos (${validLinked.length})</span>
+        <span class="material-symbols-outlined check-icon">check</span>
+    `;
+    allOpt.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        const wrap = document.getElementById("wrapper-proveedor-filter");
+        if (wrap) wrap.classList.remove("open");
         filterByProveedor('all');
     };
-    container.appendChild(allChip);
+    container.appendChild(allOpt);
     
-    // Dynamic Chips from provider names list
+    // Dynamic Options from provider names list
     appState.proveedorNamesList.forEach(name => {
         const low = String(name || '').trim().toLowerCase();
         if (low === 'jennifer' || low === 'rama') return;
 
         const count = validLinked.filter(p => p.proveedor && p.proveedor.toLowerCase() === low).length;
-        const chip = document.createElement("div");
-        chip.className = `proveedor-chip ${appState.selectedProveedorFilter.toLowerCase() === low ? 'active' : ''}`;
-        chip.setAttribute('role', 'button');
-        chip.setAttribute('tabindex', '0');
-        chip.style.cursor = 'pointer';
+        const isOptActive = Boolean(appState.selectedProveedorFilter && appState.selectedProveedorFilter.toLowerCase() === low);
+        if (isOptActive) {
+            activeLabelText = `${name} (${count})`;
+        }
+
+        const opt = document.createElement("div");
+        opt.className = `custom-dropdown-option ${isOptActive ? 'selected' : ''}`;
+        opt.setAttribute('data-value', name);
         
         const isEditing = Boolean(appState.isEditingProveedores);
-        chip.innerHTML = `
-            <span class="chip-label-area" style="display:inline-flex; align-items:center; gap:6px;">
-                <span class="material-symbols-outlined" style="font-size: 16px;">person</span>
-                <span>${name} (${count})</span>
+        opt.innerHTML = `
+            <span class="option-name">${name} (${count})</span>
+            <span class="proveedor-option-actions">
+                ${isEditing ? `
+                    <span class="material-symbols-outlined chip-edit-btn" style="font-size: 15px; opacity: 0.75; cursor: pointer;" title="Editar nombre de proveedor">edit</span>
+                    <span class="material-symbols-outlined chip-delete-btn" style="font-size: 15px; opacity: 0.75; cursor: pointer;" title="Eliminar proveedor">close</span>
+                ` : ''}
+                <span class="material-symbols-outlined check-icon">check</span>
             </span>
-            ${isEditing ? `
-                <span class="material-symbols-outlined chip-edit-btn" style="font-size: 14px; margin-left: 6px; opacity: 0.7; cursor: pointer;" title="Editar nombre de proveedor">edit</span>
-                <span class="material-symbols-outlined chip-delete-btn" style="font-size: 14px; margin-left: 4px; opacity: 0.7; cursor: pointer;" title="Eliminar proveedor">close</span>
-            ` : ''}
         `;
         
-        chip.onclick = (e) => {
+        opt.onclick = (e) => {
             if (e.target && (e.target.closest('.chip-edit-btn') || e.target.closest('.chip-delete-btn'))) return;
             e.stopPropagation();
             e.preventDefault();
+            const wrap = document.getElementById("wrapper-proveedor-filter");
+            if (wrap) wrap.classList.remove("open");
             filterByProveedor(name);
         };
 
-        const editBtn = chip.querySelector('.chip-edit-btn');
+        const editBtn = opt.querySelector('.chip-edit-btn');
         if (editBtn) {
             editBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -4110,7 +4137,7 @@ function renderProveedorChips() {
             };
         }
 
-        const delBtn = chip.querySelector('.chip-delete-btn');
+        const delBtn = opt.querySelector('.chip-delete-btn');
         if (delBtn) {
             delBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -4119,8 +4146,12 @@ function renderProveedorChips() {
             };
         }
 
-        container.appendChild(chip);
+        container.appendChild(opt);
     });
+
+    if (selectedLabelEl) {
+        selectedLabelEl.innerText = activeLabelText;
+    }
 
     updateProveedorStatusCounts();
 }
@@ -5689,7 +5720,6 @@ function renderProveedores() {
     const pagadosCount = (appState.proveedores || []).filter(p => p && (p.p || p.estatus || '').trim().toLowerCase() === 'pagado').length;
     const archivoCountEl = document.getElementById("proveedores-archivo-count");
     const archivoBtn = document.getElementById("btn-proveedores-archivo");
-    const archivoBanner = document.getElementById("proveedores-archivo-banner");
     if (archivoCountEl) {
         archivoCountEl.innerText = appState.proveedoresArchivoMode
             ? `Viendo Archivo (${pagadosCount})`
@@ -5697,9 +5727,6 @@ function renderProveedores() {
     }
     if (archivoBtn) {
         archivoBtn.classList.toggle("active", Boolean(appState.proveedoresArchivoMode));
-    }
-    if (archivoBanner) {
-        archivoBanner.style.display = appState.proveedoresArchivoMode ? "flex" : "none";
     }
 
     // Filter by active chip
@@ -15521,7 +15548,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_17_hide_balance_parcial';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_operaciones_proveedores_ui';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
