@@ -1340,8 +1340,8 @@ test("17. Visualización: Reflejo en tiempo real de Gastos Indirectos y Nóminas
   // 3. Simular llegada de Nóminas desde la nube
   await page.evaluate(() => {
     window.appState.nominas = [
-      { id: 'nom_1', empleado: 'Juan Perez', total: 15000, estatus: 'PAGADO' },
-      { id: 'nom_2', empleado: 'Carlos Lopez', total: 18500, estatus: 'PAGADO' }
+      { id: 'nom_1', empleado: 'Juan Perez', total: 15000, estatus: 'PROGRAMADO' },
+      { id: 'nom_2', empleado: 'Carlos Lopez', total: 18500, estatus: 'PROGRAMADO' }
     ];
     window.renderVisualizacion();
   });

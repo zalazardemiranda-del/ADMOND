@@ -1479,10 +1479,12 @@ function calculateAdminTotals() {
     // 3 Balance parcial = 2 Balance parcial - Gastos Indirectos
     const subtotal3 = Math.round((subtotal2 - gastosInd) * 100) / 100;
     
-    // Nominas: resultado del total de nóminas
+    // Nominas: resultado del total de nóminas en estatus "Programado" (excluyendo "Pendiente" y "Pagado")
     let totalNominas = 0;
     window.getActiveNominasList().forEach(n => {
-        if (n) {
+        if (!n) return;
+        const rawSt = String(n.estatus || n.p || 'PROG').trim().toLowerCase();
+        if (rawSt !== 'pagado' && rawSt !== 'pendiente') {
             const nomVal = Number(n.nomina !== undefined && n.nomina !== null && n.nomina !== '' ? n.nomina : (n.servicio && !isNaN(n.servicio) ? n.servicio : (n.total || 0))) || 0;
             const ivaPct = Number(n.ivaPct) || 0;
             const ivaVal = Number(n.iva !== undefined ? n.iva : (nomVal * (ivaPct / 100))) || 0;
@@ -15800,7 +15802,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_nominas_total_programado';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_visualizacion_nominas_programadas';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
