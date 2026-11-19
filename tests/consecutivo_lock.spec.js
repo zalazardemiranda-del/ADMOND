@@ -1327,17 +1327,19 @@ test("17. Visualización: Reflejo en tiempo real de Gastos Indirectos y Nóminas
   const kpiGastosInd = page.locator("#concept-gastos-ind-val");
   const kpiNominas = page.locator("#concept-nominas-val");
 
-  // 2. Simular llegada de actualización de Gastos Indirectos desde la nube
+  // 2. Simular llegada de actualización de Gastos Indirectos desde la nube (solo Programado impacta Visualización)
   await page.evaluate(() => {
     window.appState.gastosIndirectos = [
-      { id: 'gi_1', concepto: 'Servicios de Internet', total: 4500, estatus: 'PAGADO' },
-      { id: 'gi_2', concepto: 'Mantenimiento de Unidades', total: 12300, estatus: 'PAGADO' }
+      { id: 'gi_1', concepto: 'Servicios de Internet', total: 4500, estatus: 'Programado' },
+      { id: 'gi_2', concepto: 'Mantenimiento de Unidades', total: 12300, estatus: 'Programado' },
+      { id: 'gi_3', concepto: 'Flyers expo', total: 1500, estatus: 'Pagado' },
+      { id: 'gi_4', concepto: 'Pendiente revision', total: 350, estatus: 'Pendiente' }
     ];
     window.renderVisualizacion();
   });
   await page.waitForTimeout(100);
 
-  // Gastos Indirectos debe reflejar $16,800.00
+  // Gastos Indirectos debe reflejar solo Programado = $16,800.00 (excluyendo Pagado y Pendiente)
   await expect(kpiGastosInd).toContainText("$16,800.00");
 
   // 3. Simular llegada de Nóminas desde la nube

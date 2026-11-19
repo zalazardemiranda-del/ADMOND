@@ -1458,7 +1458,7 @@ function calculateAdminTotals() {
     // 2 Balance parcial = 1 Balance parcial - Gastos proveedores
     const subtotal2 = Math.round((subtotal1 - totalGastosProveedores) * 100) / 100;
 
-    // Gastos Indirectos: resultado del total de los gastos indirectos en Administración (sin registros ficticios)
+    // Gastos Indirectos: Solo los registros en estatus "Programado" (excluyendo "Pendiente" y "Pagado")
     if (!appState.gastosIndirectos || !Array.isArray(appState.gastosIndirectos)) {
         appState.gastosIndirectos = [];
     } else if (typeof window.isFictitiousGastoIndirecto === 'function') {
@@ -1468,10 +1468,13 @@ function calculateAdminTotals() {
     if (Array.isArray(appState.gastosIndirectos)) {
         appState.gastosIndirectos.forEach(g => {
             if (g) {
-                const val = (g.total !== undefined && g.total !== null && g.total !== '' && !isNaN(g.total))
-                    ? Number(g.total)
-                    : (Number(g.subtotal) || Number(g.monto) || 0);
-                gastosInd += val;
+                const rawSt = String(g.estatus || g.p || 'PROG').trim().toLowerCase();
+                if (rawSt !== 'pagado' && rawSt !== 'pendiente') {
+                    const val = (g.total !== undefined && g.total !== null && g.total !== '' && !isNaN(g.total))
+                        ? Number(g.total)
+                        : (Number(g.subtotal) || Number(g.monto) || 0);
+                    gastosInd += val;
+                }
             }
         });
     }
@@ -16114,7 +16117,7 @@ function cleanOperacionesLegacyData(proyectos) {
 // BLOQUEO EXCLUSIVO DE PROYECTOS EN OPERACIONES, RESOLUCIÓN DE CARRERA Y DESPLIEGUE
 // =================================================================================
 const OPERACIONES_LOCK_TTL_MS = 90 * 1000; // 90 segundos de respaldo (1.5 min) con heartbeat activo cada 10s
-const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_totales_filtro_gastos_indirectos';
+const SYSTEM_RELEASE_VERSION = 'release_2026_11_18_visualizacion_gastos_ind_programado';
 window.SYSTEM_RELEASE_VERSION = SYSTEM_RELEASE_VERSION;
 
 function getOperacionesCurrentUserInfo() {
