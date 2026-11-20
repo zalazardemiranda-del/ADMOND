@@ -5292,7 +5292,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-    <script src="firebase_config.js?v=b0e06cda"></script>
+    <script src="firebase_config.js?v=0b06f082"></script>
     <!-- backup_data.js removido por seguridad y rendimiento -->
 
     <script src="consecutivo_data.js?v=285df872"></script>
@@ -5300,6 +5300,40 @@
     <script src="schema.js?v=c644e61d"></script>
     <script src="app.js?v=8abbba10"></script>
 
+<script>
+/* Auto-actualizacion: revisa version.json y recarga sola la app cuando hay una version nueva (sin hard refresh). */
+(function () {
+    var current = null, busy = false;
+    function isEditing() {
+        try {
+            var s = window.appState || {};
+            return !!(s.isEditingConsecutivo || s.isEditingProveedores || s.isEditingNominas || s.isEditingGastosIndirectos || s.isEditingVisualizacion || s.isEditingOperacionesDetail);
+        } catch (e) { return false; }
+    }
+    function check() {
+        if (busy) return;
+        busy = true;
+        fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                busy = false;
+                if (!d || !d.version) return;
+                if (current === null) { current = d.version; return; }
+                if (d.version !== current) {
+                    if (isEditing()) return; // reintenta en el siguiente ciclo
+                    var u = new URL(location.href);
+                    u.searchParams.set('_v', d.version.slice(0, 8));
+                    location.replace(u.toString());
+                }
+            })
+            .catch(function () { busy = false; });
+    }
+    check();
+    setInterval(check, 60000);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') check(); });
+    window.addEventListener('online', check);
+})();
+</script>
 </body>
 
 </html>

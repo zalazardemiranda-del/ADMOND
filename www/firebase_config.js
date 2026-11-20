@@ -830,9 +830,13 @@
                 window.FIREBASE_CONFIG.auth = window.firebase.auth ? window.firebase.auth() : null;
                 window.FIREBASE_CONFIG.db = window.firebase.firestore ? window.firebase.firestore() : null;
 
-                // Configurar persistencia offline en Firestore ANTES de usar el cliente
-                if (window.FIREBASE_CONFIG.db && typeof window.FIREBASE_CONFIG.db.enablePersistence === 'function') {
-                    window.FIREBASE_CONFIG.db.enablePersistence({ synchronizeTabs: true }).catch(function() {});
+                // Tiempo real fiable: SIN persistencia offline (evitaba datos viejos en cache) y con long-polling
+                // automatico para redes/antivirus/proxys que bloquean el WebChannel/WebSocket de Firestore.
+                if (window.FIREBASE_CONFIG.db && !window.FIREBASE_CONFIG._settingsApplied) {
+                    window.FIREBASE_CONFIG._settingsApplied = true;
+                    try {
+                        window.FIREBASE_CONFIG.db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
+                    } catch (e) { console.warn('[Firebase] settings:', e && e.message); }
                 }
 
                 window.FIREBASE_CONFIG.client = createFirebaseClientAdapter(window.firebase);
