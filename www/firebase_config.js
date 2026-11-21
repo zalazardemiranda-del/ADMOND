@@ -113,11 +113,44 @@
                 });
             } catch (e) {}
         }
-        ensureRealtimeHubListener();
-        if (auth && typeof auth.onAuthStateChanged === 'function') {
-            auth.onAuthStateChanged(function(user) {
-                if (user) ensureRealtimeHubListener();
-            });
+        function sanitizeForFirestore(val) {
+            try {
+                return JSON.parse(JSON.stringify(val));
+            } catch (e) {
+                return val;
+            }
+        }
+
+        const desiredColListeners = new Set();
+        function ensureColListener(tbl) {
+            if (!db || !tbl) return;
+            if (auth && !auth.currentUser) return;
+            if (!channelInterface._activeColListeners) channelInterface._activeColListeners = {};
+            if (channelInterface._activeColListeners[tbl]) return;
+            try {
+                let isInitialSnapshot = true;
+                channelInterface._activeColListeners[tbl] = db.collection(tbl).onSnapshot(function(snapshot) {
+                    if (isInitialSnapshot) {
+                        // La primera entrega contiene todos los documentos existentes como "added": no son cambios en vivo.
+                        isInitialSnapshot = false;
+                        return;
+                    }
+                    snapshot.docChanges().forEach(function(change) {
+                        const eventType = change.type === 'added' ? 'INSERT' : (change.type === 'modified' ? 'UPDATE' : 'DELETE');
+                        const payload = {
+                            eventType: eventType,
+                            new: change.doc.data(),
+                            old: change.type === 'modified' || change.type === 'removed' ? change.doc.data() : null
+                        };
+                        (postgresChangeHandlers[tbl] || []).forEach(function(fn) {
+                            try { fn(payload); } catch (err) {}
+                        });
+                    });
+                }, function(err) {
+                    console.warn(`[Firebase] Listener ${tbl} detenido:`, err && err.message ? err.message : err);
+                    if (channelInterface._activeColListeners) delete channelInterface._activeColListeners[tbl];
+                });
+            } catch (e) {}
         }
 
         // Interfaz de canal compatible con WebSockets y Firestore Realtime Hub
@@ -131,32 +164,8 @@
                     const tbl = filter.table;
                     if (!postgresChangeHandlers[tbl]) postgresChangeHandlers[tbl] = [];
                     postgresChangeHandlers[tbl].push(callback);
-
-                    // Suscribirse a cambios en Firestore para esta colección si está disponible
-                    if (db && !channelInterface._activeColListeners?.[tbl]) {
-                        if (!channelInterface._activeColListeners) channelInterface._activeColListeners = {};
-                        try {
-                            let isInitialSnapshot = true;
-                            channelInterface._activeColListeners[tbl] = db.collection(tbl).onSnapshot(function(snapshot) {
-                                if (isInitialSnapshot) {
-                                    // La primera entrega contiene todos los documentos existentes como "added": no son cambios en vivo.
-                                    isInitialSnapshot = false;
-                                    return;
-                                }
-                                snapshot.docChanges().forEach(function(change) {
-                                    const eventType = change.type === 'added' ? 'INSERT' : (change.type === 'modified' ? 'UPDATE' : 'DELETE');
-                                    const payload = {
-                                        eventType: eventType,
-                                        new: change.doc.data(),
-                                        old: change.type === 'modified' || change.type === 'removed' ? change.doc.data() : null
-                                    };
-                                    (postgresChangeHandlers[tbl] || []).forEach(function(fn) {
-                                        try { fn(payload); } catch (err) {}
-                                    });
-                                });
-                            }, function() {});
-                        } catch (e) {}
-                    }
+                    desiredColListeners.add(tbl);
+                    ensureColListener(tbl);
                 }
                 return channelInterface;
             },
@@ -164,7 +173,7 @@
                 if (!msg) return Promise.resolve({ error: null });
                 if (msg.type === 'broadcast') {
                     const evt = msg.event;
-                    const payload = msg.payload || {};
+                    const payload = sanitizeForFirestore(msg.payload || {});
                     const senderId = window._myClientId || 'client_main';
                     const nowTs = Date.now();
 
@@ -231,6 +240,16 @@
             _broadcastHandlers: broadcastHandlers,
             _postgresChangeHandlers: postgresChangeHandlers
         };
+
+        ensureRealtimeHubListener();
+        if (auth && typeof auth.onAuthStateChanged === 'function') {
+            auth.onAuthStateChanged(function(user) {
+                if (user) {
+                    ensureRealtimeHubListener();
+                    desiredColListeners.forEach(function(tbl) { ensureColListener(tbl); });
+                }
+            });
+        }
 
         // Query Builder para Firestore con compatibilidad completa para la API existente
         function createQueryBuilder(collectionName) {
@@ -342,7 +361,7 @@
                             let writeError = null;
                             for (let item of actionData) {
                                 const id = item.id || ('doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
-                                const fullItem = Object.assign({}, item, { id: id, created_at: item.created_at || new Date().toISOString(), updated_at: new Date().toISOString() });
+                                const fullItem = sanitizeForFirestore(Object.assign({}, item, { id: id, created_at: item.created_at || new Date().toISOString(), updated_at: new Date().toISOString() }));
                                 
                                 const isSyncSnapMsg = collectionName === 'messages' && item.chat_id && String(item.chat_id).startsWith('__cloud_sync_');
                                 // Guardar en Firestore si está disponible

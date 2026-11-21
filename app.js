@@ -307,40 +307,10 @@ const runInitialAppSetup = async () => {
     ]);
     window.purgedProjectIds = purgedProjectIds;
 // ---------------------------------------------------------------------------------
-// LIMPIEZA FORZOSA INMEDIATA DE EXPEDIENTES FANTASMA (NOVIEMBRE 2026)
+// LIMPIEZA DE EXPEDIENTES FANTASMA (solo IDs purgados o con guion colgante)
 // ---------------------------------------------------------------------------------
 (function runInstantForcedPurge() {
     try {
-        const isTestId = (val) => /^RDP2611(19[2-9])/i.test(String(val || '').trim());
-        const purgeFlag = 'rp_purged_test_nov_192_199_v5';
-        if (!localStorage.getItem(purgeFlag)) {
-            const stored = localStorage.getItem('rp_operaciones_proyectos');
-            if (stored) {
-                let list = JSON.parse(stored);
-                if (Array.isArray(list)) {
-                    list = list.filter(p => {
-                        const id = String(p?.id || p?.consecutivo || p?.numProyecto || p?.numConsecutivo || '').trim();
-                        return !isTestId(id);
-                    });
-                    localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(list));
-                    if (window.appState) window.appState.operacionesProyectos = list;
-                }
-            }
-            const storedCon = localStorage.getItem('rp_consecutivo_data');
-            if (storedCon) {
-                let conList = JSON.parse(storedCon);
-                if (Array.isArray(conList)) {
-                    conList = conList.filter(r => {
-                        const ref = String(r?.referenciaOp || r?.refOp || '').trim();
-                        return !isTestId(ref);
-                    });
-                    localStorage.setItem('rp_consecutivo_data', JSON.stringify(conList));
-                    if (window.appState) window.appState.consecutivo = conList;
-                }
-            }
-            localStorage.setItem(purgeFlag, 'true');
-        }
-
         const storedNow = localStorage.getItem('rp_operaciones_proyectos');
         if (storedNow) {
             let list = JSON.parse(storedNow);
@@ -1372,6 +1342,14 @@ function renderAdministracion() {
         if (typeof window.fetchProveedoresLockFromCloud === 'function') {
             window.fetchProveedoresLockFromCloud();
         }
+        const opsPromise = (!appState.isEditingOperacionesDetail && typeof window.fetchOperacionesFromCloud === 'function')
+            ? Promise.resolve(window.fetchOperacionesFromCloud())
+            : Promise.resolve();
+        opsPromise.then(() => {
+            if (!appState.isEditingProveedores && typeof window.fetchProveedoresDataFromCloud === 'function') {
+                window.fetchProveedoresDataFromCloud();
+            }
+        });
         if (typeof window.syncAllOperacionesToProveedores === 'function') {
             window.syncAllOperacionesToProveedores();
         }
@@ -5058,9 +5036,16 @@ async function fetchProveedoresDataFromCloud() {
 
                     let anyChanged = false;
                     (appState.proveedores || []).forEach(localR => {
-                        const key = localR.opRefId || (localR.projectId && localR.opRowIndex !== undefined ? `${localR.projectId}_${localR.opRowIndex}` : null) || (localR.op && localR.opRowIndex !== undefined ? `${String(localR.op).trim().toLowerCase()}_${localR.opRowIndex}` : null);
-                        const provKey = (!key && localR.op && localR.proveedor) ? `${String(localR.op).trim().toLowerCase()}_${String(localR.proveedor).trim().toLowerCase()}` : null;
-                        const match = (key && rowMap.has(key)) ? rowMap.get(key) : (provKey && rowMap.has(provKey) ? rowMap.get(provKey) : null);
+                        const candidateKeys = [
+                            localR.opRefId,
+                            (localR.projectId && localR.opRowIndex !== undefined) ? `${localR.projectId}_${localR.opRowIndex}` : null,
+                            (localR.op && localR.opRowIndex !== undefined) ? `${String(localR.op).trim().toLowerCase()}_${localR.opRowIndex}` : null,
+                            (localR.op && localR.proveedor) ? `${String(localR.op).trim().toLowerCase()}_${String(localR.proveedor).trim().toLowerCase()}` : null
+                        ].filter(Boolean);
+                        let match = null;
+                        for (const ck of candidateKeys) {
+                            if (rowMap.has(ck)) { match = rowMap.get(ck); break; }
+                        }
                         if (match) {
                             let rowChanged = false;
                             if (match.p !== undefined || match.estatus !== undefined) {
@@ -5337,7 +5322,7 @@ function syncProjectToProveedores(p) {
 }
 window.syncProjectToProveedores = syncProjectToProveedores;
 
-function syncAllOperacionesToProveedores() {
+function syncAllOperacionesToProveedores(preferCloudOps = false) {
     window.syncAllOperacionesToProveedores = syncAllOperacionesToProveedores;
     if (appState.isEditingProveedores) return;
 
@@ -5448,11 +5433,12 @@ function syncAllOperacionesToProveedores() {
                 if (!hasData) return;
 
                 const opRefId = `${p.id}_${idx}`;
-                // Por defecto todos los expedientes de proveedores entran en "Programar a pago" ('PROG')
-                const rawSaved = statusMap.get(opRefId) || 
-                                 statusMap.get(`${p.id}_${idx}`) || 
-                                 statusMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || 
-                                 item.p || item.estatus || 'PROG';
+                // Priorizar el estatus real guardado en Operaciones (nube) sobre caché local de Proveedores para que nunca revierta Pagados a Programado
+                const opSt = (item.p && String(item.p).trim()) || (item.estatus && String(item.estatus).trim()) || '';
+                const mapSt = statusMap.get(opRefId) ||
+                              statusMap.get(`${p.id}_${idx}`) ||
+                              statusMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) || '';
+                const rawSaved = preferCloudOps ? (opSt || mapSt || 'PROG') : (opSt || mapSt || 'PROG');
                 const rawSavedLower = String(rawSaved || '').trim().toLowerCase();
                 let savedStatus = 'PROG';
                 if (rawSavedLower === 'pagado') {
@@ -5463,10 +5449,11 @@ function syncAllOperacionesToProveedores() {
                     savedStatus = 'PROG';
                 }
                 const isPagado = savedStatus === 'PAGADO';
-                const rawFp = fechaPagoMap.has(opRefId) ? fechaPagoMap.get(opRefId) :
+                const opFp = (item.fechaPago && String(item.fechaPago).trim()) || '';
+                const mapFp = fechaPagoMap.has(opRefId) ? fechaPagoMap.get(opRefId) :
                               (fechaPagoMap.has(`${p.id}_${idx}`) ? fechaPagoMap.get(`${p.id}_${idx}`) :
-                              (fechaPagoMap.has(`${String(projOp).trim().toLowerCase()}_${idx}`) ? fechaPagoMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) :
-                              (item.fechaPago || '')));
+                              (fechaPagoMap.has(`${String(projOp).trim().toLowerCase()}_${idx}`) ? fechaPagoMap.get(`${String(projOp).trim().toLowerCase()}_${idx}`) : ''));
+                const rawFp = preferCloudOps ? (opFp || mapFp || '') : (opFp || mapFp || '');
                 const savedFechaPago = isPagado ? (rawFp || '') : '';
 
                 // Mantener sincronizado el objeto del proyecto en memoria
@@ -11241,6 +11228,9 @@ function setupRealtimeSubscriptions() {
                         }
                     } else if (appState.currentAdminFicha === 'proveedores') {
                         if (!appState.isEditingProveedores) {
+                            if (!appState.isEditingOperacionesDetail && typeof window.fetchOperacionesFromCloud === 'function') {
+                                await window.fetchOperacionesFromCloud();
+                            }
                             if (typeof window.fetchProveedoresDataFromCloud === 'function') {
                                 await window.fetchProveedoresDataFromCloud();
                             }
@@ -14841,6 +14831,8 @@ function syncAllOperacionesToConsecutivo() {
                     row.factura = pFac;
                 }
             } else {
+                // NUNCA crear esqueletos vacios antes de leer operaciones de la nube (antes pisaban expedientes reales con proveedores vacios)
+                if (window.isFirebaseActive && window.isFirebaseActive() && !window._opsFetchedOnce) return;
                 const subVal = Number(row.subtotal) || 0;
                 const ivaVal = (row.iva !== undefined && row.iva !== null && row.iva !== '') ? Number(row.iva) : (subVal > 0 ? Math.round(subVal * 0.16 * 100) / 100 : 0);
                 const totVal = (row.total !== undefined && row.total !== null && row.total !== '') ? Number(row.total) : (subVal + ivaVal);
@@ -14855,6 +14847,7 @@ function syncAllOperacionesToConsecutivo() {
                     consecutivo: ref,
                     numConsecutivo: ref,
                     numProyecto: ref,
+                    _autoCreatedFromConsecutivo: true,
                     fechaInicio: row.fechaEmision || new Date().toISOString().split('T')[0],
                     fechaInicioDisplay: inicioDisplay,
                     cliente: row.cliente || '',
@@ -15148,44 +15141,44 @@ function syncOperacionesToCloud(forceImmediate = false) {
 
     const doSync = async () => {
         try {
-            window._lastLocalOperacionesSyncTime = Date.now();
-            const delSetSync = getDeletedOperacionesSet();
-            const list = (appState.operacionesProyectos || []).filter(p => p && isProjectGenerado(p) && ![p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean).some(k => delSetSync.has(String(k).trim().toUpperCase())) && !purgedIds.has(p.id) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.numConsecutivo));
-            const safeList = cleanProjectsForCloud(list);
-
-            // A. Guardar snapshot en tabla messages con chat_id especial para garantizar persistencia universal (< 100KB, nunca excede el límite de 1MB de Firestore)
-            let opSyncError = null;
-            try {
-                const { error: snapErr } = await client.from('messages').insert({
-                    chat_id: '__cloud_sync_operaciones__',
-                    contenido: JSON.stringify(safeList),
-                    emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
-                    emisor_role: 'sistema'
-                });
-                if (snapErr) opSyncError = snapErr;
-            } catch (errSnap) {
-                opSyncError = errSnap;
-                console.warn("⚠️ Error saving snapshot to messages:", errSnap);
-            }
-
-            // B. Si existe la tabla operaciones en Firebase/Firebase, guardar cada proyecto de forma independiente
-            // Un equipo que aun no leyo la nube NO debe sobrescribirla con su copia local vieja: reintenta luego.
+            // Un equipo que aun no leyo la nube NO debe sobrescribir ni el snapshot ni la coleccion operaciones: reintenta luego.
             if (!window._opsFetchedOnce) {
                 window._opsSyncRetries = (window._opsSyncRetries || 0) + 1;
                 if (window._opsSyncRetries <= 10) { setTimeout(doSync, 3000); }
                 return;
             }
             window._opsSyncRetries = 0;
+
+            window._lastLocalOperacionesSyncTime = Date.now();
+            const delSetSync = getDeletedOperacionesSet();
+            const list = (appState.operacionesProyectos || []).filter(p => p && isProjectGenerado(p) && ![p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean).some(k => delSetSync.has(String(k).trim().toUpperCase())) && !purgedIds.has(p.id) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.numConsecutivo));
+            const safeList = cleanProjectsForCloud(list);
+
+            const countRealProvs = (arr) => Array.isArray(arr) ? arr.filter(x => x && (String(x.proveedor || '').trim() || String(x.facturaNum || '').trim() || Number(x.subtotal) > 0 || Number(x.total) > 0)).length : 0;
+
+            let opSyncError = null;
+            let anyUploaded = false;
             window._opsKnownState = window._opsKnownState || {};
+            window._opsCloudMeta = window._opsCloudMeta || {};
+
+            // A. Guardar cada proyecto modificado de forma independiente en la coleccion operaciones
             for (const proj of safeList) {
-                const knownKey = String(proj.id || proj.consecutivo || proj.numConsecutivo);
+                if (proj._autoCreatedFromConsecutivo && countRealProvs(proj.proveedoresClaves) === 0) continue;
+                const knownKey = String(proj.id || proj.consecutivo || proj.numConsecutivo).trim().toUpperCase();
+                const cloudMeta = window._opsCloudMeta[knownKey] || null;
+                const isProjClosed = proj.archivado === true || proj.estatus === 'CERRADO' || Boolean(proj.fechaArchivado) || Boolean(cloudMeta && cloudMeta.archivado);
+                if (isProjClosed) {
+                    proj.archivado = true;
+                    proj.estatus = 'CERRADO';
+                }
+                // Proteccion anti-regresion: nunca pisar en Firestore un expediente que ya tenia proveedores con uno vacio
+                const localProvCount = countRealProvs(proj.proveedoresClaves);
+                if (cloudMeta && cloudMeta.provCount > 0 && localProvCount === 0) continue;
+
                 const projStr = JSON.stringify(proj);
-                // Solo subir proyectos que este equipo modifico (evita pisar versiones nuevas con copias viejas)
                 if (window._opsKnownState[knownKey] === projStr) continue;
-                window._opsKnownState[knownKey] = projStr;
                 try {
                     const cNum = proj.consecutivo || proj.numConsecutivo || proj.id;
-                    const isProjClosed = proj.archivado === true || proj.estatus === 'CERRADO';
                     const { error: opErr } = await client.from('operaciones').upsert({
                         id: String(proj.id || cNum),
                         consecutivo: String(cNum),
@@ -15195,14 +15188,36 @@ function syncOperacionesToCloud(forceImmediate = false) {
                         orden_compra: proj.numOC || '',
                         datos: Object.assign({}, proj, {
                             archivado: isProjClosed,
-                            estatus: isProjClosed ? 'CERRADO' : proj.estatus
+                            estatus: isProjClosed ? 'CERRADO' : (proj.estatus || 'PENDIENTE')
                         }),
                         updated_at: new Date().toISOString()
                     }, { onConflict: 'id' });
-                    if (opErr && !opSyncError) opSyncError = opErr;
+                    if (opErr) {
+                        if (!opSyncError) opSyncError = opErr;
+                    } else {
+                        window._opsKnownState[knownKey] = projStr;
+                        window._opsCloudMeta[knownKey] = { archivado: isProjClosed, provCount: localProvCount };
+                        anyUploaded = true;
+                    }
                 } catch (errDb) {
                     if (!opSyncError) opSyncError = errDb;
                     console.warn("⚠️ Error upserting individual project to operaciones:", errDb);
+                }
+            }
+
+            // B. Actualizar snapshot de respaldo solo cuando realmente hubo cambios subidos
+            if (anyUploaded) {
+                try {
+                    const { error: snapErr } = await client.from('messages').insert({
+                        chat_id: '__cloud_sync_operaciones__',
+                        contenido: JSON.stringify(safeList),
+                        emisor_nombre: appState.currentUser?.nombre || 'Sistema Rodipack',
+                        emisor_role: 'sistema'
+                    });
+                    if (snapErr && !opSyncError) opSyncError = snapErr;
+                } catch (errSnap) {
+                    if (!opSyncError) opSyncError = errSnap;
+                    console.warn("⚠️ Error saving snapshot to messages:", errSnap);
                 }
             }
             if (opSyncError && typeof window.notifyCloudSyncError === 'function') {
@@ -15370,24 +15385,31 @@ async function fetchOperacionesFromCloud() {
         let dbProjects = [];
         let snapProjects = [];
 
-        // 0. Leer lista de expedientes eliminados (tombstones) para que nunca resuciten
-        const deletedSet = getDeletedOperacionesSet();
+        // 0. Leer lista de expedientes eliminados (tombstones) desde la nube como unica fuente de verdad
+        // Evita que un rp_deleted_operaciones viejo en localStorage oculte expedientes vigentes solo en una computadora
+        const deletedSet = new Set();
         try {
-            const { data: delMsgs } = await client.from('messages')
+            const { data: delMsgs, error: delErr } = await client.from('messages')
                 .select('contenido')
                 .eq('chat_id', '__cloud_sync_operaciones_deleted__')
                 .limit(1);
-            if (delMsgs && delMsgs.length > 0 && delMsgs[0].contenido) {
-                const delArr = JSON.parse(delMsgs[0].contenido);
-                if (Array.isArray(delArr)) {
-                    delArr.forEach(id => {
-                        const clean = String(id || '').trim().toUpperCase();
-                        if (clean) deletedSet.add(clean);
-                    });
-                    try { localStorage.setItem('rp_deleted_operaciones', JSON.stringify(Array.from(deletedSet).slice(-300))); } catch (e) {}
+            if (!delErr) {
+                if (delMsgs && delMsgs.length > 0 && delMsgs[0].contenido) {
+                    const delArr = JSON.parse(delMsgs[0].contenido);
+                    if (Array.isArray(delArr)) {
+                        delArr.forEach(id => {
+                            const clean = String(id || '').trim().toUpperCase();
+                            if (clean) deletedSet.add(clean);
+                        });
+                    }
                 }
+                try { localStorage.setItem('rp_deleted_operaciones', JSON.stringify(Array.from(deletedSet).slice(-300))); } catch (e) {}
+            } else {
+                getDeletedOperacionesSet().forEach(id => deletedSet.add(id));
             }
-        } catch (e) {}
+        } catch (e) {
+            getDeletedOperacionesSet().forEach(id => deletedSet.add(id));
+        }
 
         // 1. Leer desde tabla dedicada operaciones (fuente principal)
         try {
@@ -15413,7 +15435,7 @@ async function fetchOperacionesFromCloud() {
                     if (row.consecutivo && !d.consecutivo) d.consecutivo = row.consecutivo;
                     if (row.id && !d.id) d.id = row.id;
                     if (d.generado === undefined) d.generado = true;
-                    if (row.estatus === 'CERRADO' || d.estatus === 'CERRADO' || d.archivado === true) {
+                    if (row.estatus === 'CERRADO' || d.estatus === 'CERRADO' || d.archivado === true || Boolean(d.fechaArchivado)) {
                         d.archivado = true;
                         d.estatus = 'CERRADO';
                     }
@@ -15464,14 +15486,46 @@ async function fetchOperacionesFromCloud() {
         });
 
         if (filteredCloud.length > 0 || dbProjects.length === 0) {
-            window.mergeOperacionesProjects(filteredCloud);
+            const countRealProvs = (arr) => Array.isArray(arr) ? arr.filter(x => x && (String(x.proveedor || '').trim() || String(x.facturaNum || '').trim() || Number(x.subtotal) > 0 || Number(x.total) > 0)).length : 0;
+            // Registrar el estado REAL recibido de la nube ANTES de fusionar con datos locales
+            const cloudMetaNow = {};
+            const cloudKnownNow = {};
             try {
-                window._opsKnownState = window._opsKnownState || {};
-                stripLargeDocsFromProjectList(appState.operacionesProyectos || []).forEach(function (kp) {
-                    if (kp) window._opsKnownState[String(kp.id || kp.consecutivo || kp.numConsecutivo)] = JSON.stringify(kp);
+                stripLargeDocsFromProjectList(filteredCloud).forEach(function (cp) {
+                    if (!cp) return;
+                    const k = String(cp.id || cp.consecutivo || cp.numConsecutivo).trim().toUpperCase();
+                    cloudKnownNow[k] = JSON.stringify(cp);
+                    cloudMetaNow[k] = {
+                        archivado: Boolean(cp.archivado === true || cp.estatus === 'CERRADO' || cp.fechaArchivado),
+                        provCount: countRealProvs(cp.proveedoresClaves)
+                    };
                 });
-                window._opsFetchedOnce = true;
             } catch (eKnown) {}
+
+            window.mergeOperacionesProjects(filteredCloud);
+            window._opsKnownState = cloudKnownNow;
+            window._opsCloudMeta = cloudMetaNow;
+            window._opsFetchedOnce = true;
+
+            // Auto-reparacion segura: si local tiene datos autoritativos faltantes en la nube (archivado o proveedores reales), subir solo esos proyectos
+            let needsCloudHeal = false;
+            try {
+                stripLargeDocsFromProjectList(appState.operacionesProyectos || []).forEach(function (mp) {
+                    if (!mp) return;
+                    const k = String(mp.id || mp.consecutivo || mp.numConsecutivo).trim().toUpperCase();
+                    const cm = cloudMetaNow[k];
+                    if (!cm) return;
+                    const localArch = Boolean(mp.archivado === true || mp.estatus === 'CERRADO' || mp.fechaArchivado);
+                    const localProvs = countRealProvs(mp.proveedoresClaves);
+                    if ((localArch && !cm.archivado) || (localProvs > 0 && cm.provCount === 0)) {
+                        needsCloudHeal = true;
+                    }
+                });
+            } catch (eHeal) {}
+            if (needsCloudHeal && typeof window.syncOperacionesToCloud === 'function') {
+                window.syncOperacionesToCloud(true);
+            }
+
             if (!appState.isEditingOperacionesDetail) {
                 try {
                     const safeToStore = typeof stripLargeDocsFromProjectList === 'function'
@@ -15492,6 +15546,14 @@ async function fetchOperacionesFromCloud() {
                         if (typeof window.renderDocumentosStatus === 'function') window.renderDocumentosStatus(activeP);
                     }
                 }
+            } else if (appState.currentAdminFicha === 'proveedores' && !appState.isEditingProveedores) {
+                if (typeof window.updateProveedorStatusCounts === 'function') window.updateProveedorStatusCounts();
+                if (typeof window.renderProveedores === 'function') window.renderProveedores();
+                if (typeof window.recalculateProveedoresTableTotals === 'function') window.recalculateProveedoresTableTotals();
+            } else if (appState.currentAdminFicha === 'consecutivo' && !appState.isEditingConsecutivo) {
+                if (typeof window.renderConsecutivo === 'function') window.renderConsecutivo();
+            } else if (appState.currentAdminFicha === 'visualizacion') {
+                if (typeof window.renderVisualizacion === 'function') window.renderVisualizacion();
             }
         }
     } catch (err) {
@@ -15589,8 +15651,8 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
 
             // Preservación estricta de estado ARCHIVADO / CERRADO:
             // Si el proyecto ya fue archivado o cerrado (local o en la nube), NUNCA debe desarchivarse por sincronizaciones obsoletas
-            const isLocalArchivado = local.archivado === true || local.estatus === 'CERRADO';
-            const isCloudArchivado = cp.archivado === true || cp.estatus === 'CERRADO';
+            const isLocalArchivado = local.archivado === true || local.estatus === 'CERRADO' || Boolean(local.fechaArchivado);
+            const isCloudArchivado = cp.archivado === true || cp.estatus === 'CERRADO' || Boolean(cp.fechaArchivado);
             if (isLocalArchivado || isCloudArchivado) {
                 merged.archivado = true;
                 merged.estatus = 'CERRADO';
@@ -15695,30 +15757,29 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
                 merged.contenedores = cloudContainers.length > 0 ? cloudContainers : localContainers;
             }
             
-            // 5. Partidas y Proveedores
-            if (isCurrentlyActive) {
-                merged.partidasConceptos = (local.partidasConceptos && local.partidasConceptos.length > 0) ? local.partidasConceptos : cp.partidasConceptos;
-                merged.proveedoresClaves = (local.proveedoresClaves && local.proveedoresClaves.length > 0) ? local.proveedoresClaves : cp.proveedoresClaves;
+            // 5. Partidas y Proveedores (la nube prevalece sobre caché local si trae datos reales; si la nube viene vacía, se preserva local para auto-reparar)
+            const hasLocalPartidas = Array.isArray(local.partidasConceptos) && local.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+            const hasCloudPartidas = Array.isArray(cp.partidasConceptos) && cp.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+            if (isCurrentlyActive && appState.isEditingOperacionesDetail) {
+                merged.partidasConceptos = hasLocalPartidas ? local.partidasConceptos : (cp.partidasConceptos || []);
+            } else if (hasCloudPartidas) {
+                merged.partidasConceptos = cp.partidasConceptos;
+            } else if (hasLocalPartidas) {
+                merged.partidasConceptos = local.partidasConceptos;
             } else {
-                const hasLocalPartidas = local.partidasConceptos && local.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
-                const hasCloudPartidas = cp.partidasConceptos && cp.partidasConceptos.some(x => x && (x.servicio || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
-                if (forceRealtime && hasCloudPartidas) {
-                    merged.partidasConceptos = cp.partidasConceptos;
-                } else if (hasLocalPartidas) {
-                    merged.partidasConceptos = local.partidasConceptos;
-                } else if (hasCloudPartidas) {
-                    merged.partidasConceptos = cp.partidasConceptos;
-                }
+                merged.partidasConceptos = cp.partidasConceptos || local.partidasConceptos || [];
+            }
 
-                const hasLocalProv = local.proveedoresClaves && local.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
-                const hasCloudProv = cp.proveedoresClaves && cp.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
-                if (forceRealtime && hasCloudProv) {
-                    merged.proveedoresClaves = cp.proveedoresClaves;
-                } else if (hasLocalProv) {
-                    merged.proveedoresClaves = local.proveedoresClaves;
-                } else if (hasCloudProv) {
-                    merged.proveedoresClaves = cp.proveedoresClaves;
-                }
+            const hasLocalProv = Array.isArray(local.proveedoresClaves) && local.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+            const hasCloudProv = Array.isArray(cp.proveedoresClaves) && cp.proveedoresClaves.some(x => x && (x.proveedor || x.facturaNum || x.concepto || x.cantidad || x.unitario || x.subtotal || x.total));
+            if (isCurrentlyActive && appState.isEditingOperacionesDetail) {
+                merged.proveedoresClaves = hasLocalProv ? local.proveedoresClaves : (cp.proveedoresClaves || []);
+            } else if (hasCloudProv) {
+                merged.proveedoresClaves = cp.proveedoresClaves;
+            } else if (hasLocalProv) {
+                merged.proveedoresClaves = local.proveedoresClaves;
+            } else {
+                merged.proveedoresClaves = cp.proveedoresClaves || local.proveedoresClaves || [];
             }
 
             // 6. Fusión de documentos: dar prioridad a documentos reales (> 3000 caracteres)
@@ -15749,7 +15810,7 @@ function mergeOperacionesProjects(cloudList, forceRealtime = false) {
 
     cleanOperacionesLegacyData(appState.operacionesProyectos);
     if (typeof window.syncAllOperacionesToProveedores === 'function') {
-        window.syncAllOperacionesToProveedores();
+        window.syncAllOperacionesToProveedores(true);
     }
     if (appState.activeOperacionesProjectId) {
         const activeP = (appState.operacionesProyectos || []).find(x => x.id === appState.activeOperacionesProjectId || x.consecutivo === appState.activeOperacionesProjectId || x.numProyecto === appState.activeOperacionesProjectId);
