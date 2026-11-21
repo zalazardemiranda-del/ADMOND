@@ -10362,8 +10362,14 @@ function setupRealtimeSubscriptions() {
         if (data.senderId && window._myClientId && data.senderId === window._myClientId) return;
         if (Date.now() - (window._lastLocalOperacionesSyncTime || 0) < 5000) return;
         if (appState.isEditingOperacionesDetail) return;
-        if (typeof window.mergeOperacionesProjects === 'function') {
-            window.mergeOperacionesProjects(data.proyectos, true);
+        // La nube (coleccion operaciones) es la unica fuente de verdad: el broadcast solo avisa que hubo cambios.
+        // Antes se fusionaba la lista del emisor y un cliente desactualizado inyectaba/borraba expedientes en los demas.
+        clearTimeout(window._opsBroadcastFetchTimer);
+        window._opsBroadcastFetchTimer = setTimeout(function () {
+            window._lastLocalOperacionesSyncTime = 0;
+            if (typeof window.fetchOperacionesFromCloud === 'function') window.fetchOperacionesFromCloud();
+        }, 1800);
+        if (false) {
             try {
                 localStorage.setItem('rp_operaciones_proyectos', JSON.stringify(appState.operacionesProyectos));
             } catch (e) {}
@@ -15143,7 +15149,8 @@ function syncOperacionesToCloud(forceImmediate = false) {
     const doSync = async () => {
         try {
             window._lastLocalOperacionesSyncTime = Date.now();
-            const list = (appState.operacionesProyectos || []).filter(p => p && isProjectGenerado(p) && !purgedIds.has(p.id) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.numConsecutivo));
+            const delSetSync = getDeletedOperacionesSet();
+            const list = (appState.operacionesProyectos || []).filter(p => p && isProjectGenerado(p) && ![p.id, p.consecutivo, p.numConsecutivo, p.numProyecto].filter(Boolean).some(k => delSetSync.has(String(k).trim().toUpperCase())) && !purgedIds.has(p.id) && !purgedIds.has(p.consecutivo) && !purgedIds.has(p.numProyecto) && !purgedIds.has(p.numConsecutivo));
             const safeList = cleanProjectsForCloud(list);
 
             // A. Guardar snapshot en tabla messages con chat_id especial para garantizar persistencia universal (< 100KB, nunca excede el límite de 1MB de Firestore)
@@ -15162,7 +15169,20 @@ function syncOperacionesToCloud(forceImmediate = false) {
             }
 
             // B. Si existe la tabla operaciones en Firebase/Firebase, guardar cada proyecto de forma independiente
+            // Un equipo que aun no leyo la nube NO debe sobrescribirla con su copia local vieja: reintenta luego.
+            if (!window._opsFetchedOnce) {
+                window._opsSyncRetries = (window._opsSyncRetries || 0) + 1;
+                if (window._opsSyncRetries <= 10) { setTimeout(doSync, 3000); }
+                return;
+            }
+            window._opsSyncRetries = 0;
+            window._opsKnownState = window._opsKnownState || {};
             for (const proj of safeList) {
+                const knownKey = String(proj.id || proj.consecutivo || proj.numConsecutivo);
+                const projStr = JSON.stringify(proj);
+                // Solo subir proyectos que este equipo modifico (evita pisar versiones nuevas con copias viejas)
+                if (window._opsKnownState[knownKey] === projStr) continue;
+                window._opsKnownState[knownKey] = projStr;
                 try {
                     const cNum = proj.consecutivo || proj.numConsecutivo || proj.id;
                     const isProjClosed = proj.archivado === true || proj.estatus === 'CERRADO';
@@ -15430,7 +15450,8 @@ async function fetchOperacionesFromCloud() {
 
         // Priorizar los documentos individuales de `operaciones` sobre el snapshot
         const combinedCloud = [...dbProjects];
-        snapProjects.forEach(sp => {
+        // El snapshot lo escribe el ultimo cliente que guardo (puede estar desactualizado): solo se usa si la coleccion esta vacia.
+        (dbProjects.length > 0 ? [] : snapProjects).forEach(sp => {
             const spConsec = String(sp.consecutivo || sp.numProyecto || sp.id || '').trim().toUpperCase();
             if (!combinedCloud.some(cp => String(cp.consecutivo || cp.numProyecto || cp.id || '').trim().toUpperCase() === spConsec)) {
                 combinedCloud.push(sp);
@@ -15444,6 +15465,13 @@ async function fetchOperacionesFromCloud() {
 
         if (filteredCloud.length > 0 || dbProjects.length === 0) {
             window.mergeOperacionesProjects(filteredCloud);
+            try {
+                window._opsKnownState = window._opsKnownState || {};
+                stripLargeDocsFromProjectList(appState.operacionesProyectos || []).forEach(function (kp) {
+                    if (kp) window._opsKnownState[String(kp.id || kp.consecutivo || kp.numConsecutivo)] = JSON.stringify(kp);
+                });
+                window._opsFetchedOnce = true;
+            } catch (eKnown) {}
             if (!appState.isEditingOperacionesDetail) {
                 try {
                     const safeToStore = typeof stripLargeDocsFromProjectList === 'function'
